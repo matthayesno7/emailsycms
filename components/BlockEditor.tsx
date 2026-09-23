@@ -295,26 +295,34 @@ export function Preview({ b, bt, slotSrc, drag }: { b: any; bt: BlockField[]; sl
   return <div className={'pv pv-' + b.block_type}>{imgs}{texts}</div>;
 }
 
-// Scales a fixed-width preview down to fit its container (used by library tiles).
+// Scales a fixed-width preview down so all of it fits its container (width and height), centred.
 export function FitPreview({ children, width = 320 }: { children: React.ReactNode; width?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
-  const [k, setK] = useState(0.55);
-  const [h, setH] = useState<number | undefined>(undefined);
+  const [box, setBox] = useState<{ k: number; h: number } | null>(null);
   useEffect(() => {
     const el = ref.current, inn = inner.current;
     if (!el || !inn) return;
-    const ro = new ResizeObserver(() => {
-      const scale = el.clientWidth / width;
-      setK(scale);
-      setH(inn.offsetHeight * scale);
-    });
-    ro.observe(el); ro.observe(inn);
+    const measure = () => {
+      const host = el.parentElement || el;
+      const cs = getComputedStyle(host);
+      const availW = host.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const availH = host.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const h = inn.offsetHeight || 1;
+      const k = Math.max(0.1, Math.min(availW / width, availH / h));
+      setBox({ k, h });
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(inn);
+    if (el.parentElement) ro.observe(el.parentElement);
+    measure();
     return () => ro.disconnect();
   }, [width]);
   return (
-    <div ref={ref} className="fitpv" style={{ height: h }}>
-      <div ref={inner} style={{ width, transform: `scale(${k})`, transformOrigin: 'top left' }}>{children}</div>
+    <div ref={ref} className="fitpv">
+      <div style={{ width: box ? width * box.k : '100%', height: box ? box.h * box.k : undefined, overflow: 'hidden', margin: '0 auto' }}>
+        <div ref={inner} style={{ width, transform: `scale(${box?.k ?? 0.5})`, transformOrigin: 'top left' }}>{children}</div>
+      </div>
     </div>
   );
 }

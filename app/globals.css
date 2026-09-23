@@ -173,8 +173,8 @@ svg.wire .wb{fill:var(--accent)}
 .pv.side .pv-txt>*{padding-left:0;padding-right:0}
 .pv.side .pv-txt>:first-child{padding-top:0}
 .pv.side .pv-btn{margin-top:10px}
-.thumb.block.live{display:grid;place-items:center;padding:12px;background:var(--surface)}
-.fitpv{width:100%;overflow:hidden;max-height:100%}
+.thumb.block.live{display:grid;place-items:center;padding:12px 12px 44px;background:var(--surface)}
+.fitpv{width:100%;overflow:hidden;max-height:100%;display:flex;justify-content:center}
 .fitpv .pv{max-width:none;width:100%}
 .readcard .tip{margin-bottom:8px}
 .thumb.live.product{background:var(--surface)}
