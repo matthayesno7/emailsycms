@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { publicOrigin } from '@/lib/origin';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -24,9 +25,7 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const open = path.startsWith('/login') || path.startsWith('/auth');
   if (!user && !open) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(`${publicOrigin(request)}/login`);
   }
   return response;
 }
