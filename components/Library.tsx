@@ -1,10 +1,10 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { BLOCK_TYPES, KIND_LABEL, exportSize } from '@/lib/blockTypes';
+import { BLOCK_TYPES, KIND_LABEL, autoBlockType, exportSize } from '@/lib/blockTypes';
 import { baseName, drawFit, extOf, loadImg, parseCSV, toBlob } from '@/lib/images';
 import { emailRendition } from '@/lib/renditions';
-import { editableFromReading, readDesign } from '@/lib/extract';
+import { suggestAlt } from '@/lib/alt';
 import { cleanText, productAsBlock, shortDescription } from '@/lib/products';
 import AssetPanel from './AssetPanel';
 import BlockEditor, { FitPreview, Preview, previewWidth } from './BlockEditor';
@@ -33,7 +33,6 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [dropping, setDropping] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [newWs, setNewWs] = useState<string | null>(null);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const toastT = useRef<any>(null);
   const fileImg = useRef<HTMLInputElement>(null);
   const fileCsv = useRef<HTMLInputElement>(null);
@@ -170,6 +169,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       width: w, height: h, bytes: file.size, images, created_by: userId,
     }).select('*').single();
     if (e2 || !data) { toast('Couldn’t save the image.'); return null; }
+    // Optional: AI alt text, filled in shortly after upload (skipped if no API key is set).
+    if (img && !/svg/.test(type)) suggestAlt(img).then((alt) => { if (alt) supabase.from('assets').update({ fields: { ...(data.fields || {}), alt } }).eq('id', data.id).then(() => {}); });
     return { asset: data as Asset, img };
   }
 
@@ -245,7 +246,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     for (const f of list.filter((f) => /\.csv$/i.test(f.name) || f.type === 'text/csv')) await importFeed(f);
     const imgs = list.filter((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name));
     // In Blocks, images become blocks: ask for the block type, then create them.
-    if (view === 'block' && imgs.length) { setPendingFiles(imgs); setConvertFrom(null); setModal('blocktype'); return; }
+    if (view === 'block' && imgs.length) { await blocksFromImages(imgs); return; }
     if (imgs.length > 1) toast(`Adding ${imgs.length} images…`);
     for (const f of imgs) await addImageAsset(f);
     if (imgs.length) loadAssets(ws);
@@ -261,19 +262,6 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   // ---------- block flows ----------
   // Blocks use assets; they never move or replace them.
-  async function uploadOriginal(file: File) {
-    const ext = extOf(file);
-    const mime = file.type || (ext === 'png' ? 'image/png' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg');
-    const original = `${ws}/designs/${crypto.randomUUID()}.${ext}`;
-    const up = await supabase.storage.from('assets').upload(original, file, { contentType: mime });
-    if (up.error) throw up.error;
-    const local = URL.createObjectURL(file);
-    let img: HTMLImageElement;
-    try { img = await loadImg(local); } finally { URL.revokeObjectURL(local); }
-    const name = baseName(file.name || 'Design').replace(/[-_]+/g, ' ').slice(0, 120);
-    return { original, img, name };
-  }
-
   // Render the email-ready crop of a source image for the block's image slot and save the block.
   async function blockFromImage(img: HTMLImageElement, src: { id?: string | null; storage_path: string; name: string }, type: string) {
     const bt = BLOCK_TYPES[type];
@@ -293,47 +281,16 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return data as Asset;
   }
 
-  // A finished design: Emailsy reads it so its copy is editable and its look is kept (its photo goes into Images).
-  // Falls back to a Design block.
-  async function blockFromDesign(img: HTMLImageElement, original: string, name: string): Promise<{ row: Asset; note?: string }> {
-    const r = await readDesign(img, ws);
-    if (!r.ok) {
-      const row = await blockFromImage(img, { storage_path: original, name }, 'design');
-      const note = r.reason === 'not_configured'
-        ? 'Saved as a Design block. Add an Anthropic API key to let Emailsy read designs.'
-        : r.reason === 'not_a_design'
-        ? 'No copy found in that image, so it was saved as a Design block.'
-        : `Couldn’t read the design${r.message ? ` (${r.message})` : ''}. Saved as a Design block.`;
-      return { row, note };
-    }
-    const title = (r.reading.headline || name || 'Design block').slice(0, 120);
-    const built = await editableFromReading({ supabase, ws, userId, name: title, img, originalPath: original, reading: r.reading, crop: r.crop });
-    const { data, error } = await supabase.from('assets').insert({ workspace_id: ws, kind: 'block', name: title, created_by: userId, ...built }).select('*').single();
-    if (error) throw error;
-    return { row: data as Asset };
-  }
-
-  async function blocksFromFiles(type: string) {
-    const files = pendingFiles;
-    setPendingFiles([]); setModal(null);
-    if (!files.length) return;
-    const design = type === 'design';
-    const logoSlot = BLOCK_TYPES[type]?.fields.find((f) => f.type === 'image')?.png;
-    toast(design ? (files.length > 1 ? `Reading ${files.length} designs…` : 'Reading your design…') : files.length > 1 ? `Making ${files.length} blocks…` : 'Making your block…');
+  // Dropping images into Blocks: each one goes into your assets and gets a one-click block
+  // (Hero if wide, Card otherwise). Switch the type in the block afterwards if needed.
+  async function blocksFromImages(files: File[]) {
+    toast(files.length > 1 ? `Making ${files.length} blocks…` : 'Making your block…');
     const made: Asset[] = [];
-    let note: string | undefined;
     for (const f of files) {
       try {
-        if (design) {
-          const { original, img, name } = await uploadOriginal(f);
-          const r = await blockFromDesign(img, original, name);
-          made.push(r.row); note = note || r.note;
-        } else {
-          // The image becomes an asset in the library, and the block uses it.
-          const r = await addImageAsset(f, { kind: logoSlot ? 'logo' : 'image', attachToProduct: false });
-          if (!r?.img) throw new Error('upload');
-          made.push(await blockFromImage(r.img, r.asset as any, type));
-        }
+        const r = await addImageAsset(f, { attachToProduct: false });
+        if (!r?.img) throw new Error('upload');
+        made.push(await blockFromImage(r.img, r.asset as any, autoBlockType(r.img.naturalWidth, r.img.naturalHeight)));
       } catch { toast(`Couldn’t make a block from ${f.name}.`); }
     }
     if (!made.length) return;
@@ -342,8 +299,14 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (made.length === 1) {
       const b = made[0];
       setBlock({ ...b, fields: { ...(b.fields || {}) }, images: JSON.parse(JSON.stringify(b.images || {})) });
-      toast(note || (design ? 'Design read: its copy is now editable and its photo is in Images. Check the copy.' : 'Block created. The image is also in your library. Add your copy.'));
-    } else toast(note || `${made.length} blocks created`);
+      toast(`${BLOCK_TYPES[b.block_type].name} block created. Add your copy.`);
+    } else toast(`${made.length} blocks created`);
+  }
+
+  // One click from an asset: products make a Product block, logos a Footer, images a Hero or Card.
+  function useInBlock(a: Asset) {
+    const type = a.kind === 'product' ? 'product' : a.kind === 'logo' ? 'footer' : autoBlockType(a.width, a.height);
+    startBlock(type, a.id);
   }
 
   function startBlock(type: string, fromId?: string | null) {
@@ -353,7 +316,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (conv) {
       const slot = bt.fields.find((d) => d.type === 'image')!;
       draft.name = conv.name;
-      if (conv.storage_path) draft.images[slot.k] = { source_asset_id: conv.id, alt: conv.name, dirty: true, original_path: conv.storage_path };
+      if (conv.storage_path) draft.images[slot.k] = { source_asset_id: conv.id, alt: conv.fields?.alt || conv.name, dirty: true, original_path: conv.storage_path };
       if (conv.kind === 'product') {
         const pf = productAsBlock(conv).fields;
         draft.product_id = conv.id;
@@ -481,7 +444,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   <div className="empty small">
                     <Wire type="hero" />
                     <h2>No blocks yet</h2>
-                    <p>A block is an email module: images and copy together, built from your assets. Drop images or finished designs here, open any asset and choose “Use in a block”, or start from scratch.</p>
+                    <p>A block is an email module: images and copy together, built from your assets. Drop images here, open any asset and choose “Use in a block”, or start from scratch.</p>
                     <div className="row">
                       <button className="primary" type="button" onClick={() => fileImg.current?.click()}><Icon.Plus size={16} />Upload images</button>
                       <button className="ghost" type="button" onClick={() => setModal('blocktype')}>Create a block</button>
@@ -502,7 +465,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
       <input ref={fileImg} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       <input ref={fileCsv} type="file" accept=".csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
-      {dropping && <div className="drop"><div><strong>{view === 'block' ? 'Drop to make blocks' : 'Drop to add'}</strong><span>{view === 'block' ? 'Each image becomes a block. You pick the type next.' : 'Images, logos, or a product feed CSV'}</span></div></div>}
+      {dropping && <div className="drop"><div><strong>{view === 'block' ? 'Drop to make blocks' : 'Drop to add'}</strong><span>{view === 'block' ? 'Each image goes into your assets and becomes a block: Hero if wide, Card otherwise.' : 'Images, logos, or a product feed CSV'}</span></div></div>}
       {(openAsset || block || modal || sideOpen) && <div className="scrim" onClick={() => { setOpenId(null); setBlock(null); setModal(null); setSideOpen(false); }} />}
 
       {openAsset && (
@@ -515,7 +478,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onDelete={() => deleteAsset(openAsset)}
           usedIn={usedIn[openAsset.id] || []}
           onOpenBlock={(b) => { setOpenId(null); setBlock({ ...b, images: JSON.parse(JSON.stringify(b.images || {})), fields: { ...(b.fields || {}) } }); }}
-          onMakeBlock={() => { setConvertFrom(openAsset.id); setOpenId(null); setModal('blocktype'); }}
+          onMakeBlock={() => useInBlock(openAsset)}
           toast={toast}
         />
       )}
@@ -542,9 +505,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       )}
 
       {modal === 'blocktype' && (
-        <Modal wide onClose={() => { setModal(null); setConvertFrom(null); setPendingFiles([]); }}>
-          <BlockTypePicker from={convertFrom ? itemById(convertFrom) : null} count={pendingFiles.length}
-            onPick={(t) => (pendingFiles.length ? blocksFromFiles(t) : startBlock(t, convertFrom))} />
+        <Modal wide onClose={() => { setModal(null); setConvertFrom(null); }}>
+          <BlockTypePicker from={convertFrom ? itemById(convertFrom) : null}
+            onPick={(t) => startBlock(t, convertFrom)} />
         </Modal>
       )}
       {modal === 'help-figma' && <Modal onClose={() => setModal(null)}><HelpFigma /></Modal>}

@@ -24,6 +24,7 @@ export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const INSTRUCTIONS = `What each kind of asset becomes in Figma:
 - image and logo: stay images. Place them with push_image_to_figma; never add text to them.
 - block: an image plus copy. Build it as a component with the copy as live, editable text (get_block_for_figma).
+- Use an asset's alt text (alt, when present) as the image's alt text in the email.
 - Assets (images, logos, products) are the source material. Blocks are email modules built from assets; a block references its assets and never replaces them.
 - product: a card built from the product feed: image, label, name, description, price and button. Build it like a Product block with live text (get_block_for_figma works on products too). Leave out any part whose value is empty (e.g. no button if cta is empty).
 
@@ -163,6 +164,7 @@ function publicAsset(a: AssetRow, ws?: Workspace) {
     updated_at: a.updated_at,
   };
   if (a.width) Object.assign(out, { width: a.width, height: a.height });
+  if (a.fields?.alt) out.alt = a.fields.alt;
   if (a.kind === 'product') Object.assign(out, { pid: a.pid, price: a.price, link: a.link, description: a.fields?.description || '', has_image: !!a.storage_path });
   if (a.kind === 'block') Object.assign(out, { block_type: a.block_type, block_type_name: BLOCK_TYPES[a.block_type]?.name });
   if (a.figma) out.figma = a.figma;

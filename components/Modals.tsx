@@ -15,13 +15,13 @@ export function Modal({ children, onClose, wide }: { children: React.ReactNode; 
 }
 
 export function BlockTypePicker({ from, count = 0, onPick }: { from?: Asset | null; count?: number; onPick: (t: string) => void }) {
-  const types = Object.entries(BLOCK_TYPES).filter(([, t]) => (!from && !count) || t.fields.some((d) => d.type === 'image'));
+  const types = Object.entries(BLOCK_TYPES).filter(([, t]) => !t.legacy && ((!from && !count) || t.fields.some((d) => d.type === 'image')));
   return (
     <>
       <h2>{count ? (count === 1 ? 'What kind of block?' : `Make ${count} blocks`) : from ? `Make “${from.name}” a block` : 'New block'}</h2>
       <p className="tip" style={{ marginBottom: 14 }}>
         {count
-          ? `Each image is added to your assets and used as the main image of a new block. Pick Design for a finished design with copy in it: Emailsy reads it into an editable Card. ${count === 1 ? '' : 'Add copy to each block afterwards.'}`
+          ? `Each image is added to your assets and used as the main image of a new block. ${count === 1 ? '' : 'Add copy to each block afterwards.'}`
           : from
           ? from.kind === 'product' ? 'Pick the kind of block. The product’s image and copy go in; the product stays in Products.' : 'Pick the kind of block. The image goes in as its main image; add copy, then save. The image stays in your assets.'
           : 'Pick the shape of the content. You fill it with copy and images here; Claude turns it into a component in whichever Figma design system you choose.'}

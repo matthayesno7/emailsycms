@@ -71,7 +71,7 @@ export default function AssetPanel({ it, src, usedIn = [], onOpenBlock, onClose,
     const edited = Array.from(new Set([...(f.edited || []), key]));
     return { ...f, ...extra, edited };
   }
-  async function saveCopy(key: 'eyebrow' | 'description' | 'cta', v: string) {
+  async function saveCopy(key: 'eyebrow' | 'description' | 'cta' | 'alt', v: string) {
     const lock = key === 'description' ? 'description' : key;
     if (await onPatch({ fields: markEdited({ [key]: v }, lock) })) toast('Saved');
   }
@@ -166,12 +166,19 @@ export default function AssetPanel({ it, src, usedIn = [], onOpenBlock, onClose,
         <p className="tip">No image yet.{it.pid ? <> Drop <code>{it.pid}.jpg</code> (or .png) onto the page and it attaches to this product.</> : null}</p>
       )}
 
+      {src && it.kind !== 'product' && (
+        <div className="fields">
+          <ProductField label="Alt text" long value={it.fields?.alt || ''} placeholder="Describe the image for people who can’t see it" onSave={async (v) => { if (await onPatch({ fields: { ...(it.fields || {}), alt: v } })) toast('Saved'); }} onCopy={copyText} />
+        </div>
+      )}
+
       {it.kind === 'product' && (
         <div>
           <div className="label">Product</div>
           <div className="fields">
             <ProductField label="Label" value={it.fields?.eyebrow || ''} placeholder="e.g. New in" onSave={(v) => saveCopy('eyebrow', v)} onCopy={copyText} />
             <ProductField label="Description" long value={it.fields?.description || ''} placeholder="Short description for email" onSave={(v) => saveCopy('description', v)} onCopy={copyText} />
+            <ProductField label="Alt text" long value={it.fields?.alt || ''} placeholder="Describe the product image" onSave={(v) => saveCopy('alt' as any, v)} onCopy={copyText} />
             <ProductField label="Button" value={it.fields?.cta ?? DEFAULT_CTA} placeholder="No button" onSave={(v) => saveCopy('cta', v)} onCopy={copyText} />
             {([['Price', 'price'], ['Link', 'link'], ['PID', 'pid']] as [string, string][]).map(([label, f]) => (
               <ProductField key={f} label={label} mono value={it[f] || ''} onSave={async (v) => { if (await onPatch({ [f]: v || null })) toast('Saved'); }} onCopy={copyText} />

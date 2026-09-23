@@ -4,7 +4,7 @@ A home for a team's email-ready assets: images, logos, feed products and content
 
 - **Library:** upload images and logos, import a product feed (CSV), rename and move assets between categories.
 - **Email-ready images:** crop to email sizes, remove white backgrounds, then drag straight into Figma.
-- **Blocks:** Hero, Card, Product, Button and Footer content with copy and email-ready images, plus Design blocks (a finished design as one image that Claude rebuilds in Figma with live text).
+- **Blocks:** Hero, Card, Product, Button and Footer content with copy and email-ready images, made in one click from any image or product.
 - **Claude connector (MCP):** Claude can find assets, push full-size images into Figma, and turn blocks into components in any Figma design system.
 - **Teams:** brand workspaces, invites and owner/editor roles.
 
@@ -39,7 +39,7 @@ npm run dev                  # http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API (anon / publishable key) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API (service_role / secret key). Server only. |
 | `NEXT_PUBLIC_APP_URL` | The public URL of the app, no trailing slash |
-| `ANTHROPIC_API_KEY` | Optional. Lets Emailsy read finished designs into editable Card blocks. Server only. |
+| `ANTHROPIC_API_KEY` | Optional. Turns on AI alt text for uploaded images. Server only. |
 | `ANTHROPIC_MODEL` | Optional. Defaults to `claude-sonnet-5`. |
 
 Check the MCP handler without a database: `npx tsx scripts/mcp-selftest.ts`.

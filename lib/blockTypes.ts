@@ -16,7 +16,7 @@ export type BlockField = {
   linkOf?: string;
 };
 
-export type BlockType = { name: string; note: string; fields: BlockField[] };
+export type BlockType = { name: string; note: string; fields: BlockField[]; legacy?: boolean };
 
 export const BLOCK_TYPES: Record<string, BlockType> = {
   hero: {
@@ -77,7 +77,9 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
       { k: 'unsub', type: 'text', label: 'Unsubscribe line', max: 40 },
     ],
   },
+  // Legacy: finished designs are rebuilt in Figma now (ask Claude there). Kept so older blocks still open.
   design: {
+    legacy: true,
     name: 'Design',
     note: 'A finished design (photo and copy in one image). Emailsy reads it: the photo stays an image and the copy becomes editable, keeping the design’s own look.',
     fields: [
@@ -98,6 +100,9 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
 // Pixel size an image slot is exported at (2x for retina). Natural slots keep the
 // source's shape and never upscale.
 // A Design block whose copy has been read out of the image (so it is editable).
+// One-click blocks: wide images make a Hero, square or portrait ones a Card.
+export const autoBlockType = (w?: number | null, h?: number | null) => (w && h && w / h >= 1.3 ? 'hero' : 'card');
+
 export const isReadDesign = (b: any) => b?.block_type === 'design' && !!b?.images?.reference?.path;
 
 export function exportSize(d: BlockField, sw?: number, sh?: number, layout?: string) {

@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BLOCK_TYPES, exportSize, isReadDesign, type BlockField } from '@/lib/blockTypes';
 import { cropCanvas, drawFit, loadImg, toBlob } from '@/lib/images';
-import { editableFromReading, readDesign } from '@/lib/extract';
 import { Icon } from './icons';
 import type { Asset } from './Library';
 
@@ -25,7 +24,6 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const [pickFor, setPickFor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
-  const [reading, setReading] = useState(false);
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const bt = BLOCK_TYPES[b.block_type] || BLOCK_TYPES.hero;
   const saved = !!b.id;
@@ -42,7 +40,6 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     if (k === 'layout' && x.images?.image && (x.images.image.original_path || x.images.image.source_asset_id)) next.images = { ...x.images, image: { ...x.images.image, dirty: true } };
     return next;
   });
-  const setStyle = (k: string, v: any) => setB((x: any) => ({ ...x, fields: { ...x.fields, style: { ...(x.fields?.style || {}), [k]: v } } }));
   const setImage = (k: string, v: any) => setB((x: any) => ({ ...x, images: { ...x.images, [k]: v } }));
 
   // Switching type re-renders each image from its original at the new type's size.
@@ -117,36 +114,6 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     }
   }
 
-  // Design block -> editable design: Claude reads the copy, the look and finds the photo.
-  async function readDesignCopy() {
-    const slot = b.images?.image;
-    const path = b.images?.reference?.path || slot?.original_path || slot?.path;
-    if (!b.id || !path) { toast('Save the block with an image first.'); return; }
-    setReading(true);
-    try {
-      const { data } = await supabase.storage.from('assets').createSignedUrl(path, 600);
-      if (!data?.signedUrl) throw new Error('Could not open the image');
-      const img = await loadImg(data.signedUrl);
-      const r = await readDesign(img, b.workspace_id || ws);
-      if (!r.ok) {
-        toast(r.reason === 'not_configured' ? 'Add an Anthropic API key to Railway to let Emailsy read designs.' : r.reason === 'not_a_design' ? 'No copy found in this image.' : `Couldn’t read the design${r.message ? `: ${r.message}` : '.'}`);
-        return;
-      }
-      const title = b.name && !/block$/.test(b.name) ? b.name : r.reading.headline || b.name;
-      const built = await editableFromReading({ supabase, ws: b.workspace_id || ws, userId, name: title, img, originalPath: path, reading: r.reading, crop: r.crop });
-      if (slot?.path && slot.path !== path && slot.path.includes('/blocks/')) await supabase.storage.from('assets').remove([slot.path]);
-      const res = await supabase.from('assets').update({ ...built, name: title }).eq('id', b.id).select('*').single();
-      if (res.error) throw res.error;
-      setB({ ...res.data, fields: { ...(res.data.fields || {}) }, images: JSON.parse(JSON.stringify(res.data.images || {})) });
-      onSaved(res.data as Asset, null);
-      toast('Design read: the copy is editable and the look is kept. Its photo is in Images. Check the copy.');
-    } catch (err: any) {
-      toast(`Couldn’t read the design${err?.message ? `: ${err.message}` : '.'}`);
-    } finally {
-      setReading(false);
-    }
-  }
-
   const where = figmaFile ? ` (${figmaFile.url})` : ': [paste your Figma file link]';
   const prompt = !saved
     ? ''
@@ -163,7 +130,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
           <input className="title-in" value={b.name} maxLength={120} aria-label="Block name" onChange={(e) => setB({ ...b, name: e.target.value })} />
           <div className="sub">
             <select className="bsel" aria-label="Block type" value={b.block_type} onChange={(e) => setType(e.target.value)}>
-              {Object.entries(BLOCK_TYPES).map(([k, t]) => <option key={k} value={k}>{t.name} block</option>)}
+              {Object.entries(BLOCK_TYPES).filter(([k, t]) => !t.legacy || k === b.block_type).map(([k, t]) => <option key={k} value={k}>{t.name} block</option>)}
             </select>
           </div>
         </div>
@@ -182,35 +149,6 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
           <Preview b={b} bt={bt.fields} slotSrc={slotSrc} mobile={device === 'mobile'} />
         </FitPreview>
       </div>
-
-      {b.block_type === 'design' && saved && (
-        <div className="bf readcard">
-          <p className="tip">{isReadDesign(b)
-            ? 'The copy below is editable and the preview keeps the original design’s look. Read it again if something came out wrong.'
-            : 'Emailsy can read this design: the photo stays an image, the copy becomes editable, and its colours, fonts and layout are kept.'}</p>
-          <button className="btn" type="button" disabled={reading} onClick={readDesignCopy}>{reading ? 'Reading the design…' : isReadDesign(b) ? 'Read the design again' : 'Make the copy editable'}</button>
-        </div>
-      )}
-
-      {isReadDesign(b) && (
-        <div className="bf">
-          <div className="bl"><label>Look</label></div>
-          <div className="stylerow">
-            {([['background', 'Background'], ['headline', 'Headline'], ['text', 'Text'], ['button_bg', 'Button'], ['button_text', 'Button text']] as [string, string][]).map(([k, l]) => (
-              <label key={k} className="swatch" title={l}>
-                <input type="color" value={/^#[0-9a-f]{6}$/i.test(b.fields?.style?.[k] || '') ? b.fields.style[k] : '#ffffff'} onChange={(e) => setStyle(k, e.target.value)} />
-                <span>{l}</span>
-              </label>
-            ))}
-            <select className="in" aria-label="Typeface" value={b.fields?.style?.font || 'sans'} onChange={(e) => setStyle('font', e.target.value)}>
-              <option value="sans">Sans serif</option><option value="serif">Serif</option>
-            </select>
-            <select className="in" aria-label="Alignment" value={b.fields?.style?.align || 'left'} onChange={(e) => setStyle('align', e.target.value)}>
-              <option value="left">Left</option><option value="center">Centred</option>
-            </select>
-          </div>
-        </div>
-      )}
 
       {b.block_type === 'product' && (
         <div className="bf">
@@ -242,7 +180,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
                 <div className="picker">
                   {pickable.length ? pickable.map((i) => (
                     <button key={i.id} type="button" className={'pk ' + i.kind} title={i.name}
-                      onClick={() => { setImage(d.k, { ...(slot || {}), source_asset_id: i.id, alt: i.name, dirty: true, original_path: i.storage_path, crop: undefined }); setPickFor(null); }}>
+                      onClick={() => { setImage(d.k, { ...(slot || {}), source_asset_id: i.id, alt: i.fields?.alt || i.name, dirty: true, original_path: i.storage_path, crop: undefined }); setPickFor(null); }}>
                       <img src={urls[i.storage_path]} alt={i.name} />
                     </button>
                   )) : <p className="tip">Upload images first, then pick one here.</p>}
