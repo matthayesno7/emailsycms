@@ -8,11 +8,11 @@ export function supabaseRepo(db: SupabaseClient): Repo {
     async workspacesForUser(userId) {
       const { data, error } = await db
         .from('workspace_members')
-        .select('role, workspaces(id, name)')
+        .select('role, workspaces(id, name, figma_file_url, figma_file_key, figma_file_name)')
         .eq('user_id', userId);
       if (error) throw error;
       return (data || [])
-        .map((r: any) => (r.workspaces ? { id: r.workspaces.id, name: r.workspaces.name, role: r.role } : null))
+        .map((r: any) => (r.workspaces ? { id: r.workspaces.id, name: r.workspaces.name, role: r.role, figma_file_url: r.workspaces.figma_file_url, figma_file_key: r.workspaces.figma_file_key, figma_file_name: r.workspaces.figma_file_name } : null))
         .filter(Boolean) as Workspace[];
     },
     async listAssets(workspaceIds, { kind, query, limit }) {

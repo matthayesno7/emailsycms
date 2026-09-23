@@ -156,6 +156,7 @@ svg.wire .wb{fill:var(--accent)}
 .pv-img{width:100%;background:#eee;overflow:hidden}
 .pv-img img{width:100%;height:100%;object-fit:cover;display:block}
 .pv-img.contain{background:#fff}.pv-img.contain img{object-fit:contain}
+.pv-img.natural{min-height:80px}.pv-img.natural img{height:auto}
 .pv-h{font-weight:700;font-size:17px;padding:10px 14px 0;line-height:1.25;word-break:break-word}
 .pv-s{font-size:12.5px;padding:6px 14px 0;color:#444}
 .pv-p{font-size:11.5px;padding:6px 14px 0;color:#555;line-height:1.45}
@@ -258,3 +259,7 @@ kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border
 .me button{border:0;background:none;color:var(--ink-2);font-size:13px;padding:0}
 .me button:hover{color:var(--ink)}
 .loading{padding:40px 0;color:var(--ink-3)}
+
+.settings{display:flex;flex-direction:column;gap:16px}
+.settings h2{margin:0}
+.dotnote{color:var(--accent)!important;font-size:18px!important;line-height:1}

@@ -10,6 +10,7 @@ export type BlockField = {
   h?: number;
   fit?: 'cover' | 'contain';
   png?: boolean;
+  natural?: boolean; // keep the source's aspect ratio: w is the width, height follows the image
   linkOf?: string;
 };
 
@@ -69,7 +70,27 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
       { k: 'unsub', type: 'text', label: 'Unsubscribe line', max: 40 },
     ],
   },
+  design: {
+    name: 'Design',
+    note: 'A finished design saved as one image, like a card with a photo and copy. Claude rebuilds it in Figma with live text.',
+    fields: [
+      { k: 'image', type: 'image', label: 'Design image', w: 600, fit: 'cover', natural: true },
+      { k: 'notes', type: 'long', label: 'Notes for Claude', max: 300 },
+      { k: 'link', type: 'url', label: 'Link' },
+    ],
+  },
 };
+
+// Pixel size an image slot is exported at (2x for retina). Natural slots keep the
+// source's shape and never upscale.
+export function exportSize(d: BlockField, sw?: number, sh?: number) {
+  if (d.natural) {
+    if (!sw || !sh) return { w: (d.w || 600) * 2, h: 0 };
+    const w = Math.round(Math.min((d.w || 600) * 2, sw));
+    return { w, h: Math.round((w * sh) / sw) };
+  }
+  return { w: (d.w || 300) * 2, h: (d.h || 200) * 2 };
+}
 
 // Email-ready export sizes for single images (pixels, already 2x for retina).
 export const PRESETS = [

@@ -4,7 +4,7 @@ A home for a team's email-ready assets: images, logos, feed products and content
 
 - **Library:** upload images and logos, import a product feed (CSV), rename and move assets between categories.
 - **Email-ready images:** crop to email sizes, remove white backgrounds, then drag straight into Figma.
-- **Blocks:** Hero, Card, Product, Button and Footer content with copy and email-ready images.
+- **Blocks:** Hero, Card, Product, Button and Footer content with copy and email-ready images, plus Design blocks (a finished design as one image that Claude rebuilds in Figma with live text).
 - **Claude connector (MCP):** Claude can find assets, push full-size images into Figma, and turn blocks into components in any Figma design system.
 - **Teams:** brand workspaces, invites and owner/editor roles.
 
@@ -87,6 +87,7 @@ supabase/migrations/       schema, RLS, storage bucket
 | `get_asset` | Details plus a one-hour image URL; full fields for blocks |
 | `search_products` | Products by name or PID |
 | `get_block_for_figma` | Copy, image slots and field rules for building a component |
+| `view_image` | Returns the image itself so Claude can read a finished design's text and layout |
 | `push_image_to_figma` | Server uploads the image to a Figma `upload_assets` URL and returns the imageHash |
 | `record_figma_placement` | Saves where a block or image lives in Figma |
 

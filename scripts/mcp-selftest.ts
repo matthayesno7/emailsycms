@@ -6,6 +6,7 @@ const assets: any[] = [
   { id: 'a1', workspace_id: W1, kind: 'image', name: 'Autumn hero', storage_path: 'w1/a.jpg', width: 1600, height: 900 },
   { id: 'p1', workspace_id: W1, kind: 'product', name: 'Merino crew', pid: '10482', price: '£48', storage_path: 'w1/p.png' },
   { id: 'b1', workspace_id: W1, kind: 'block', name: 'Autumn block', block_type: 'hero', fields: { headline: 'Hi', cta: 'Shop', link: 'https://x' }, images: { image: { path: 'w1/blocks/b.jpg', alt: 'Sunset', original_path: 'w1/a.jpg' } } },
+  { id: 'd1', workspace_id: W1, kind: 'block', name: 'Matt test', block_type: 'design', fields: { notes: 'Stars are gold' }, images: { image: { path: 'w1/blocks/d.jpg', width: 640, height: 321, original_path: 'w1/d.jpg' } } },
   { id: 'x1', workspace_id: W2, kind: 'image', name: 'Secret', storage_path: 'w2/s.jpg' },
 ];
 const repo = {
@@ -36,6 +37,12 @@ const call = async (m: any) => handleBody(m, ctx);
   const push = await t('push_image_to_figma', { asset_id: 'b1', upload_url: 'https://mcp.figma.com/mcp/upload/x/submit' });
   console.log('push', push.isError, JSON.parse(push.content[0].text).figma, posted.file.name, posted.file.size);
   console.log('record', (await t('record_figma_placement', { asset_id: 'b1', file_key: 'F', node_id: '1:2' })).isError, assets[2].figma.node_id);
+  const d = JSON.parse((await t('get_block_for_figma', { id: 'd1' })).content[0].text);
+  console.log('design', d.rebuild, JSON.stringify(d.images.image.size_px), d.how_to.slice(0, 40));
+  const v = await t('view_image', { asset_id: 'd1' });
+  console.log('view', v.content[0].type, v.content[0].mimeType, v.content[0].data, v.content[1].text);
+  console.log('view other ws', (await t('view_image', { asset_id: 'x1' })).isError);
+  console.log('hero how_to', JSON.parse((await t('get_block_for_figma', { id: 'b1' })).content[0].text).how_to.slice(0, 30));
   const bad: any = await call({ jsonrpc: '2.0', id: 9, method: 'nope' });
   console.log('unknown', bad.error.code);
   const batch: any = await call([{ jsonrpc: '2.0', id: 1, method: 'ping' }, { jsonrpc: '2.0', method: 'notifications/x' }]);

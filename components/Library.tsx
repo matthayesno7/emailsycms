@@ -1,15 +1,15 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { BLOCK_TYPES, KIND_LABEL } from '@/lib/blockTypes';
+import { BLOCK_TYPES, KIND_LABEL, exportSize } from '@/lib/blockTypes';
 import { baseName, dimsOf, drawFit, extOf, loadImg, parseCSV, toBlob } from '@/lib/images';
 import AssetPanel from './AssetPanel';
 import BlockEditor from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
-import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker } from './Modals';
+import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
-export type Ws = { id: string; name: string; role: string };
+export type Ws = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 const WS_COLORS = ['#2f5bff', '#26313e', '#32a5db', '#e8a317', '#7b61ff', '#2f9e6e'];
 const KINDS = ['image', 'logo', 'product', 'block'];
 
@@ -46,8 +46,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   // ---------- data ----------
   const loadWorkspaces = useCallback(async (select?: string) => {
-    const { data } = await supabase.from('workspace_members').select('role, workspaces(id, name, created_at)').eq('user_id', userId);
-    const list = (data || []).map((r: any) => r.workspaces && { id: r.workspaces.id, name: r.workspaces.name, role: r.role, created_at: r.workspaces.created_at })
+    const { data } = await supabase.from('workspace_members').select('role, workspaces(id, name, created_at, figma_file_url, figma_file_key, figma_file_name)').eq('user_id', userId);
+    const list = (data || []).map((r: any) => r.workspaces && { id: r.workspaces.id, name: r.workspaces.name, role: r.role, created_at: r.workspaces.created_at, figma_file_url: r.workspaces.figma_file_url, figma_file_key: r.workspaces.figma_file_key, figma_file_name: r.workspaces.figma_file_name })
       .filter(Boolean).sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
     setWorkspaces(list);
     let saved = '';
@@ -82,7 +82,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const paths = new Set<string>();
     for (const a of items) {
       if (a.storage_path) paths.add(a.storage_path);
-      for (const s of Object.values(a.images || {}) as any[]) if (s?.path) paths.add(s.path);
+      for (const s of Object.values(a.images || {}) as any[]) { if (s?.path) paths.add(s.path); if (s?.original_path) paths.add(s.original_path); }
     }
     const missing = [...paths].filter((p) => !urls[p]);
     if (!missing.length) return;
@@ -210,10 +210,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const local = URL.createObjectURL(file);
     let img: HTMLImageElement;
     try { img = await loadImg(local); } finally { URL.revokeObjectURL(local); }
-    const w = (d.w || 300) * 2, h = (d.h || 200) * 2;
+    const { w, h } = exportSize(d, img.naturalWidth, img.naturalHeight);
     const cv = drawFit(img, w, h, d.fit || 'cover', null, !d.png, d.fit === 'contain' ? 0.92 : 1);
     const type2 = d.png ? 'image/png' : 'image/jpeg';
-    const blob = await toBlob(cv, type2);
+    const blob = await toBlob(cv, type2, d.natural ? 0.92 : 0.86);
     const path = `${ws}/blocks/${crypto.randomUUID()}.${d.png ? 'png' : 'jpg'}`;
     const up2 = await supabase.storage.from('assets').upload(path, blob, { contentType: type2 });
     if (up2.error) throw up2.error;
@@ -332,6 +332,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           </form>
         )}
         <div className="group">Team &amp; Claude</div>
+        <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('settings'); }}><Icon.Settings />Workspace settings{!curWs?.figma_file_key && <span className="count dotnote" title="No Figma file connected">•</span>}</button>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('members'); }}><Icon.Users />Members</button>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('connector'); }}><Icon.Plug />Claude connector</button>
         <div className="group">Help</div>
@@ -420,6 +421,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           library={items}
           urls={urls}
           appUrl={appUrl}
+          figmaFile={curWs?.figma_file_key ? { url: curWs.figma_file_url || '', name: curWs.figma_file_name || '' } : null}
           supabase={supabase}
           toast={toast}
           onClose={() => setBlock(null)}
@@ -441,6 +443,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       {modal === 'help-feed' && <Modal onClose={() => setModal(null)}><HelpFeed /></Modal>}
       {modal === 'members' && curWs && <Modal onClose={() => setModal(null)}><Members supabase={supabase} ws={curWs} userId={userId} toast={toast} /></Modal>}
       {modal === 'connector' && <Modal onClose={() => setModal(null)}><Connector supabase={supabase} toast={toast} /></Modal>}
+      {modal === 'settings' && curWs && (
+        <Modal onClose={() => setModal(null)}>
+          <WorkspaceSettings supabase={supabase} ws={curWs} toast={toast} onSaved={() => loadWorkspaces(curWs.id)} />
+        </Modal>
+      )}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </div>
   );

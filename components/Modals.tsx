@@ -200,3 +200,65 @@ export function Connector({ supabase, toast }: { supabase: SupabaseClient; toast
     </>
   );
 }
+
+// Parse a Figma link into its file key and a readable name.
+export function parseFigmaUrl(raw: string) {
+  try {
+    const u = new URL(raw.trim());
+    if (!/(^|\.)figma\.com$/.test(u.hostname)) return null;
+    const m = u.pathname.match(/^\/(design|file|board|slides|proto)\/([A-Za-z0-9]{10,})(?:\/branch\/([A-Za-z0-9]{10,}))?(?:\/([^/?#]+))?/);
+    if (!m) return null;
+    const key = m[3] || m[2];
+    const name = m[4] ? decodeURIComponent(m[4]).replace(/-/g, ' ') : 'Figma file';
+    return { key, name, url: `https://www.figma.com/${m[1] === 'file' ? 'design' : m[1]}/${m[2]}${m[3] ? `/branch/${m[3]}` : ''}${m[4] ? `/${m[4]}` : ''}` };
+  } catch {
+    return null;
+  }
+}
+
+export function WorkspaceSettings({ supabase, ws, toast, onSaved }: { supabase: SupabaseClient; ws: Ws; toast: (m: string) => void; onSaved: () => void }) {
+  const owner = ws.role === 'owner';
+  const [name, setName] = useState(ws.name);
+  const [link, setLink] = useState(ws.figma_file_url || '');
+  const [busy, setBusy] = useState(false);
+  const parsed = link.trim() ? parseFigmaUrl(link) : null;
+  const invalid = !!link.trim() && !parsed;
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (invalid) return;
+    setBusy(true);
+    const { error } = await supabase.from('workspaces').update({
+      name: name.trim() || ws.name,
+      figma_file_url: parsed?.url || null,
+      figma_file_key: parsed?.key || null,
+      figma_file_name: parsed?.name || null,
+    }).eq('id', ws.id);
+    setBusy(false);
+    if (error) { toast('Couldn’t save. Only owners can change workspace settings.'); return; }
+    toast(parsed ? `Connected ${parsed.name}` : 'Saved');
+    onSaved();
+  }
+
+  return (
+    <form onSubmit={save} className="settings">
+      <h2>Workspace settings</h2>
+      <div className="bf">
+        <div className="bl"><label htmlFor="wsname">Workspace name</label></div>
+        <input id="wsname" className="in" value={name} maxLength={60} disabled={!owner} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="bf">
+        <div className="bl"><label htmlFor="figma">Connected Figma file</label></div>
+        <input id="figma" className="in mono" type="url" disabled={!owner} placeholder="https://www.figma.com/design/…" value={link} onChange={(e) => setLink(e.target.value)} />
+        {invalid ? <p className="err">That doesn’t look like a Figma file link. Copy it from Figma with Share → Copy link.</p>
+          : parsed ? <p className="tip">Claude will use <b>{parsed.name}</b> whenever you don’t give it a link. It’s where images, blocks and components from {ws.name} go.</p>
+          : <p className="tip">Paste the link to this brand’s Figma design-system or email file. Claude uses it by default, so you don’t have to paste it into every request.</p>}
+      </div>
+      {owner ? (
+        <div className="actions"><button className="primary" type="submit" disabled={busy || invalid}>{busy ? 'Saving…' : 'Save'}</button></div>
+      ) : (
+        <p className="tip">Only owners can change workspace settings.</p>
+      )}
+    </form>
+  );
+}

@@ -1,18 +1,19 @@
 'use client';
 import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { BLOCK_TYPES, type BlockField } from '@/lib/blockTypes';
+import { BLOCK_TYPES, exportSize, type BlockField } from '@/lib/blockTypes';
 import { drawFit, loadImg, toBlob } from '@/lib/images';
 import { Icon } from './icons';
 import type { Asset } from './Library';
 
-export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, supabase, toast, onClose, onSaved, onDelete }: {
+export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, figmaFile, supabase, toast, onClose, onSaved, onDelete }: {
   draft: any;
   ws: string;
   userId: string;
   library: Asset[];
   urls: Record<string, string>;
   appUrl: string;
+  figmaFile?: { url: string; name: string } | null;
   supabase: SupabaseClient;
   toast: (m: string) => void;
   onClose: () => void;
@@ -27,12 +28,25 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const saved = !!b.id;
   const byId = (id?: string) => library.find((i) => i.id === id);
   const srcOfAsset = (a?: Asset) => (a?.storage_path ? urls[a.storage_path] : undefined);
-  const slotSrc = (slot: any) => (slot?.path && !slot.dirty ? urls[slot.path] : srcOfAsset(byId(slot?.source_asset_id)));
+  // A changed slot previews its source: a library asset, or the block's own original upload.
+  const slotSrc = (slot: any) => (slot?.path && !slot.dirty ? urls[slot.path] : srcOfAsset(byId(slot?.source_asset_id)) || (slot?.original_path ? urls[slot.original_path] : undefined));
   const pickable = library.filter((i) => i.kind !== 'block' && i.storage_path && urls[i.storage_path]);
   const products = library.filter((i) => i.kind === 'product');
 
   const setField = (k: string, v: string) => setB((x: any) => ({ ...x, fields: { ...x.fields, [k]: v } }));
   const setImage = (k: string, v: any) => setB((x: any) => ({ ...x, images: { ...x.images, [k]: v } }));
+
+  // Switching type re-renders each image from its original at the new type's size.
+  function setType(t: string) {
+    setB((x: any) => {
+      const images = { ...x.images };
+      for (const d of BLOCK_TYPES[t]?.fields.filter((f) => f.type === 'image') || []) {
+        const slot = images[d.k];
+        if (slot && (slot.original_path || slot.source_asset_id)) images[d.k] = { ...slot, dirty: true };
+      }
+      return { ...x, block_type: t, images };
+    });
+  }
 
   function fillFromProduct(id: string) {
     const p = byId(id);
@@ -56,17 +70,22 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         const slot = images[d.k];
         if (!slot?.dirty) continue;
         const src = byId(slot.source_asset_id);
-        const url = srcOfAsset(src);
-        if (!src || !url) continue;
+        let url = srcOfAsset(src);
+        if (!url && slot.original_path) {
+          const { data } = await supabase.storage.from('assets').createSignedUrl(slot.original_path, 600);
+          url = data?.signedUrl;
+        }
+        if (!url) continue;
         const img = await loadImg(url);
-        const cv = drawFit(img, (d.w || 300) * 2, (d.h || 200) * 2, d.fit || 'cover', src.focus, !d.png, d.fit === 'contain' ? 0.92 : 1);
+        const { w, h } = exportSize(d, img.naturalWidth, img.naturalHeight);
+        const cv = drawFit(img, w, h, d.fit || 'cover', src?.focus, !d.png, d.fit === 'contain' ? 0.92 : 1);
         const type = d.png ? 'image/png' : 'image/jpeg';
-        const blob = await toBlob(cv, type);
+        const blob = await toBlob(cv, type, d.natural ? 0.92 : 0.86);
         const path = `${ws}/blocks/${crypto.randomUUID()}.${d.png ? 'png' : 'jpg'}`;
         const { error } = await supabase.storage.from('assets').upload(path, blob, { contentType: type });
         if (error) throw error;
         if (slot.path) await supabase.storage.from('assets').remove([slot.path]);
-        images[d.k] = { path, width: (d.w || 300) * 2, height: (d.h || 200) * 2, format: d.png ? 'png' : 'jpg', bytes: blob.size, alt: slot.alt || '', source_asset_id: src.id, original_path: slot.original_path || src.storage_path };
+        images[d.k] = { path, width: w, height: h, format: d.png ? 'png' : 'jpg', bytes: blob.size, alt: slot.alt || '', source_asset_id: src?.id || slot.source_asset_id || null, original_path: slot.original_path || src?.storage_path || null };
       }
       const row = {
         workspace_id: b.workspace_id || ws, kind: 'block', block_type: b.block_type, name: (b.name || `${bt.name} block`).trim().slice(0, 120),
@@ -93,9 +112,12 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     }
   }
 
-  const prompt = saved
-    ? `Using Emailsy CMS, turn my block "${b.name}" (id ${b.id}) into a ${bt.name.toLowerCase()} component and add it to my design system: [paste your Figma file link]`
-    : '';
+  const where = figmaFile ? ` (${figmaFile.url})` : ': [paste your Figma file link]';
+  const prompt = !saved
+    ? ''
+    : b.block_type === 'design'
+    ? `Using Emailsy CMS, rebuild my design block "${b.name}" (id ${b.id}) as an editable component in my design system${where}. Look at the design first, keep the photo as an image, and turn all the text into live text laid out exactly as in the design.`
+    : `Using Emailsy CMS, turn my block "${b.name}" (id ${b.id}) into a ${bt.name.toLowerCase()} component and add it to my design system${where}.`;
 
   return (
     <aside className="sheet wide" role="dialog" aria-modal="true" aria-label={b.name}>
@@ -103,7 +125,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         <div style={{ flex: 1, minWidth: 0 }}>
           <input className="title-in" value={b.name} maxLength={120} aria-label="Block name" onChange={(e) => setB({ ...b, name: e.target.value })} />
           <div className="sub">
-            <select className="bsel" aria-label="Block type" value={b.block_type} onChange={(e) => setB({ ...b, block_type: e.target.value })}>
+            <select className="bsel" aria-label="Block type" value={b.block_type} onChange={(e) => setType(e.target.value)}>
               {Object.entries(BLOCK_TYPES).map(([k, t]) => <option key={k} value={k}>{t.name} block</option>)}
             </select>
           </div>
@@ -131,7 +153,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
           const src = byId(slot?.source_asset_id);
           return (
             <div className="bf" key={d.k}>
-              <div className="bl"><label>{d.label}</label><span className="cnt">{(d.w || 0) * 2}×{(d.h || 0) * 2} {d.png ? 'PNG' : 'JPG'}</span></div>
+              <div className="bl"><label>{d.label}</label><span className="cnt">{d.natural ? (slot?.width && !slot.dirty ? `${slot.width}×${slot.height}` : `up to ${(d.w || 600) * 2}px wide, same shape`) : `${(d.w || 0) * 2}×${(d.h || 0) * 2}`} {d.png ? 'PNG' : 'JPG'}</span></div>
               <div className="slot">
                 <div className={'sthumb ' + d.fit}>{s && <img src={s} alt="" />}</div>
                 <div className="sinfo">
@@ -166,7 +188,9 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
       {saved && (
         <div className="figma">
           <div className="label">Make it a Figma component</div>
-          <p className="tip">Ask Claude with the Emailsy CMS and Figma connectors on. It builds a component from this block in the design system you choose, using your styles.</p>
+          <p className="tip">{b.block_type === 'design'
+            ? 'Ask Claude with the Emailsy CMS and Figma connectors on. It looks at this design, keeps the photo as an image and rebuilds the text as live, editable text in your design system.'
+            : 'Ask Claude with the Emailsy CMS and Figma connectors on. It builds a component from this block in the design system you choose, using your styles.'}</p>
           <div className="promptbox">{prompt}</div>
           <button className="btn" type="button" onClick={async () => { try { await navigator.clipboard.writeText(prompt); toast('Copied. Paste it to Claude.'); } catch { toast(prompt); } }}>Copy request for Claude</button>
           {b.figma?.node_id && <p className="tip">In Figma: file {b.figma.file_key}, node {b.figma.node_id}.</p>}
@@ -195,9 +219,12 @@ function Preview({ b, bt, slotSrc }: { b: any; bt: BlockField[]; slotSrc: (s: an
     <div className={'pv pv-' + b.block_type}>
       {bt.map((d) => {
         if (d.type === 'image') {
-          const s = slotSrc(b.images?.[d.k]);
+          const slot = b.images?.[d.k];
+          const s = slotSrc(slot);
+          if (d.natural) return <div key={d.k} className="pv-img natural">{s && <img src={s} alt="" />}</div>;
           return <div key={d.k} className={'pv-img ' + d.fit} style={{ aspectRatio: `${d.w}/${d.h}` }}>{s && <img src={s} alt="" />}</div>;
         }
+        if (b.block_type === 'design') return null;
         if (d.type === 'url') return null;
         const v = b.fields?.[d.k];
         if (!v) return null;

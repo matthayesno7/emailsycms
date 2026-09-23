@@ -18,6 +18,7 @@ export const Icon = {
   Blocks: (p: P) => <S {...p}><rect x="3" y="3" width="18" height="8" rx="1.5" /><rect x="3" y="14" width="8" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></S>,
   Plus: (p: P) => <S {...p}><path d="M12 5v14M5 12h14" /></S>,
   Users: (p: P) => <S {...p}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.5 3.3-5.5 6.5-5.5s5.7 2 6.5 5.5" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.5 3.5 5.2" /></S>,
+  Settings: (p: P) => <S {...p}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></S>,
   Plug: (p: P) => <S {...p}><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4" /></S>,
   Send: (p: P) => <S {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></S>,
   Table: (p: P) => <S {...p}><path d="M4 4h16v16H4z" /><path d="M4 9h16M9 9v11" /></S>,
@@ -33,6 +34,7 @@ const WIRE: Record<string, string> = {
   product: '<rect x="14" y="6" width="72" height="44" rx="2" class="wi"/><rect x="38" y="56" width="24" height="3" rx="1" class="wl"/><rect x="26" y="63" width="48" height="6" rx="1"/><rect x="40" y="73" width="20" height="4" rx="1" class="wl"/><rect x="38" y="83" width="24" height="8" rx="2" class="wb"/>',
   button: '<rect x="30" y="42" width="40" height="14" rx="3" class="wb"/>',
   footer: '<rect x="38" y="16" width="24" height="9" rx="1"/><circle cx="36" cy="36" r="3" class="wl"/><circle cx="46" cy="36" r="3" class="wl"/><circle cx="56" cy="36" r="3" class="wl"/><circle cx="66" cy="36" r="3" class="wl"/><rect x="14" y="48" width="72" height="3" rx="1" class="wl"/><rect x="20" y="54" width="60" height="3" rx="1" class="wl"/><rect x="28" y="64" width="44" height="3" rx="1" class="wl"/><rect x="40" y="74" width="20" height="3" rx="1"/>',
+  design: '<rect x="6" y="22" width="88" height="56" rx="2"/><rect x="10" y="26" width="38" height="48" rx="1" class="wi"/><rect x="54" y="32" width="32" height="6" rx="1"/><rect x="54" y="44" width="24" height="3" rx="1" class="wl"/><rect x="54" y="52" width="34" height="3" rx="1" class="wl"/><rect x="54" y="58" width="28" height="3" rx="1" class="wl"/><rect x="54" y="66" width="18" height="3" rx="1"/>',
 };
 
 export function Wire({ type }: { type: string }) {
