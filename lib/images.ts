@@ -69,6 +69,29 @@ export function drawFit(src: Src, tw: number, th: number, fit: 'cover' | 'contai
   return cv;
 }
 
+// Cut a region out of an image. crop is normalised (0..1) to the image size.
+export function cropCanvas(img: HTMLImageElement, crop: { x: number; y: number; w: number; h: number }) {
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const sx = Math.round(crop.x * W), sy = Math.round(crop.y * H);
+  const sw = Math.max(1, Math.round(crop.w * W)), sh = Math.max(1, Math.round(crop.h * H));
+  const cv = document.createElement('canvas');
+  cv.width = sw; cv.height = sh;
+  cv.getContext('2d')!.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  return cv;
+}
+
+// JPEG base64 of an image, scaled so its long edge is at most max px.
+export function toBase64Jpeg(img: HTMLImageElement, max = 1568) {
+  const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d')!;
+  cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, w, h);
+  cx.drawImage(img, 0, 0, w, h);
+  return { data: cv.toDataURL('image/jpeg', 0.9).split(',')[1], width: w, height: h };
+}
+
 export function toBlob(cv: HTMLCanvasElement, type = 'image/png', quality = 0.86): Promise<Blob> {
   return new Promise((resolve, reject) => cv.toBlob((b) => (b ? resolve(b) : reject(new Error('export failed'))), type, quality));
 }

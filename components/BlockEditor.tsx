@@ -1,8 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BLOCK_TYPES, exportSize, type BlockField } from '@/lib/blockTypes';
-import { drawFit, loadImg, toBlob } from '@/lib/images';
+import { cropCanvas, drawFit, loadImg, toBlob } from '@/lib/images';
+import { cardFromReading, readDesign } from '@/lib/extract';
 import { Icon } from './icons';
 import type { Asset } from './Library';
 
@@ -24,6 +25,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const [pickFor, setPickFor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [reading, setReading] = useState(false);
   const bt = BLOCK_TYPES[b.block_type] || BLOCK_TYPES.hero;
   const saved = !!b.id;
   const byId = (id?: string) => library.find((i) => i.id === id);
@@ -33,7 +35,12 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const pickable = library.filter((i) => i.kind !== 'block' && i.storage_path && urls[i.storage_path]);
   const products = library.filter((i) => i.kind === 'product');
 
-  const setField = (k: string, v: string) => setB((x: any) => ({ ...x, fields: { ...x.fields, [k]: v } }));
+  const setField = (k: string, v: string) => setB((x: any) => {
+    const next = { ...x, fields: { ...x.fields, [k]: v } };
+    // Changing the layout re-crops the image for its new shape.
+    if (k === 'layout' && x.images?.image && (x.images.image.original_path || x.images.image.source_asset_id)) next.images = { ...x.images, image: { ...x.images.image, dirty: true } };
+    return next;
+  });
   const setImage = (k: string, v: any) => setB((x: any) => ({ ...x, images: { ...x.images, [k]: v } }));
 
   // Switching type re-renders each image from its original at the new type's size.
@@ -77,15 +84,17 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         }
         if (!url) continue;
         const img = await loadImg(url);
-        const { w, h } = exportSize(d, img.naturalWidth, img.naturalHeight);
-        const cv = drawFit(img, w, h, d.fit || 'cover', src?.focus, !d.png, d.fit === 'contain' ? 0.92 : 1);
+        const source = !src && slot.crop ? cropCanvas(img, slot.crop) : img;
+        const sw = (source as any).naturalWidth || source.width, sh = (source as any).naturalHeight || source.height;
+        const { w, h } = exportSize(d, sw, sh, b.fields?.layout);
+        const cv = drawFit(source, w, h, d.fit || 'cover', src?.focus, !d.png, d.fit === 'contain' ? 0.92 : 1);
         const type = d.png ? 'image/png' : 'image/jpeg';
         const blob = await toBlob(cv, type, d.natural ? 0.92 : 0.86);
         const path = `${ws}/blocks/${crypto.randomUUID()}.${d.png ? 'png' : 'jpg'}`;
         const { error } = await supabase.storage.from('assets').upload(path, blob, { contentType: type });
         if (error) throw error;
         if (slot.path) await supabase.storage.from('assets').remove([slot.path]);
-        images[d.k] = { path, width: w, height: h, format: d.png ? 'png' : 'jpg', bytes: blob.size, alt: slot.alt || '', source_asset_id: src?.id || slot.source_asset_id || null, original_path: slot.original_path || src?.storage_path || null };
+        images[d.k] = { path, width: w, height: h, format: d.png ? 'png' : 'jpg', bytes: blob.size, alt: slot.alt || '', source_asset_id: src?.id || slot.source_asset_id || null, original_path: slot.original_path || src?.storage_path || null, ...(!src && slot.crop ? { crop: slot.crop } : {}) };
       }
       const row = {
         workspace_id: b.workspace_id || ws, kind: 'block', block_type: b.block_type, name: (b.name || `${bt.name} block`).trim().slice(0, 120),
@@ -112,6 +121,35 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     }
   }
 
+  // Design block -> editable Card: Claude reads the copy and finds the photo.
+  async function readIntoCard() {
+    const slot = b.images?.image;
+    const path = slot?.original_path || slot?.path;
+    if (!b.id || !path) { toast('Save the block with an image first.'); return; }
+    setReading(true);
+    try {
+      const { data } = await supabase.storage.from('assets').createSignedUrl(path, 600);
+      if (!data?.signedUrl) throw new Error('Could not open the image');
+      const img = await loadImg(data.signedUrl);
+      const r = await readDesign(img, b.workspace_id || ws);
+      if (!r.ok) {
+        toast(r.reason === 'not_configured' ? 'Add an Anthropic API key to Railway to let Emailsy read designs.' : r.reason === 'not_a_design' ? 'No copy found in this image.' : `Couldn’t read the design${r.message ? `: ${r.message}` : '.'}`);
+        return;
+      }
+      const built = await cardFromReading({ supabase, ws: b.workspace_id || ws, img, originalPath: path, reading: r.reading, crop: r.crop });
+      if (slot?.path && slot.path !== path) await supabase.storage.from('assets').remove([slot.path]);
+      const res = await supabase.from('assets').update({ ...built, name: b.name && !/block$/.test(b.name) ? b.name : r.reading.headline || b.name }).eq('id', b.id).select('*').single();
+      if (res.error) throw res.error;
+      setB({ ...res.data, fields: { ...(res.data.fields || {}) }, images: JSON.parse(JSON.stringify(res.data.images || {})) });
+      onSaved(res.data as Asset, null);
+      toast('Design read and turned into a Card. Check the copy.');
+    } catch (err: any) {
+      toast(`Couldn’t read the design${err?.message ? `: ${err.message}` : '.'}`);
+    } finally {
+      setReading(false);
+    }
+  }
+
   const where = figmaFile ? ` (${figmaFile.url})` : ': [paste your Figma file link]';
   const prompt = !saved
     ? ''
@@ -134,6 +172,13 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
       </header>
 
       <div className="pvwrap"><Preview b={b} bt={bt.fields} slotSrc={slotSrc} /></div>
+
+      {b.block_type === 'design' && saved && (
+        <div className="bf readcard">
+          <p className="tip">Emailsy can read this design, keep the photo and turn the copy into an editable Card that matches your other blocks.</p>
+          <button className="btn" type="button" disabled={reading} onClick={readIntoCard}>{reading ? 'Reading the design…' : 'Turn into an editable Card'}</button>
+        </div>
+      )}
 
       {b.block_type === 'product' && (
         <div className="bf">
@@ -165,13 +210,23 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
                 <div className="picker">
                   {pickable.length ? pickable.map((i) => (
                     <button key={i.id} type="button" className={'pk ' + i.kind} title={i.name}
-                      onClick={() => { setImage(d.k, { ...(slot || {}), source_asset_id: i.id, alt: i.name, dirty: true, original_path: i.storage_path }); setPickFor(null); }}>
+                      onClick={() => { setImage(d.k, { ...(slot || {}), source_asset_id: i.id, alt: i.name, dirty: true, original_path: i.storage_path, crop: undefined }); setPickFor(null); }}>
                       <img src={urls[i.storage_path]} alt={i.name} />
                     </button>
                   )) : <p className="tip">Upload images first, then pick one here.</p>}
                 </div>
               )}
               {s && <input className="in" placeholder="Alt text" maxLength={120} value={slot?.alt || ''} onChange={(e) => setImage(d.k, { ...slot, alt: e.target.value })} />}
+            </div>
+          );
+        }
+        if (d.type === 'choice') {
+          return (
+            <div className="bf" key={d.k}>
+              <div className="bl"><label htmlFor={'bf-' + d.k}>{d.label}</label></div>
+              <select className="in" id={'bf-' + d.k} value={v || (d.k === 'layout' ? 'top' : '')} onChange={(e) => setField(d.k, e.target.value)}>
+                {(d.options || []).map(([ov, ol]) => <option key={ov} value={ov}>{ol}</option>)}
+              </select>
             </div>
           );
         }
@@ -214,23 +269,51 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   );
 }
 
-function Preview({ b, bt, slotSrc }: { b: any; bt: BlockField[]; slotSrc: (s: any) => string | undefined }) {
+export function Preview({ b, bt, slotSrc }: { b: any; bt: BlockField[]; slotSrc: (s: any) => string | undefined }) {
+  const f = b.fields || {};
+  const layout = b.block_type === 'card' ? f.layout || 'top' : 'top';
+  const side = layout === 'left' || layout === 'right';
+  const imgs = bt.filter((d) => d.type === 'image').map((d) => {
+    const s = slotSrc(b.images?.[d.k]);
+    if (d.natural) return <div key={d.k} className="pv-img natural">{s && <img src={s} alt="" />}</div>;
+    const ar = side && d.side ? `${d.side.w}/${d.side.h}` : `${d.w}/${d.h}`;
+    return <div key={d.k} className={'pv-img ' + d.fit} style={{ aspectRatio: ar }}>{s && <img src={s} alt="" />}</div>;
+  });
+  const texts = b.block_type === 'design' ? [] : bt.filter((d) => d.type !== 'image' && d.type !== 'url' && d.k !== 'layout').map((d) => {
+    const v = f[d.k];
+    if (!v) return null;
+    if (d.k === 'rating') return <div key={d.k} className="pv-stars" aria-label={`${v} stars`}>{'★'.repeat(Number(v) || 0)}</div>;
+    const cls = /cta/.test(d.k) ? 'pv-btn'
+      : d.k === 'eyebrow' ? 'pv-e'
+      : d.k === 'name' && b.block_type === 'card' ? 'pv-name'
+      : /headline|name/.test(d.k) ? 'pv-h'
+      : /subhead|price/.test(d.k) ? 'pv-s' : 'pv-p';
+    return <div key={d.k} className={cls}>{v}</div>;
+  });
+  if (side) return <div className={'pv pv-card side ' + layout}>{imgs}<div className="pv-txt">{texts}</div></div>;
+  return <div className={'pv pv-' + b.block_type}>{imgs}{texts}</div>;
+}
+
+// Scales a fixed-width preview down to fit its container (used by library tiles).
+export function FitPreview({ children, width = 320 }: { children: React.ReactNode; width?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [k, setK] = useState(0.55);
+  const [h, setH] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const el = ref.current, inn = inner.current;
+    if (!el || !inn) return;
+    const ro = new ResizeObserver(() => {
+      const scale = el.clientWidth / width;
+      setK(scale);
+      setH(inn.offsetHeight * scale);
+    });
+    ro.observe(el); ro.observe(inn);
+    return () => ro.disconnect();
+  }, [width]);
   return (
-    <div className={'pv pv-' + b.block_type}>
-      {bt.map((d) => {
-        if (d.type === 'image') {
-          const slot = b.images?.[d.k];
-          const s = slotSrc(slot);
-          if (d.natural) return <div key={d.k} className="pv-img natural">{s && <img src={s} alt="" />}</div>;
-          return <div key={d.k} className={'pv-img ' + d.fit} style={{ aspectRatio: `${d.w}/${d.h}` }}>{s && <img src={s} alt="" />}</div>;
-        }
-        if (b.block_type === 'design') return null;
-        if (d.type === 'url') return null;
-        const v = b.fields?.[d.k];
-        if (!v) return null;
-        const cls = /cta/.test(d.k) ? 'pv-btn' : /headline|name/.test(d.k) ? 'pv-h' : /subhead|eyebrow|price/.test(d.k) ? 'pv-s' : 'pv-p';
-        return <div key={d.k} className={cls}>{v}</div>;
-      })}
+    <div ref={ref} className="fitpv" style={{ height: h }}>
+      <div ref={inner} style={{ width, transform: `scale(${k})`, transformOrigin: 'top left' }}>{children}</div>
     </div>
   );
 }

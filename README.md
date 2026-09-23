@@ -39,6 +39,8 @@ npm run dev                  # http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API (anon / publishable key) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API (service_role / secret key). Server only. |
 | `NEXT_PUBLIC_APP_URL` | The public URL of the app, no trailing slash |
+| `ANTHROPIC_API_KEY` | Optional. Lets Emailsy read finished designs into editable Card blocks. Server only. |
+| `ANTHROPIC_MODEL` | Optional. Defaults to `claude-sonnet-5`. |
 
 Check the MCP handler without a database: `npx tsx scripts/mcp-selftest.ts`.
 

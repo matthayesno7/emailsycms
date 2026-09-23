@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { BLOCK_TYPES, KIND_LABEL, exportSize } from '@/lib/blockTypes';
 import { baseName, dimsOf, drawFit, extOf, loadImg, parseCSV, toBlob } from '@/lib/images';
+import { cardFromReading, readDesign } from '@/lib/extract';
 import AssetPanel from './AssetPanel';
-import BlockEditor from './BlockEditor';
+import BlockEditor, { FitPreview, Preview } from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
 import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
 
@@ -173,7 +174,26 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     }
     setView('product');
     loadAssets(ws);
-    toast(`${products.length} products imported`);
+    const withImages = products.filter((p) => p.feed_image).length;
+    toast(`${products.length} products imported${withImages ? '. Fetching their images…' : ''}`);
+    if (withImages) await fetchFeedImages();
+  }
+
+  // The server downloads image_link URLs into storage in batches (browsers can't read other sites' images).
+  async function fetchFeedImages() {
+    const skip: string[] = [];
+    let done = 0, failed = 0;
+    for (let round = 0; round < 60; round++) {
+      const res = await fetch('/api/feed-images', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws, skip }) }).catch(() => null);
+      const json = res ? await res.json().catch(() => null) : null;
+      if (!res?.ok || !json) { toast('Couldn’t fetch the product images. Try importing again.'); break; }
+      done += json.done;
+      for (const f of json.failed || []) { skip.push(f.id); failed++; }
+      loadAssets(ws);
+      if (!json.remaining || (!json.done && !(json.failed || []).length)) break;
+      toast(`Fetched ${done} product images…`);
+    }
+    toast(failed ? `${done} product images added. ${failed} couldn’t be downloaded; drop PID.jpg files to add them.` : `${done} product images added`);
   }
 
   async function ingest(files: FileList | File[]) {
@@ -197,43 +217,72 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   }
 
   // ---------- block flows ----------
-  // Upload an image straight into a new block: keep the original, render the
-  // email-ready crop for the block's image slot, and save the block.
-  async function makeBlockFromFile(file: File, type: string) {
-    const bt = BLOCK_TYPES[type];
-    const d = bt.fields.find((f) => f.type === 'image')!;
+  async function uploadOriginal(file: File) {
     const ext = extOf(file);
     const mime = file.type || (ext === 'png' ? 'image/png' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg');
     const original = `${ws}/${crypto.randomUUID()}.${ext}`;
-    const up1 = await supabase.storage.from('assets').upload(original, file, { contentType: mime });
-    if (up1.error) throw up1.error;
+    const up = await supabase.storage.from('assets').upload(original, file, { contentType: mime });
+    if (up.error) throw up.error;
     const local = URL.createObjectURL(file);
     let img: HTMLImageElement;
     try { img = await loadImg(local); } finally { URL.revokeObjectURL(local); }
+    const name = baseName(file.name || 'Image').replace(/[-_]+/g, ' ').slice(0, 120);
+    return { original, img, name };
+  }
+
+  // Render the email-ready crop for the block's image slot and save the block.
+  async function blockFromImage(img: HTMLImageElement, original: string, type: string, name: string) {
+    const bt = BLOCK_TYPES[type];
+    const d = bt.fields.find((f) => f.type === 'image')!;
     const { w, h } = exportSize(d, img.naturalWidth, img.naturalHeight);
     const cv = drawFit(img, w, h, d.fit || 'cover', null, !d.png, d.fit === 'contain' ? 0.92 : 1);
     const type2 = d.png ? 'image/png' : 'image/jpeg';
     const blob = await toBlob(cv, type2, d.natural ? 0.92 : 0.86);
     const path = `${ws}/blocks/${crypto.randomUUID()}.${d.png ? 'png' : 'jpg'}`;
-    const up2 = await supabase.storage.from('assets').upload(path, blob, { contentType: type2 });
-    if (up2.error) throw up2.error;
-    const name = baseName(file.name || 'Image').replace(/[-_]+/g, ' ').slice(0, 120) || `${bt.name} block`;
+    const up = await supabase.storage.from('assets').upload(path, blob, { contentType: type2 });
+    if (up.error) throw up.error;
     const { data, error } = await supabase.from('assets').insert({
-      workspace_id: ws, kind: 'block', block_type: type, name, fields: {}, created_by: userId,
+      workspace_id: ws, kind: 'block', block_type: type, name: name || `${bt.name} block`, fields: {}, created_by: userId,
       images: { [d.k]: { path, width: w, height: h, format: d.png ? 'png' : 'jpg', bytes: blob.size, alt: name, original_path: original } },
     }).select('*').single();
     if (error) throw error;
     return data as Asset;
   }
 
+  // A finished design: Emailsy reads it and saves an editable Card. Falls back to a Design block.
+  async function blockFromDesign(img: HTMLImageElement, original: string, name: string): Promise<{ row: Asset; note?: string }> {
+    const r = await readDesign(img, ws);
+    if (!r.ok) {
+      const row = await blockFromImage(img, original, 'design', name);
+      const note = r.reason === 'not_configured'
+        ? 'Saved as a Design block. Add an Anthropic API key to let Emailsy read designs.'
+        : r.reason === 'not_a_design'
+        ? 'No copy found in that image, so it was saved as a Design block.'
+        : `Couldn’t read the design${r.message ? ` (${r.message})` : ''}. Saved as a Design block.`;
+      return { row, note };
+    }
+    const built = await cardFromReading({ supabase, ws, img, originalPath: original, reading: r.reading, crop: r.crop });
+    const { data, error } = await supabase.from('assets').insert({
+      workspace_id: ws, kind: 'block', name: (r.reading.headline || name || 'Card block').slice(0, 120), created_by: userId, ...built,
+    }).select('*').single();
+    if (error) throw error;
+    return { row: data as Asset };
+  }
+
   async function blocksFromFiles(type: string) {
     const files = pendingFiles;
     setPendingFiles([]); setModal(null);
     if (!files.length) return;
-    toast(files.length > 1 ? `Making ${files.length} blocks…` : 'Making your block…');
+    const design = type === 'design';
+    toast(design ? (files.length > 1 ? `Reading ${files.length} designs…` : 'Reading your design…') : files.length > 1 ? `Making ${files.length} blocks…` : 'Making your block…');
     const made: Asset[] = [];
+    let note: string | undefined;
     for (const f of files) {
-      try { made.push(await makeBlockFromFile(f, type)); } catch { toast(`Couldn’t make a block from ${f.name}.`); }
+      try {
+        const { original, img, name } = await uploadOriginal(f);
+        if (design) { const r = await blockFromDesign(img, original, name); made.push(r.row); note = note || r.note; }
+        else made.push(await blockFromImage(img, original, type, name));
+      } catch { toast(`Couldn’t make a block from ${f.name}.`); }
     }
     if (!made.length) return;
     setItems((list) => [...made, ...list]);
@@ -241,8 +290,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (made.length === 1) {
       const b = made[0];
       setBlock({ ...b, fields: { ...(b.fields || {}) }, images: JSON.parse(JSON.stringify(b.images || {})) });
-      toast('Block created. Add your copy.');
-    } else toast(`${made.length} ${BLOCK_TYPES[type].name} blocks created`);
+      toast(note || (design ? 'Design read and saved as a Card. Check the copy.' : 'Block created. Add your copy.'));
+    } else toast(note || `${made.length} blocks created`);
   }
 
   function startBlock(type: string, fromId?: string | null) {
@@ -394,7 +443,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </div>
       </main>
 
-      <input ref={fileImg} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
+      <input ref={fileImg} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       <input ref={fileCsv} type="file" accept=".csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       {dropping && <div className="drop"><div><strong>{view === 'block' ? 'Drop to make blocks' : 'Drop to add'}</strong><span>{view === 'block' ? 'Each image becomes a block. You pick the type next.' : 'Images, logos, or a product feed CSV'}</span></div></div>}
       {(openAsset || block || modal || sideOpen) && <div className="scrim" onClick={() => { setOpenId(null); setBlock(null); setModal(null); setSideOpen(false); }} />}
@@ -456,12 +505,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 function Tile({ it, src, urls, onOpen }: { it: Asset; src: string | null; urls: Record<string, string>; onOpen: () => void }) {
   const onKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } };
   if (it.kind === 'block') {
-    const bt = BLOCK_TYPES[it.block_type] || { name: 'Block' };
-    const slot = Object.values(it.images || {}).find((s: any) => s?.path && urls[s.path]) as any;
+    const bt = BLOCK_TYPES[it.block_type] || { name: 'Block', fields: [] };
     return (
       <div className="tile" role="button" tabIndex={0} title="Open block" onClick={onOpen} onKeyDown={onKey}>
-        <div className="thumb block">
-          {slot ? <img src={urls[slot.path]} alt="" loading="lazy" draggable={false} /> : <Wire type={it.block_type} />}
+        <div className="thumb block live">
+          {bt.fields.length ? <FitPreview><Preview b={it} bt={bt.fields} slotSrc={(s: any) => (s?.path ? urls[s.path] : undefined)} /></FitPreview> : <Wire type={it.block_type} />}
           <span className="tag">{bt.name}</span>
         </div>
         <div className="meta"><span className="t">{it.name}</span><span className="s">{it.figma?.node_id ? 'In Figma' : ''}</span></div>

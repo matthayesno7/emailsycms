@@ -3,13 +3,15 @@
 
 export type BlockField = {
   k: string;
-  type: 'image' | 'text' | 'long' | 'url';
+  type: 'image' | 'text' | 'long' | 'url' | 'choice';
   label: string;
   max?: number;
   w?: number; // image slot size in CSS px (exported at 2x)
   h?: number;
   fit?: 'cover' | 'contain';
   png?: boolean;
+  side?: { w: number; h: number }; // slot size when the image sits beside the copy (layout left/right)
+  options?: [string, string][]; // for choice fields: [value, label]
   natural?: boolean; // keep the source's aspect ratio: w is the width, height follows the image
   linkOf?: string;
 };
@@ -31,12 +33,16 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   },
   card: {
     name: 'Card',
-    note: 'Image with a title, short text and a button. Use it in rows of one, two or three.',
+    note: 'Image with a sub header, title, optional stars, text, name and a button. Image on top, left or right.',
     fields: [
-      { k: 'image', type: 'image', label: 'Image', w: 300, h: 200, fit: 'cover' },
+      { k: 'image', type: 'image', label: 'Image', w: 300, h: 200, fit: 'cover', side: { w: 240, h: 320 } },
+      { k: 'layout', type: 'choice', label: 'Layout', options: [['top', 'Image on top'], ['left', 'Image left'], ['right', 'Image right']] },
+      { k: 'eyebrow', type: 'text', label: 'Sub header', max: 30 },
       { k: 'headline', type: 'text', label: 'Title', max: 50 },
-      { k: 'body', type: 'long', label: 'Text', max: 160 },
-      { k: 'cta', type: 'text', label: 'Button label', max: 20 },
+      { k: 'rating', type: 'choice', label: 'Star rating', options: [['', 'None'], ['5', '5 stars'], ['4', '4 stars'], ['3', '3 stars'], ['2', '2 stars'], ['1', '1 star']] },
+      { k: 'body', type: 'long', label: 'Text', max: 220 },
+      { k: 'name', type: 'text', label: 'Name', max: 40 },
+      { k: 'cta', type: 'text', label: 'Button label', max: 24 },
       { k: 'link', type: 'url', label: 'Link', linkOf: 'cta' },
     ],
   },
@@ -72,7 +78,7 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   },
   design: {
     name: 'Design',
-    note: 'A finished design saved as one image, like a card with a photo and copy. Claude rebuilds it in Figma with live text.',
+    note: 'A finished design saved as one image, like a card with a photo and copy. Emailsy reads it and turns it into an editable Card.',
     fields: [
       { k: 'image', type: 'image', label: 'Design image', w: 600, fit: 'cover', natural: true },
       { k: 'notes', type: 'long', label: 'Notes for Claude', max: 300 },
@@ -83,7 +89,8 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
 
 // Pixel size an image slot is exported at (2x for retina). Natural slots keep the
 // source's shape and never upscale.
-export function exportSize(d: BlockField, sw?: number, sh?: number) {
+export function exportSize(d: BlockField, sw?: number, sh?: number, layout?: string) {
+  if (d.side && (layout === 'left' || layout === 'right')) return { w: d.side.w * 2, h: d.side.h * 2 };
   if (d.natural) {
     if (!sw || !sh) return { w: (d.w || 600) * 2, h: 0 };
     const w = Math.round(Math.min((d.w || 600) * 2, sw));

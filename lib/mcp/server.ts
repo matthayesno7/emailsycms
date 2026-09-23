@@ -36,6 +36,8 @@ Turning a block into a component in the user's design system:
 3. Build it as a COMPONENT with auto layout, named layers, text properties for each text field, and the image slots as image-filled rectangles at the given sizes (push images with push_image_to_figma).
 4. Call record_figma_placement with the file key and node id so the team can see it in Emailsy.
 
+Card blocks can have layout "top", "left" or "right" (image beside the copy), a sub header (eyebrow), a star rating and a name. Cards read from a finished design keep that design as images.reference: view it with view_image slot "reference" to match the layout.
+
 Rebuilding a Design block (block type "design", or any time the user says an image IS a finished design, e.g. a card with a photo and copy baked in):
 The goal is an editable copy of that design, not the flat image with new copy next to it. Never place the whole flat image and never add default or placeholder copy.
 1. Call get_block_for_figma, then view_image on the block to SEE the design. Read every piece of text exactly as written (headlines, quotes, names, prices, button labels), and note the layout: where the photo sits, columns, alignment, spacing, colours, font sizes and weights, dividers, icons such as star ratings, and the background colour.
@@ -185,11 +187,12 @@ async function blockImages(ctx: Ctx, a: AssetRow) {
   const spec = BLOCK_TYPES[a.block_type];
   for (const f of spec?.fields.filter((f) => f.type === 'image') || []) {
     const slot = a.images?.[f.k];
-    const ew = f.natural ? slot?.width || null : (f.w || 0) * 2;
-    const eh = f.natural ? slot?.height || null : (f.h || 0) * 2;
+    const sideways = f.side && ['left', 'right'].includes(a.fields?.layout);
+    const ew = f.natural ? slot?.width || null : sideways ? f.side!.w * 2 : (f.w || 0) * 2;
+    const eh = f.natural ? slot?.height || null : sideways ? f.side!.h * 2 : (f.h || 0) * 2;
     out[f.k] = {
       label: f.label,
-      size_px: { width: ew ? Math.round(ew / 2) : f.w, height: eh ? Math.round(eh / 2) : null },
+      size_px: { width: ew ? Math.round(ew / 2) : f.w || null, height: eh ? Math.round(eh / 2) : null },
       export_px: { width: ew, height: eh },
       keeps_shape: !!f.natural,
       fit: f.fit,
@@ -261,14 +264,17 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
         component_name_suggestion: `${spec.name} / ${a.name}`,
         fields: spec.fields
           .filter((f) => f.type !== 'image')
-          .map((f) => ({ key: f.k, label: f.label, kind: f.type === 'url' ? 'link' : 'text', max_chars: f.max || null, link_for: f.linkOf || null, value: a.fields?.[f.k] || '' })),
+          .map((f) => ({ key: f.k, label: f.label, kind: f.type === 'url' ? 'link' : f.type === 'choice' ? 'option' : 'text', max_chars: f.max || null, link_for: f.linkOf || null, options: f.options ? f.options.map(([v]) => v) : undefined, value: a.fields?.[f.k] || '' })),
         images: await blockImages(ctx, a),
         figma: a.figma || null,
         workspace_figma_file: figmaFile(r.ws!.find((w) => w.id === a.workspace_id)),
+        reference_image: a.images?.reference?.path
+          ? { width: a.images.reference.width || null, height: a.images.reference.height || null, note: 'The original finished design this block was read from. Call view_image with slot "reference" to see it, and match its layout and proportions using the design system\'s styles.' }
+          : null,
         rebuild: a.block_type === 'design',
         how_to: a.block_type === 'design'
           ? 'This is a finished design saved as one flat image. Do NOT place the flat image or add placeholder copy. Call view_image on this block, read the exact text and layout, then rebuild it as one component: photo regions as image-filled rectangles cropped from the pushed image (scaleMode CROP), all text as live text with component text properties, laid out as in the design. Follow "Rebuilding a Design block" in the server instructions. Use the notes field if the user left any.'
-          : 'Build from the target design system\'s own text styles, colours and spacing. One COMPONENT, vertical auto layout, hug height. Expose each text field as a component text property. Push each image with push_image_to_figma, then apply the returned imageHash as an IMAGE fill (scaleMode FILL for cover, FIT for contain) on a rectangle at size_px.',
+          : 'Build from the target design system\'s own text styles, colours and spacing. One COMPONENT, vertical auto layout, hug height. Expose each text field as a component text property. Push each image with push_image_to_figma, then apply the returned imageHash as an IMAGE fill (scaleMode FILL for cover, FIT for contain) on a rectangle at size_px. Card layout: "top" = image above the copy (vertical auto layout); "left"/"right" = image beside the copy (horizontal auto layout, copy vertically centred). rating is a number of stars (draw that many star characters or vectors); leave out any field whose value is empty. Add a variant or boolean property for optional parts (stars, name, button) when the design system does that.',
       });
     }
     case 'view_image': {

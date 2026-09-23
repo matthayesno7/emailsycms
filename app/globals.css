@@ -165,6 +165,18 @@ svg.wire .wb{fill:var(--accent)}
 .pv-two .pv-h{font-size:13px;padding:8px 0 0}.pv-two .pv-p{padding:4px 0 0}
 .pv-footer .pv-img{max-width:110px;margin:14px auto 0}
 .pv-button{padding-top:6px}
+.pv-e{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#666;padding:12px 14px 0}
+.pv-stars{font-size:13px;letter-spacing:2px;padding:6px 14px 0;color:#111}
+.pv-name{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:8px 14px 0}
+.pv.side{display:grid;grid-template-columns:42% 1fr;gap:14px;align-items:center;text-align:left;padding:12px}
+.pv.side.right .pv-img{order:2}
+.pv.side .pv-txt>*{padding-left:0;padding-right:0}
+.pv.side .pv-txt>:first-child{padding-top:0}
+.pv.side .pv-btn{margin-top:10px}
+.thumb.block.live{display:grid;place-items:center;padding:12px;background:var(--surface)}
+.fitpv{width:100%;overflow:hidden;max-height:100%}
+.fitpv .pv{max-width:none;width:100%}
+.readcard .tip{margin-bottom:8px}
 .figma{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .figma .label{margin:0;color:var(--ink);font-weight:600}
 .promptbox{font-size:13px;background:var(--surface);border-radius:8px;padding:10px 12px;color:var(--ink);line-height:1.5;width:100%}
