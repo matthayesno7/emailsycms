@@ -79,17 +79,27 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   },
   design: {
     name: 'Design',
-    note: 'A finished design saved as one image, like a card with a photo and copy. Emailsy reads it and turns it into an editable Card.',
+    note: 'A finished design (photo and copy in one image). Emailsy reads it: the photo stays an image and the copy becomes editable, keeping the design’s own look.',
     fields: [
-      { k: 'image', type: 'image', label: 'Design image', w: 600, fit: 'cover', natural: true },
+      { k: 'image', type: 'image', label: 'Photo', w: 600, fit: 'cover', natural: true },
+      { k: 'layout', type: 'choice', label: 'Layout', options: [['top', 'Photo on top'], ['left', 'Photo left'], ['right', 'Photo right']] },
+      { k: 'eyebrow', type: 'text', label: 'Sub header', max: 40 },
+      { k: 'headline', type: 'text', label: 'Headline', max: 80 },
+      { k: 'rating', type: 'choice', label: 'Star rating', options: [['', 'None'], ['5', '5 stars'], ['4', '4 stars'], ['3', '3 stars'], ['2', '2 stars'], ['1', '1 star']] },
+      { k: 'body', type: 'long', label: 'Text', max: 300 },
+      { k: 'name', type: 'text', label: 'Name', max: 40 },
+      { k: 'cta', type: 'text', label: 'Button label', max: 30 },
+      { k: 'link', type: 'url', label: 'Link', linkOf: 'cta' },
       { k: 'notes', type: 'long', label: 'Notes for Claude', max: 300 },
-      { k: 'link', type: 'url', label: 'Link' },
     ],
   },
 };
 
 // Pixel size an image slot is exported at (2x for retina). Natural slots keep the
 // source's shape and never upscale.
+// A Design block whose copy has been read out of the image (so it is editable).
+export const isReadDesign = (b: any) => b?.block_type === 'design' && !!b?.images?.reference?.path;
+
 export function exportSize(d: BlockField, sw?: number, sh?: number, layout?: string) {
   if (d.side && (layout === 'left' || layout === 'right')) return { w: d.side.w * 2, h: d.side.h * 2 };
   if (d.natural) {

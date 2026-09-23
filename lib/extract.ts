@@ -1,5 +1,5 @@
 'use client';
-// Turn a finished design (one flat image) into an editable Card block:
+// Turn a finished design (one flat image) into an editable Design block:
 // Claude reads the copy and finds the photo, then we crop the photo out of the original.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BLOCK_TYPES, exportSize } from './blockTypes';
@@ -11,6 +11,7 @@ export type Reading = {
   layout: 'top' | 'left' | 'right';
   photo: { x: number; y: number; width: number; height: number } | null;
   eyebrow: string; headline: string; rating: number; body: string; name: string; cta: string;
+  style?: Record<string, any>;
 };
 
 export type ReadResult =
@@ -44,9 +45,9 @@ export async function readDesign(img: HTMLImageElement, workspaceId: string): Pr
   return { ok: true, reading: r, crop };
 }
 
-// Build the Card's fields and images. The photo is saved as an Image asset (so it can be reused)
-// and the Card uses it; the original design stays attached as the reference.
-export async function cardFromReading(opts: {
+// Build an editable Design block: the copy as fields, the look as fields.style, the photo as its
+// own Image asset (so it can be reused), and the original design attached as the reference.
+export async function editableFromReading(opts: {
   supabase: SupabaseClient; ws: string; userId: string; name: string; img: HTMLImageElement; originalPath: string;
   reading: Reading; crop: { x: number; y: number; w: number; h: number } | null;
 }) {
@@ -61,6 +62,7 @@ export async function cardFromReading(opts: {
     name: (r.name || '').trim(),
     cta: (r.cta || '').trim(),
     link: '',
+    style: { ...(r.style || {}), photo_share: crop ? Math.round(crop.w * 100) / 100 : null },
   };
   const images: Record<string, any> = {
     reference: { path: originalPath, width: img.naturalWidth, height: img.naturalHeight, note: 'Original design' },
@@ -77,14 +79,14 @@ export async function cardFromReading(opts: {
       workspace_id: ws, kind: 'image', name: `${name} photo`.slice(0, 120), storage_path: photoPath, mime: 'image/jpeg',
       width: src.width, height: src.height, bytes: full.size, images: email ? { email } : {}, created_by: userId,
     }).select('id').single();
-    // 2. The Card's image slot, cropped to its layout.
-    const d = BLOCK_TYPES.card.fields.find((f) => f.type === 'image')!;
-    const { w, h } = exportSize(d, src.width, src.height, layout);
+    // 2. The block's photo slot, keeping the photo's own shape.
+    const d = BLOCK_TYPES.design.fields.find((f) => f.type === 'image')!;
+    const { w, h } = exportSize(d, src.width, src.height);
     const blob = await toBlob(drawFit(src, w, h, 'cover', null, true), 'image/jpeg', 0.88);
     const path = `${ws}/blocks/${crypto.randomUUID()}.jpg`;
     const up2 = await supabase.storage.from('assets').upload(path, blob, { contentType: 'image/jpeg' });
     if (up2.error) throw up2.error;
     images.image = { path, width: w, height: h, format: 'jpg', bytes: blob.size, alt: fields.headline || fields.name || '', source_asset_id: asset?.id || null, original_path: photoPath };
   }
-  return { block_type: 'card', fields, images };
+  return { block_type: 'design', fields, images };
 }

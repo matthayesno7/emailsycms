@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { BLOCK_TYPES, exportSize, type BlockField } from '@/lib/blockTypes';
+import { BLOCK_TYPES, exportSize, isReadDesign, type BlockField } from '@/lib/blockTypes';
 import { cropCanvas, drawFit, loadImg, toBlob } from '@/lib/images';
-import { cardFromReading, readDesign } from '@/lib/extract';
+import { editableFromReading, readDesign } from '@/lib/extract';
 import { Icon } from './icons';
 import type { Asset } from './Library';
 
@@ -42,6 +42,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     if (k === 'layout' && x.images?.image && (x.images.image.original_path || x.images.image.source_asset_id)) next.images = { ...x.images, image: { ...x.images.image, dirty: true } };
     return next;
   });
+  const setStyle = (k: string, v: any) => setB((x: any) => ({ ...x, fields: { ...x.fields, style: { ...(x.fields?.style || {}), [k]: v } } }));
   const setImage = (k: string, v: any) => setB((x: any) => ({ ...x, images: { ...x.images, [k]: v } }));
 
   // Switching type re-renders each image from its original at the new type's size.
@@ -116,10 +117,10 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     }
   }
 
-  // Design block -> editable Card: Claude reads the copy and finds the photo.
-  async function readIntoCard() {
+  // Design block -> editable design: Claude reads the copy, the look and finds the photo.
+  async function readDesignCopy() {
     const slot = b.images?.image;
-    const path = slot?.original_path || slot?.path;
+    const path = b.images?.reference?.path || slot?.original_path || slot?.path;
     if (!b.id || !path) { toast('Save the block with an image first.'); return; }
     setReading(true);
     try {
@@ -132,13 +133,13 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         return;
       }
       const title = b.name && !/block$/.test(b.name) ? b.name : r.reading.headline || b.name;
-      const built = await cardFromReading({ supabase, ws: b.workspace_id || ws, userId, name: title, img, originalPath: path, reading: r.reading, crop: r.crop });
-      if (slot?.path && slot.path !== path) await supabase.storage.from('assets').remove([slot.path]);
+      const built = await editableFromReading({ supabase, ws: b.workspace_id || ws, userId, name: title, img, originalPath: path, reading: r.reading, crop: r.crop });
+      if (slot?.path && slot.path !== path && slot.path.includes('/blocks/')) await supabase.storage.from('assets').remove([slot.path]);
       const res = await supabase.from('assets').update({ ...built, name: title }).eq('id', b.id).select('*').single();
       if (res.error) throw res.error;
       setB({ ...res.data, fields: { ...(res.data.fields || {}) }, images: JSON.parse(JSON.stringify(res.data.images || {})) });
       onSaved(res.data as Asset, null);
-      toast('Design read and turned into a Card. Its photo is now in Images. Check the copy.');
+      toast('Design read: the copy is editable and the look is kept. Its photo is in Images. Check the copy.');
     } catch (err: any) {
       toast(`Couldn’t read the design${err?.message ? `: ${err.message}` : '.'}`);
     } finally {
@@ -149,6 +150,8 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const where = figmaFile ? ` (${figmaFile.url})` : ': [paste your Figma file link]';
   const prompt = !saved
     ? ''
+    : isReadDesign(b)
+    ? `Using Emailsy CMS, build my design block "${b.name}" (id ${b.id}) as an editable component${where}. Match the original design's layout, colours, typeface and button style (they're in the block), keep the photo as an image and make all the copy live text.`
     : b.block_type === 'design'
     ? `Using Emailsy CMS, rebuild my design block "${b.name}" (id ${b.id}) as an editable component in my design system${where}. Look at the design first, keep the photo as an image, and turn all the text into live text laid out exactly as in the design.`
     : `Using Emailsy CMS, turn my block "${b.name}" (id ${b.id}) into a ${bt.name.toLowerCase()} component and add it to my design system${where}.`;
@@ -182,8 +185,30 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
 
       {b.block_type === 'design' && saved && (
         <div className="bf readcard">
-          <p className="tip">Emailsy can read this design, keep the photo and turn the copy into an editable Card that matches your other blocks.</p>
-          <button className="btn" type="button" disabled={reading} onClick={readIntoCard}>{reading ? 'Reading the design…' : 'Turn into an editable Card'}</button>
+          <p className="tip">{isReadDesign(b)
+            ? 'The copy below is editable and the preview keeps the original design’s look. Read it again if something came out wrong.'
+            : 'Emailsy can read this design: the photo stays an image, the copy becomes editable, and its colours, fonts and layout are kept.'}</p>
+          <button className="btn" type="button" disabled={reading} onClick={readDesignCopy}>{reading ? 'Reading the design…' : isReadDesign(b) ? 'Read the design again' : 'Make the copy editable'}</button>
+        </div>
+      )}
+
+      {isReadDesign(b) && (
+        <div className="bf">
+          <div className="bl"><label>Look</label></div>
+          <div className="stylerow">
+            {([['background', 'Background'], ['headline', 'Headline'], ['text', 'Text'], ['button_bg', 'Button'], ['button_text', 'Button text']] as [string, string][]).map(([k, l]) => (
+              <label key={k} className="swatch" title={l}>
+                <input type="color" value={/^#[0-9a-f]{6}$/i.test(b.fields?.style?.[k] || '') ? b.fields.style[k] : '#ffffff'} onChange={(e) => setStyle(k, e.target.value)} />
+                <span>{l}</span>
+              </label>
+            ))}
+            <select className="in" aria-label="Typeface" value={b.fields?.style?.font || 'sans'} onChange={(e) => setStyle('font', e.target.value)}>
+              <option value="sans">Sans serif</option><option value="serif">Serif</option>
+            </select>
+            <select className="in" aria-label="Alignment" value={b.fields?.style?.align || 'left'} onChange={(e) => setStyle('align', e.target.value)}>
+              <option value="left">Left</option><option value="center">Centred</option>
+            </select>
+          </div>
         </div>
       )}
 
@@ -197,7 +222,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         </div>
       )}
 
-      {bt.fields.map((d) => {
+      {bt.fields.filter((d) => b.block_type !== 'design' || isReadDesign(b) || ['image', 'notes'].includes(d.k)).map((d) => {
         const v = b.fields[d.k] || '';
         if (d.type === 'image') {
           const slot = b.images[d.k];
@@ -279,6 +304,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
 // Width a block is designed at in a 600px email: cards and products usually sit two to a row.
 export function previewWidth(b: any) {
   if (b.block_type === 'product') return 300;
+  if (b.block_type === 'design') return 600;
   if (b.block_type === 'card') return ['left', 'right'].includes(b.fields?.layout) ? 600 : 300;
   return 600;
 }
@@ -286,6 +312,7 @@ export function previewWidth(b: any) {
 // How a block looks in an email, at real email sizes. On mobile, side-by-side cards stack.
 export function Preview({ b, bt, slotSrc, drag, mobile }: { b: any; bt: BlockField[]; slotSrc: (s: any) => string | undefined; drag?: { name: string; png: boolean }; mobile?: boolean }) {
   const f = b.fields || {};
+  if (b.block_type === 'design' && isReadDesign(b)) return <DesignPreview b={b} bt={bt} slotSrc={slotSrc} mobile={mobile} />;
   const layout = b.block_type === 'card' ? f.layout || 'top' : 'top';
   const side = !mobile && (layout === 'left' || layout === 'right');
   const narrow = !mobile && previewWidth(b) <= 300;
@@ -309,6 +336,44 @@ export function Preview({ b, bt, slotSrc, drag, mobile }: { b: any; bt: BlockFie
   });
   if (side) return <div className={'pv pv-card side ' + layout}>{imgs}<div className="pv-txt">{texts}</div></div>;
   return <div className={'pv pv-' + b.block_type + (narrow ? ' narrow' : '') + (mobile ? ' mobile' : '')}>{imgs}<div className="pv-txt">{texts}</div></div>;
+}
+
+// A read Design block: its copy as live text, styled like the original design.
+function DesignPreview({ b, bt, slotSrc, mobile }: { b: any; bt: BlockField[]; slotSrc: (s: any) => string | undefined; mobile?: boolean }) {
+  const f = b.fields || {};
+  const st = f.style || {};
+  const hex = (v: any, d: string) => (typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v) ? v : d);
+  const layout = f.layout || 'top';
+  const side = !mobile && (layout === 'left' || layout === 'right');
+  const share = Math.min(0.65, Math.max(0.25, Number(st.photo_share) || 0.42));
+  const font = st.font === 'serif' ? 'Georgia, "Times New Roman", Times, serif' : 'Arial, Helvetica, sans-serif';
+  const track = st.wide_tracking ? '0.14em' : undefined;
+  const hSize = { small: 22, medium: 28, large: 36 }[st.headline_size as string] || 28;
+  const shape = st.button_shape || 'square';
+  const btnBg = hex(st.button_bg, '#111111');
+  const btnText = hex(st.button_text, '#ffffff');
+  const btn: React.CSSProperties =
+    shape === 'underline' ? { background: 'none', color: btnText, borderBottom: `2px solid ${btnText}`, borderRadius: 0, padding: '4px 0', letterSpacing: track }
+    : shape === 'outline' ? { background: 'none', color: btnText, border: `2px solid ${btnText}`, borderRadius: 0, letterSpacing: track }
+    : { background: btnBg, color: btnText, borderRadius: shape === 'pill' ? 999 : shape === 'rounded' ? 6 : 0, letterSpacing: track };
+  const photo = slotSrc(b.images?.image);
+  const texts = bt.filter((d) => d.type !== 'image' && d.type !== 'url' && !['layout', 'notes'].includes(d.k)).map((d) => {
+    const v = f[d.k];
+    if (!v) return null;
+    if (d.k === 'rating') return <div key={d.k} className="pv-stars" style={{ color: hex(st.accent, 'inherit') }}>{'★'.repeat(Number(v) || 0)}</div>;
+    if (d.k === 'eyebrow') return <div key={d.k} className="pv-e" style={{ color: hex(st.accent, '#666') }}>{v}</div>;
+    if (d.k === 'headline') return <div key={d.k} className="pv-h" style={{ color: hex(st.headline, 'inherit'), fontSize: hSize, fontWeight: st.headline_weight === 'regular' ? 400 : 700, textTransform: st.headline_uppercase ? 'uppercase' : 'none', letterSpacing: track }}>{v}</div>;
+    if (d.k === 'name') return <div key={d.k} className="pv-name" style={{ color: hex(st.headline, 'inherit') }}>{v}</div>;
+    if (d.k === 'cta') return <div key={d.k}><span className="pv-btn" style={btn}>{v}</span></div>;
+    return <div key={d.k} className="pv-p" style={{ color: hex(st.text, '#555') }}>{v}</div>;
+  });
+  return (
+    <div className={'pv pv-design-live' + (side ? ' side ' + layout : '') + (mobile ? ' mobile' : '')}
+      style={{ background: hex(st.background, '#ffffff'), fontFamily: font, textAlign: st.align === 'center' ? 'center' : 'left', gridTemplateColumns: side ? (layout === 'right' ? `1fr ${share * 100}%` : `${share * 100}% 1fr`) : undefined }}>
+      <div className="pv-img natural">{photo && <img src={photo} alt="" />}</div>
+      <div className="pv-txt">{texts}</div>
+    </div>
+  );
 }
 
 // Scales a fixed-width preview down so all of it fits its container (width and height), centred.

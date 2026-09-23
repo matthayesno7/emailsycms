@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client';
 import { BLOCK_TYPES, KIND_LABEL, exportSize } from '@/lib/blockTypes';
 import { baseName, drawFit, extOf, loadImg, parseCSV, toBlob } from '@/lib/images';
 import { emailRendition } from '@/lib/renditions';
-import { cardFromReading, readDesign } from '@/lib/extract';
+import { editableFromReading, readDesign } from '@/lib/extract';
 import { cleanText, productAsBlock, shortDescription } from '@/lib/products';
 import AssetPanel from './AssetPanel';
 import BlockEditor, { FitPreview, Preview, previewWidth } from './BlockEditor';
@@ -293,7 +293,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return data as Asset;
   }
 
-  // A finished design: Emailsy reads it and saves an editable Card (its photo goes into Images).
+  // A finished design: Emailsy reads it so its copy is editable and its look is kept (its photo goes into Images).
   // Falls back to a Design block.
   async function blockFromDesign(img: HTMLImageElement, original: string, name: string): Promise<{ row: Asset; note?: string }> {
     const r = await readDesign(img, ws);
@@ -306,8 +306,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         : `Couldn’t read the design${r.message ? ` (${r.message})` : ''}. Saved as a Design block.`;
       return { row, note };
     }
-    const title = (r.reading.headline || name || 'Card block').slice(0, 120);
-    const built = await cardFromReading({ supabase, ws, userId, name: title, img, originalPath: original, reading: r.reading, crop: r.crop });
+    const title = (r.reading.headline || name || 'Design block').slice(0, 120);
+    const built = await editableFromReading({ supabase, ws, userId, name: title, img, originalPath: original, reading: r.reading, crop: r.crop });
     const { data, error } = await supabase.from('assets').insert({ workspace_id: ws, kind: 'block', name: title, created_by: userId, ...built }).select('*').single();
     if (error) throw error;
     return { row: data as Asset };
@@ -342,7 +342,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (made.length === 1) {
       const b = made[0];
       setBlock({ ...b, fields: { ...(b.fields || {}) }, images: JSON.parse(JSON.stringify(b.images || {})) });
-      toast(note || (design ? 'Design read and saved as a Card. Its photo is in Images. Check the copy.' : 'Block created. The image is also in your library. Add your copy.'));
+      toast(note || (design ? 'Design read: its copy is now editable and its photo is in Images. Check the copy.' : 'Block created. The image is also in your library. Add your copy.'));
     } else toast(note || `${made.length} blocks created`);
   }
 

@@ -1,6 +1,6 @@
 // Emailsy CMS MCP server: a stateless JSON-RPC handler for the MCP "streamable HTTP"
 // transport. Each POST carries one message (or a batch) and gets a JSON reply.
-import { BLOCK_TYPES } from '../blockTypes';
+import { BLOCK_TYPES, isReadDesign } from '../blockTypes';
 import { productAsBlock } from '../products';
 
 export type Workspace = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
@@ -280,7 +280,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
         description: spec.note,
         component_name_suggestion: `${spec.name} / ${a.name}`,
         fields: spec.fields
-          .filter((f) => f.type !== 'image')
+          .filter((f) => f.type !== 'image' && !(a.block_type === 'design' && !isReadDesign(a) && !['notes', 'link'].includes(f.k)))
           .map((f) => ({ key: f.k, label: f.label, kind: f.type === 'url' ? 'link' : f.type === 'choice' ? 'option' : 'text', max_chars: f.max || null, link_for: f.linkOf || null, options: f.options ? f.options.map(([v]) => v) : undefined, value: a.fields?.[f.k] || '' })),
         images: await blockImages(ctx, a),
         figma: a.figma || null,
@@ -288,8 +288,11 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
         reference_image: a.images?.reference?.path
           ? { width: a.images.reference.width || null, height: a.images.reference.height || null, note: 'The original finished design this block was read from. Call view_image with slot "reference" to see it, and match its layout and proportions using the design system\'s styles.' }
           : null,
-        rebuild: a.block_type === 'design',
-        how_to: a.block_type === 'design'
+        style: a.fields?.style || null,
+        rebuild: a.block_type === 'design' && !isReadDesign(a),
+        how_to: isReadDesign(a)
+          ? 'A finished design whose copy, photo and look have already been read out. Build ONE component that looks like the original: use the fields as live text (component text properties), the "image" slot as the photo (IMAGE fill, its own proportions), and follow style exactly: background colour, headline/text/accent colours (hex), serif or sans typeface (pick the closest font in the file), alignment, headline case, weight and tracking, and button shape and colours. layout top/left/right places the photo; style.photo_share is the photo\'s share of the width. Leave out empty fields. Call view_image with slot "reference" to compare your build with the original, and fix differences.'
+          : a.block_type === 'design'
           ? 'This is a finished design saved as one flat image. Do NOT place the flat image or add placeholder copy. Call view_image on this block, read the exact text and layout, then rebuild it as one component: photo regions as image-filled rectangles cropped from the pushed image (scaleMode CROP), all text as live text with component text properties, laid out as in the design. Follow "Rebuilding a Design block" in the server instructions. Use the notes field if the user left any.'
           : 'Build from the target design system\'s own text styles, colours and spacing. One COMPONENT, vertical auto layout, hug height. Expose each text field as a component text property. Push each image with push_image_to_figma, then apply the returned imageHash as an IMAGE fill (scaleMode FILL for cover, FIT for contain) on a rectangle at size_px. Card layout: "top" = image above the copy (vertical auto layout); "left"/"right" = image beside the copy (horizontal auto layout, copy vertically centred). rating is a number of stars (draw that many star characters or vectors); leave out any field whose value is empty. Add a variant or boolean property for optional parts (stars, name, button) when the design system does that.',
       });
