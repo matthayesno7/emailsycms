@@ -303,9 +303,18 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     } else toast(`${made.length} blocks created`);
   }
 
-  // One click from an asset: products make a Product block, logos a Footer, images a Hero or Card.
+  // A product opens as its email card: edit the copy right there.
+  function openProduct(p: Asset) {
+    const pb = productAsBlock(p) as any;
+    if (pb.images.image) pb.images.image.alt = p.fields?.alt || '';
+    setOpenId(null);
+    setBlock({ ...pb, id: p.id, kind: 'product', workspace_id: p.workspace_id, name: p.name, product_id: p.id });
+  }
+
+  // One click from an asset: logos make a Footer, images and products a Hero or Card.
   function useInBlock(a: Asset) {
-    const type = a.kind === 'product' ? 'product' : a.kind === 'logo' ? 'footer' : autoBlockType(a.width, a.height);
+    // Products are already cards, so from a product this makes a Hero or Card that features it.
+    const type = a.kind === 'logo' ? 'footer' : autoBlockType(a.width, a.height);
     startBlock(type, a.id);
   }
 
@@ -455,7 +464,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 )
               ) : (
                 <div className="grid">
-                  {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? setBlock({ ...it, images: JSON.parse(JSON.stringify(it.images || {})), fields: { ...(it.fields || {}) } }) : setOpenId(it.id))} />)}
+                  {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? setBlock({ ...it, images: JSON.parse(JSON.stringify(it.images || {})), fields: { ...(it.fields || {}) } }) : it.kind === 'product' ? openProduct(it) : setOpenId(it.id))} />)}
                 </div>
               )}
             </>
@@ -485,7 +494,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
       {block && (
         <BlockEditor
-          key={block.id || 'new'}
+          key={(block.kind || 'block') + (block.id || 'new')}
+          product={block.kind === 'product' ? itemById(block.id) || null : null}
+          onImageTools={() => { const id = block.id; setBlock(null); setOpenId(id); }}
+          onUseInBlock={() => { const p = itemById(block.id); setBlock(null); if (p) startBlock(autoBlockType(p.width, p.height), p.id); }}
           draft={block}
           ws={ws}
           userId={userId}
@@ -497,10 +509,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           toast={toast}
           onClose={() => setBlock(null)}
           onSaved={(row, convertedFrom) => {
-            setItems((list) => [row, ...list.filter((i) => i.id !== row.id && i.id !== convertedFrom)]);
-            setView('block');
+            setItems((list) => list.some((i) => i.id === row.id) ? list.map((i) => (i.id === row.id ? row : i)) : [row, ...list.filter((i) => i.id !== convertedFrom)]);
+            if (row.kind === 'block') setView('block');
           }}
-          onDelete={(b) => deleteAsset(b)}
+          onDelete={(b) => deleteAsset(b.kind === 'product' ? itemById(b.id) || b : b)}
         />
       )}
 

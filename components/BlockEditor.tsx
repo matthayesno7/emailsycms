@@ -6,8 +6,11 @@ import { cropCanvas, drawFit, loadImg, toBlob } from '@/lib/images';
 import { Icon } from './icons';
 import type { Asset } from './Library';
 
-export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, figmaFile, supabase, toast, onClose, onSaved, onDelete }: {
+export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, figmaFile, supabase, toast, onClose, onSaved, onDelete, product, onImageTools, onUseInBlock }: {
   draft: any;
+  product?: Asset | null; // editing a feed product as its email card (saves to the product itself)
+  onImageTools?: () => void;
+  onUseInBlock?: () => void;
   ws: string;
   userId: string;
   library: Asset[];
@@ -66,7 +69,36 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     }));
   }
 
+  // Product card: copy saves onto the product; edited copy is kept when the feed syncs.
+  async function saveProduct() {
+    if (!product) return;
+    const over = bt.fields.find((d) => d.max && (b.fields[d.k] || '').length > d.max);
+    if (over) { toast(`${over.label} is longer than ${over.max} characters.`); return; }
+    setSaving(true);
+    try {
+      const f = b.fields || {};
+      const prev = product.fields || {};
+      const edited = new Set<string>(prev.edited || []);
+      const name = (f.name || product.name || '').trim().slice(0, 120) || product.name;
+      if (name !== product.name) edited.add('name');
+      const copy: Record<string, string> = { eyebrow: f.eyebrow || '', description: f.body || '', cta: f.cta ?? '', alt: b.images?.image?.alt || '' };
+      for (const [k, v] of Object.entries(copy)) if ((prev[k] ?? (k === 'cta' ? 'Shop now' : '')) !== v) edited.add(k);
+      const res = await supabase.from('assets').update({
+        name, price: f.price || null, link: f.link || null,
+        fields: { ...prev, ...copy, edited: [...edited] },
+      }).eq('id', product.id).select('*').single();
+      if (res.error) throw res.error;
+      onSaved(res.data as Asset, null);
+      toast('Product card saved');
+    } catch (err: any) {
+      toast(`Couldn’t save${err?.message ? `: ${err.message}` : '.'}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function save() {
+    if (product) return saveProduct();
     const over = bt.fields.find((d) => d.max && (b.fields[d.k] || '').length > d.max);
     if (over) { toast(`${over.label} is longer than ${over.max} characters.`); return; }
     setSaving(true);
@@ -117,6 +149,8 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const where = figmaFile ? ` (${figmaFile.url})` : ': [paste your Figma file link]';
   const prompt = !saved
     ? ''
+    : product
+    ? `Using Emailsy CMS, turn my product "${product.name}" (id ${product.id}) into a product card component in my design system${where}.`
     : isReadDesign(b)
     ? `Using Emailsy CMS, build my design block "${b.name}" (id ${b.id}) as an editable component${where}. Match the original design's layout, colours, typeface and button style (they're in the block), keep the photo as an image and make all the copy live text.`
     : b.block_type === 'design'
@@ -127,11 +161,15 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     <aside className="sheet wide" role="dialog" aria-modal="true" aria-label={b.name}>
       <header>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <input className="title-in" value={b.name} maxLength={120} aria-label="Block name" onChange={(e) => setB({ ...b, name: e.target.value })} />
+          {product ? (
+            <div className="title-in" style={{ border: 0 }}>{b.fields?.name || product.name}</div>
+          ) : (
+            <input className="title-in" value={b.name} maxLength={120} aria-label="Block name" onChange={(e) => setB({ ...b, name: e.target.value })} />
+          )}
           <div className="sub">
-            <select className="bsel" aria-label="Block type" value={b.block_type} onChange={(e) => setType(e.target.value)}>
+            {product ? <span className="tip">Product {product.pid} · from your feed · price, link and image follow the feed</span> : <select className="bsel" aria-label="Block type" value={b.block_type} onChange={(e) => setType(e.target.value)}>
               {Object.entries(BLOCK_TYPES).filter(([k, t]) => !t.legacy || k === b.block_type).map(([k, t]) => <option key={k} value={k}>{t.name} block</option>)}
-            </select>
+            </select>}
           </div>
         </div>
         <button className="x" type="button" aria-label="Close" onClick={onClose}><Icon.Close /></button>
@@ -150,7 +188,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         </FitPreview>
       </div>
 
-      {b.block_type === 'product' && (
+      {b.block_type === 'product' && !product && (
         <div className="bf">
           <div className="bl"><label htmlFor="bprod">Fill from product</label></div>
           <select className="in" id="bprod" value={b.product_id || ''} onChange={(e) => fillFromProduct(e.target.value)}>
@@ -162,6 +200,22 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
 
       {bt.fields.filter((d) => b.block_type !== 'design' || isReadDesign(b) || ['image', 'notes'].includes(d.k)).map((d) => {
         const v = b.fields[d.k] || '';
+        if (d.type === 'image' && product) {
+          const slot = b.images[d.k];
+          return (
+            <div className="bf" key={d.k}>
+              <div className="bl"><label>Image</label><span className="cnt">from the feed</span></div>
+              <div className="slot">
+                <div className={'sthumb ' + d.fit}>{slotSrc(slot) && <img src={slotSrc(slot)} alt="" />}</div>
+                <div className="sinfo">
+                  <span>{product.storage_path ? `${product.width || '?'}×${product.height || '?'}` : `No image yet. Drop ${product.pid}.jpg on the page.`}</span>
+                  {onImageTools && product.storage_path && <button className="btn" type="button" onClick={onImageTools}>Image tools</button>}
+                </div>
+              </div>
+              <input className="in" placeholder="Alt text" maxLength={150} value={slot?.alt || ''} onChange={(e) => setImage(d.k, { ...slot, alt: e.target.value })} />
+            </div>
+          );
+        }
         if (d.type === 'image') {
           const slot = b.images[d.k];
           const s = slotSrc(slot);
@@ -225,12 +279,13 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
       <div className="fill" />
       <div className="actions">
         {confirmDel ? (
-          <><span className="tip">Delete this block?</span><button className="btn" type="button" onClick={() => onDelete(b)}>Delete</button><button className="btn quiet" type="button" onClick={() => setConfirmDel(false)}>Keep</button></>
+          <><span className="tip">{product ? 'Delete this product?' : 'Delete this block?'}</span><button className="btn" type="button" onClick={() => onDelete(b)}>Delete</button><button className="btn quiet" type="button" onClick={() => setConfirmDel(false)}>Keep</button></>
         ) : (
           <>
-            <button className="primary" type="button" disabled={saving} onClick={save}>{saving ? 'Making images email-ready…' : saved ? 'Save changes' : 'Save block'}</button>
+            <button className="primary" type="button" disabled={saving} onClick={save}>{saving ? (product ? 'Saving…' : 'Making images email-ready…') : saved ? 'Save changes' : 'Save block'}</button>
             <button className="btn quiet" type="button" onClick={onClose}>Close</button>
             <span className="spacer" />
+            {product && onUseInBlock && <button className="btn quiet" type="button" title="Make a Hero or Card that uses this product" onClick={onUseInBlock}>Use in a Hero or Card</button>}
             {saved && <button className="btn quiet" type="button" onClick={() => setConfirmDel(true)}>Delete</button>}
           </>
         )}
