@@ -1,6 +1,7 @@
 // Emailsy CMS MCP server: a stateless JSON-RPC handler for the MCP "streamable HTTP"
 // transport. Each POST carries one message (or a batch) and gets a JSON reply.
 import { BLOCK_TYPES } from '../blockTypes';
+import { productAsBlock } from '../products';
 
 export type Workspace = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 export type AssetRow = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -20,7 +21,12 @@ export type Ctx = { repo: Repo; userId: string; fetchImpl?: typeof fetch };
 
 export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
-const INSTRUCTIONS = `Emailsy CMS holds a team's email-ready assets, grouped into brand workspaces: images, logos, products (from a feed, keyed by PID) and blocks (content shapes like Hero, Card, Product, Button and Footer, with copy and email-ready images, plus Design blocks: a finished design saved as one flat image).
+const INSTRUCTIONS = `What each kind of asset becomes in Figma:
+- image and logo: stay images. Place them with push_image_to_figma; never add text to them.
+- block: an image plus copy. Build it as a component with the copy as live, editable text (get_block_for_figma).
+- product: a card built from the product feed: image, label, name, description, price and button. Build it like a Product block with live text (get_block_for_figma works on products too). Leave out any part whose value is empty (e.g. no button if cta is empty).
+
+Emailsy CMS holds a team's email-ready assets, grouped into brand workspaces: images, logos, products (from a feed, keyed by PID) and blocks (content shapes like Hero, Card, Product, Button and Footer, with copy and email-ready images, plus Design blocks: a finished design saved as one flat image).
 
 Which Figma file: each workspace can have a connected Figma file (figma_file in list_workspaces and in asset results). When the user doesn't give a Figma link, use the connected file of the asset's workspace without asking. A link the user gives always wins. If there is neither, ask for a link once and suggest connecting a file in Emailsy (Workspace settings).
 
@@ -91,7 +97,7 @@ const TOOLS = [
   },
   {
     name: 'get_block_for_figma',
-    description: 'Everything needed to build a block as a Figma component: its type, copy, link, image slots (size, fit, alt text) and field rules such as character limits.',
+    description: 'Works on blocks and products. Everything needed to build one as a Figma component: its type, copy, link, image slots (size, fit, alt text) and field rules such as character limits.',
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
   },
   {
@@ -156,7 +162,7 @@ function publicAsset(a: AssetRow, ws?: Workspace) {
     updated_at: a.updated_at,
   };
   if (a.width) Object.assign(out, { width: a.width, height: a.height });
-  if (a.kind === 'product') Object.assign(out, { pid: a.pid, price: a.price, link: a.link, has_image: !!a.storage_path });
+  if (a.kind === 'product') Object.assign(out, { pid: a.pid, price: a.price, link: a.link, description: a.fields?.description || '', has_image: !!a.storage_path });
   if (a.kind === 'block') Object.assign(out, { block_type: a.block_type, block_type_name: BLOCK_TYPES[a.block_type]?.name });
   if (a.figma) out.figma = a.figma;
   if (ws) out.workspace_figma_file = figmaFile(ws);
@@ -251,8 +257,9 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
     case 'get_block_for_figma': {
       const r = await allowedAsset(ctx, args.id);
       if (r.error) return toolError(r.error);
-      const a = r.asset!;
-      if (a.kind !== 'block') return toolError(`"${a.name}" is a ${a.kind}, not a block. Use get_asset instead.`);
+      // Products build like Product blocks: the feed fills the copy.
+      const a = r.asset!.kind === 'product' ? { ...r.asset!, ...productAsBlock(r.asset! as any), kind: 'product' } : r.asset!;
+      if (a.kind !== 'block' && a.kind !== 'product') return toolError(`"${a.name}" is a ${a.kind}: it stays an image. Use push_image_to_figma to place it.`);
       const spec = BLOCK_TYPES[a.block_type];
       if (!spec) return toolError(`Unknown block type "${a.block_type}".`);
       return text({

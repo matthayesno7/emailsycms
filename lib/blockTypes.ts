@@ -48,11 +48,12 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   },
   product: {
     name: 'Product',
-    note: 'One product from your feed: image, label, name, price and button.',
+    note: 'One product from your feed: image, label, name, description, price and button.',
     fields: [
       { k: 'image', type: 'image', label: 'Product image', w: 300, h: 300, fit: 'contain' },
       { k: 'eyebrow', type: 'text', label: 'Label', max: 30 },
       { k: 'name', type: 'text', label: 'Product name', max: 60 },
+      { k: 'body', type: 'long', label: 'Description', max: 160 },
       { k: 'price', type: 'text', label: 'Price', max: 16 },
       { k: 'cta', type: 'text', label: 'Button label', max: 20 },
       { k: 'link', type: 'url', label: 'Product link', linkOf: 'cta' },

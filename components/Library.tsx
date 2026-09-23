@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client';
 import { BLOCK_TYPES, KIND_LABEL, exportSize } from '@/lib/blockTypes';
 import { baseName, dimsOf, drawFit, extOf, loadImg, parseCSV, toBlob } from '@/lib/images';
 import { cardFromReading, readDesign } from '@/lib/extract';
+import { cleanText, productAsBlock, shortDescription } from '@/lib/products';
 import AssetPanel from './AssetPanel';
 import BlockEditor, { FitPreview, Preview } from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
@@ -154,17 +155,36 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (rows.length < 2) { toast('That CSV has no product rows.'); return; }
     const head = rows[0].map((h) => h.trim().toLowerCase().replace(/^g:/, ''));
     const col = (...n: string[]) => head.findIndex((h) => n.includes(h));
-    const ci = { pid: col('id', 'pid', 'sku', 'item_id', 'product_id'), name: col('title', 'name', 'product_name'), price: col('sale_price', 'price'), link: col('link', 'url', 'product_url'), img: col('image_link', 'image', 'image_url') };
+    const ci = {
+      pid: col('id', 'pid', 'sku', 'item_id', 'product_id'), name: col('title', 'name', 'product_name'), price: col('sale_price', 'price'),
+      link: col('link', 'url', 'product_url'), img: col('image_link', 'image', 'image_url'), desc: col('description', 'short_description', 'body_html', 'body'),
+    };
     if (ci.pid < 0) { toast('Couldn’t find a PID column (id, pid, sku or item_id).'); return; }
+    // Existing products: copy the team edited (name, description) is kept; price, link and image follow the feed.
+    const { data: existing } = await supabase.from('assets').select('id, pid, name, fields, feed_image, storage_path, created_by').eq('workspace_id', ws).eq('kind', 'product').limit(10000);
+    const byPid = new Map((existing || []).map((e: any) => [e.pid, e]));
     const seen = new Set<string>();
     const products = rows.slice(1).map((r) => {
       const pid = (r[ci.pid] || '').trim();
       if (!pid || seen.has(pid)) return null;
       seen.add(pid);
+      const ex: any = byPid.get(pid);
+      const edited: string[] = ex?.fields?.edited || [];
+      const feedName = ((ci.name >= 0 && r[ci.name]) || pid).trim().slice(0, 120);
+      const feedImage = ci.img >= 0 ? (r[ci.img] || '').trim() : '';
+      const fields: Record<string, any> = { ...(ex?.fields || {}) };
+      if (ci.desc >= 0) {
+        fields.feed_description = cleanText(r[ci.desc] || '').slice(0, 5000);
+        if (!edited.includes('description')) fields.description = shortDescription(r[ci.desc] || '');
+      }
+      const imageChanged = !!ex && !!feedImage && ex.feed_image !== feedImage;
       return {
-        workspace_id: ws, kind: 'product', pid, name: ((ci.name >= 0 && r[ci.name]) || pid).trim().slice(0, 120),
+        workspace_id: ws, kind: 'product', pid,
+        name: edited.includes('name') && ex ? ex.name : feedName,
         price: ci.price >= 0 ? (r[ci.price] || '').trim() : null, link: ci.link >= 0 ? (r[ci.link] || '').trim() : null,
-        feed_image: ci.img >= 0 ? (r[ci.img] || '').trim() : null, created_by: userId,
+        feed_image: feedImage || null, fields,
+        storage_path: imageChanged ? null : ex?.storage_path ?? null,
+        created_by: ex?.created_by || userId,
       };
     }).filter(Boolean) as any[];
     toast(`Importing ${products.length} products…`);
@@ -516,7 +536,19 @@ function Tile({ it, src, urls, onOpen }: { it: Asset; src: string | null; urls: 
       </div>
     );
   }
-  const right = it.kind === 'product' ? it.price || it.pid || '' : it.width ? `${it.width}×${it.height}` : '';
+  if (it.kind === 'product') {
+    const pb = productAsBlock(it);
+    return (
+      <div className="tile" role="button" tabIndex={0} title="Click to open · drag the image into Figma" onClick={onOpen} onKeyDown={onKey}>
+        <div className="thumb block live product">
+          <FitPreview><Preview b={pb} bt={BLOCK_TYPES.product.fields} slotSrc={(s: any) => (s?.path ? urls[s.path] : undefined)} drag={{ name: it.pid || it.name, png: it.mime === 'image/png' }} /></FitPreview>
+          {!it.storage_path && <span className="tag noimgtag">No image</span>}
+        </div>
+        <div className="meta"><span className="t">{it.name}</span><span className="s">{it.pid || ''}</span></div>
+      </div>
+    );
+  }
+  const right = it.width ? `${it.width}×${it.height}` : '';
   return (
     <div className="tile" role="button" tabIndex={0} title="Click to open · drag into Figma" onClick={onOpen} onKeyDown={onKey}>
       <div className={'thumb ' + it.kind}>

@@ -62,7 +62,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
       ...x,
       product_id: p.id,
       name: !x.name || /block$/.test(x.name) ? p.name : x.name,
-      fields: { ...x.fields, name: p.name, price: p.price || '', link: p.link || '', cta: x.fields.cta || 'Shop now' },
+      fields: { ...x.fields, name: p.name, body: p.fields?.description || x.fields.body || '', price: p.price || '', link: p.link || '', cta: x.fields.cta || p.fields?.cta || 'Shop now' },
       images: p.storage_path ? { ...x.images, image: { source_asset_id: p.id, alt: p.name, dirty: true, original_path: p.storage_path } } : x.images,
     }));
   }
@@ -269,7 +269,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   );
 }
 
-export function Preview({ b, bt, slotSrc }: { b: any; bt: BlockField[]; slotSrc: (s: any) => string | undefined }) {
+export function Preview({ b, bt, slotSrc, drag }: { b: any; bt: BlockField[]; slotSrc: (s: any) => string | undefined; drag?: { name: string; png: boolean } }) {
   const f = b.fields || {};
   const layout = b.block_type === 'card' ? f.layout || 'top' : 'top';
   const side = layout === 'left' || layout === 'right';
@@ -277,7 +277,8 @@ export function Preview({ b, bt, slotSrc }: { b: any; bt: BlockField[]; slotSrc:
     const s = slotSrc(b.images?.[d.k]);
     if (d.natural) return <div key={d.k} className="pv-img natural">{s && <img src={s} alt="" />}</div>;
     const ar = side && d.side ? `${d.side.w}/${d.side.h}` : `${d.w}/${d.h}`;
-    return <div key={d.k} className={'pv-img ' + d.fit} style={{ aspectRatio: ar }}>{s && <img src={s} alt="" />}</div>;
+    const dragProps = drag ? { draggable: true, 'data-drag': drag.name, 'data-png': drag.png ? '1' : '0' } : { draggable: false };
+    return <div key={d.k} className={'pv-img ' + d.fit} style={{ aspectRatio: ar }}>{s && <img src={s} alt="" {...dragProps} />}</div>;
   });
   const texts = b.block_type === 'design' ? [] : bt.filter((d) => d.type !== 'image' && d.type !== 'url' && d.k !== 'layout').map((d) => {
     const v = f[d.k];

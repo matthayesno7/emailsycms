@@ -177,6 +177,10 @@ svg.wire .wb{fill:var(--accent)}
 .fitpv{width:100%;overflow:hidden;max-height:100%}
 .fitpv .pv{max-width:none;width:100%}
 .readcard .tip{margin-bottom:8px}
+.thumb.live.product{background:var(--surface)}
+.thumb .noimgtag{left:8px;right:auto}
+.pv-product .pv-p{padding-left:18px;padding-right:18px}
+textarea.v{resize:vertical;min-height:54px;font-family:inherit;line-height:1.4}
 .figma{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .figma .label{margin:0;color:var(--ink);font-weight:600}
 .promptbox{font-size:13px;background:var(--surface);border-radius:8px;padding:10px 12px;color:var(--ink);line-height:1.5;width:100%}

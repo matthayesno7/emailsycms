@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { PRESETS } from '@/lib/blockTypes';
+import { DEFAULT_CTA } from '@/lib/products';
 import { cutWhite, drawFit, loadImg, toBlob } from '@/lib/images';
 import { Icon } from './icons';
 import type { Asset } from './Library';
@@ -59,7 +60,18 @@ export default function AssetPanel({ it, src, onClose, onPatch, onDelete, onMake
   async function saveName() {
     const n = name.trim();
     if (!n) { setName(it.name); return; }
-    if (n !== it.name && (await onPatch({ name: n }))) toast('Renamed');
+    if (n !== it.name && (await onPatch(it.kind === 'product' ? { name: n, fields: markEdited({}, 'name') } : { name: n }))) toast('Renamed');
+  }
+
+  // Product copy the team edits is kept when the feed syncs again.
+  function markEdited(extra: Record<string, any>, key: string) {
+    const f = it.fields || {};
+    const edited = Array.from(new Set([...(f.edited || []), key]));
+    return { ...f, ...extra, edited };
+  }
+  async function saveCopy(key: 'eyebrow' | 'description' | 'cta', v: string) {
+    const lock = key === 'description' ? 'description' : key;
+    if (await onPatch({ fields: markEdited({ [key]: v }, lock) })) toast('Saved');
   }
 
   async function setKind(k: string) {
@@ -151,10 +163,14 @@ export default function AssetPanel({ it, src, onClose, onPatch, onDelete, onMake
         <div>
           <div className="label">Product</div>
           <div className="fields">
-            {([['PID', 'pid'], ['Price', 'price'], ['Link', 'link']] as [string, string][]).map(([label, f]) => (
-              <ProductField key={f} label={label} value={it[f] || ''} onSave={async (v) => { if (await onPatch({ [f]: v || null })) toast('Saved'); }} onCopy={copyText} />
+            <ProductField label="Label" value={it.fields?.eyebrow || ''} placeholder="e.g. New in" onSave={(v) => saveCopy('eyebrow', v)} onCopy={copyText} />
+            <ProductField label="Description" long value={it.fields?.description || ''} placeholder="Short description for email" onSave={(v) => saveCopy('description', v)} onCopy={copyText} />
+            <ProductField label="Button" value={it.fields?.cta ?? DEFAULT_CTA} placeholder="No button" onSave={(v) => saveCopy('cta', v)} onCopy={copyText} />
+            {([['Price', 'price'], ['Link', 'link'], ['PID', 'pid']] as [string, string][]).map(([label, f]) => (
+              <ProductField key={f} label={label} mono value={it[f] || ''} onSave={async (v) => { if (await onPatch({ [f]: v || null })) toast('Saved'); }} onCopy={copyText} />
             ))}
           </div>
+          <p className="tip">Name, label, description and button are yours: a feed sync won’t overwrite them once edited. Price, link and image always follow the feed.{it.fields?.feed_description ? ' The full feed description is kept for reference.' : ''}</p>
         </div>
       )}
 
@@ -170,15 +186,21 @@ export default function AssetPanel({ it, src, onClose, onPatch, onDelete, onMake
   );
 }
 
-function ProductField({ label, value, onSave, onCopy }: { label: string; value: string; onSave: (v: string) => void; onCopy: (v: string) => void }) {
+function ProductField({ label, value, onSave, onCopy, long, mono, placeholder }: { label: string; value: string; onSave: (v: string) => void; onCopy: (v: string) => void; long?: boolean; mono?: boolean; placeholder?: string }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
+  const ph = placeholder || `Add ${label.toLowerCase()}`;
   return (
     <div className="field">
       <span className="k">{label}</span>
-      <input className="v mono fin" value={v} placeholder={`Add ${label.toLowerCase()}`} aria-label={label}
-        onChange={(e) => setV(e.target.value)} onBlur={() => v.trim() !== value && onSave(v.trim())}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+      {long ? (
+        <textarea className="v fin" rows={3} maxLength={300} value={v} placeholder={ph} aria-label={label}
+          onChange={(e) => setV(e.target.value)} onBlur={() => v.trim() !== value && onSave(v.trim())} />
+      ) : (
+        <input className={'v fin' + (mono ? ' mono' : '')} value={v} placeholder={ph} aria-label={label}
+          onChange={(e) => setV(e.target.value)} onBlur={() => v.trim() !== value && onSave(v.trim())}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+      )}
       <button type="button" onClick={() => onCopy(v)}>Copy</button>
     </div>
   );
