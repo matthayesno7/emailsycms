@@ -6,10 +6,12 @@ import { cutWhite, drawFit, loadImg, toBlob } from '@/lib/images';
 import { Icon } from './icons';
 import type { Asset } from './Library';
 
-const TYPES: [string, string][] = [['image', 'Image'], ['logo', 'Logo'], ['product', 'Product'], ['block', 'Block']];
+const TYPES: [string, string][] = [['image', 'Image'], ['logo', 'Logo'], ['product', 'Product']];
 
-export default function AssetPanel({ it, src, onClose, onPatch, onDelete, onMakeBlock, toast }: {
+export default function AssetPanel({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, toast }: {
   it: Asset;
+  usedIn?: Asset[];
+  onOpenBlock?: (b: Asset) => void;
   src: string | null;
   onClose: () => void;
   onPatch: (p: Record<string, any>) => Promise<boolean>;
@@ -76,11 +78,6 @@ export default function AssetPanel({ it, src, onClose, onPatch, onDelete, onMake
 
   async function setKind(k: string) {
     if (k === it.kind) return;
-    if (k === 'block') {
-      if (!src) { toast('Add an image first, then turn it into a block.'); return; }
-      onMakeBlock();
-      return;
-    }
     if (await onPatch({ kind: k })) toast(`Moved to ${k === 'image' ? 'Images' : k === 'logo' ? 'Logos' : 'Products'}`);
   }
 
@@ -127,6 +124,16 @@ export default function AssetPanel({ it, src, onClose, onPatch, onDelete, onMake
 
       <div className="seg" role="group" aria-label="Asset type">
         {TYPES.map(([k, l]) => <button key={k} type="button" aria-pressed={it.kind === k} onClick={() => setKind(k)}>{l}</button>)}
+      </div>
+
+      <div>
+        <div className="label">In email</div>
+        <div className="usedin">
+          <button type="button" className="btn" onClick={() => (src || it.kind === 'product' ? onMakeBlock() : toast('Add an image first.'))}>Use in a block</button>
+          {usedIn.map((b) => <button key={b.id} type="button" title="Open block" onClick={() => onOpenBlock?.(b)}>{b.name}</button>)}
+        </div>
+        <p className="tip">{usedIn.length ? `Used in ${usedIn.length} block${usedIn.length > 1 ? 's' : ''}. It stays here in your assets.` : 'Blocks use this asset without moving it; it stays here.'}
+          {it.images?.email ? ` Email-ready copy: ${it.images.email.width}×${it.images.email.height}, ${Math.round(it.images.email.bytes / 1024)} KB.` : ''}</p>
       </div>
 
       {src ? (

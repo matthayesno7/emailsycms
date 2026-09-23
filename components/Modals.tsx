@@ -21,9 +21,9 @@ export function BlockTypePicker({ from, count = 0, onPick }: { from?: Asset | nu
       <h2>{count ? (count === 1 ? 'What kind of block?' : `Make ${count} blocks`) : from ? `Make “${from.name}” a block` : 'New block'}</h2>
       <p className="tip" style={{ marginBottom: 14 }}>
         {count
-          ? `Each image becomes the main image of its own block, cropped and made email-ready. ${count === 1 ? 'Then add your copy.' : 'Add copy to each one afterwards.'}`
+          ? `Each image is added to your assets and used as the main image of a new block. Pick Design for a finished design with copy in it: Emailsy reads it into an editable Card. ${count === 1 ? '' : 'Add copy to each block afterwards.'}`
           : from
-          ? 'Pick the kind of block. The image goes in as its main image; add copy, then save. It moves out of your image library and into Blocks.'
+          ? from.kind === 'product' ? 'Pick the kind of block. The product’s image and copy go in; the product stays in Products.' : 'Pick the kind of block. The image goes in as its main image; add copy, then save. The image stays in your assets.'
           : 'Pick the shape of the content. You fill it with copy and images here; Claude turns it into a component in whichever Figma design system you choose.'}
       </p>
       <div className="types">

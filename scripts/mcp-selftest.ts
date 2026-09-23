@@ -3,7 +3,7 @@
 import { handleBody } from '../lib/mcp/server';
 const W1 = 'w1', W2 = 'w2';
 const assets: any[] = [
-  { id: 'a1', workspace_id: W1, kind: 'image', name: 'Autumn hero', storage_path: 'w1/a.jpg', width: 1600, height: 900 },
+  { id: 'a1', workspace_id: W1, kind: 'image', name: 'Autumn hero', storage_path: 'w1/a.jpg', width: 1600, height: 900, images: { email: { path: 'w1/email/a.jpg', width: 1200, height: 675, bytes: 120000 } } },
   { id: 'p1', workspace_id: W1, kind: 'product', name: 'Merino crew', pid: '10482', price: '£48', link: 'https://shop/p', storage_path: 'w1/p.png', fields: { description: 'Soft merino.', cta: '' } },
   { id: 'b1', workspace_id: W1, kind: 'block', name: 'Autumn block', block_type: 'hero', fields: { headline: 'Hi', cta: 'Shop', link: 'https://x' }, images: { image: { path: 'w1/blocks/b.jpg', alt: 'Sunset', original_path: 'w1/a.jpg' } } },
   { id: 'd1', workspace_id: W1, kind: 'block', name: 'Matt test', block_type: 'design', fields: { notes: 'Stars are gold' }, images: { image: { path: 'w1/blocks/d.jpg', width: 640, height: 321, original_path: 'w1/d.jpg' } } },
@@ -50,6 +50,9 @@ const call = async (m: any) => handleBody(m, ctx);
   const pr = JSON.parse((await t('get_block_for_figma', { id: 'p1' })).content[0].text);
   console.log('product', pr.type, pr.fields.map((f: any) => f.key + '=' + f.value).join(' | '), pr.images.image.has_image, pr.images.image.url);
   console.log('image refused', (await t('get_block_for_figma', { id: 'a1' })).isError);
+  const ga = JSON.parse((await t('get_asset', { id: 'a1' })).content[0].text);
+  console.log('email', ga.image_url, ga.original_url, JSON.stringify(ga.email_ready));
+  console.log('view email', (await t('view_image', { asset_id: 'a1' })).content[1].text);
   const bad: any = await call({ jsonrpc: '2.0', id: 9, method: 'nope' });
   console.log('unknown', bad.error.code);
   const batch: any = await call([{ jsonrpc: '2.0', id: 1, method: 'ping' }, { jsonrpc: '2.0', method: 'notifications/x' }]);

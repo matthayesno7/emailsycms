@@ -2,11 +2,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { BLOCK_TYPES, KIND_LABEL, exportSize } from '@/lib/blockTypes';
-import { baseName, dimsOf, drawFit, extOf, loadImg, parseCSV, toBlob } from '@/lib/images';
+import { baseName, drawFit, extOf, loadImg, parseCSV, toBlob } from '@/lib/images';
+import { emailRendition } from '@/lib/renditions';
 import { cardFromReading, readDesign } from '@/lib/extract';
 import { cleanText, productAsBlock, shortDescription } from '@/lib/products';
 import AssetPanel from './AssetPanel';
-import BlockEditor, { FitPreview, Preview } from './BlockEditor';
+import BlockEditor, { FitPreview, Preview, previewWidth } from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
 import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
 
@@ -99,12 +100,26 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   }, [items, urls, supabase]);
 
   const srcOf = useCallback((a?: Asset | null) => (a?.storage_path ? urls[a.storage_path] || null : null), [urls]);
+  // The email-ready copy when there is one (what gets dragged into Figma).
+  const emailSrcOf = useCallback((a?: Asset | null) => (a?.images?.email?.path && urls[a.images.email.path]) || srcOf(a), [urls, srcOf]);
   const itemById = useCallback((id?: string | null) => items.find((i) => i.id === id), [items]);
   const curWs = workspaces.find((w) => w.id === ws);
-  const counts = useMemo(() => Object.fromEntries(['all', ...KINDS].map((k) => [k, k === 'all' ? items.length : items.filter((i) => i.kind === k).length])), [items]);
+  const counts = useMemo(() => Object.fromEntries(['all', ...KINDS].map((k) => [k, k === 'all' ? items.filter((i) => i.kind !== 'block').length : items.filter((i) => i.kind === k).length])), [items]);
+  // Which blocks use each asset (by image source or product).
+  const usedIn = useMemo(() => {
+    const m: Record<string, Asset[]> = {};
+    for (const b of items) {
+      if (b.kind !== 'block') continue;
+      const ids = new Set<string>();
+      if (b.product_id) ids.add(b.product_id);
+      for (const s of Object.values(b.images || {}) as any[]) if (s?.source_asset_id) ids.add(s.source_asset_id);
+      for (const id of ids) (m[id] ||= []).push(b);
+    }
+    return m;
+  }, [items]);
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return items.filter((it) => (view === 'all' || it.kind === view) && (!s || it.name.toLowerCase().includes(s) || (it.pid || '').toLowerCase().includes(s)));
+    return items.filter((it) => (view === 'all' ? it.kind !== 'block' : it.kind === view) && (!s || it.name.toLowerCase().includes(s) || (it.pid || '').toLowerCase().includes(s)));
   }, [items, view, q]);
 
   // ---------- writes ----------
@@ -128,26 +143,34 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     toast('Deleted');
   }
 
-  async function uploadImage(file: File) {
+  // Upload an image as an asset, with an email-ready copy (max 1200px wide, compressed).
+  // A file named after a product's PID attaches to that product instead.
+  async function addImageAsset(file: File, opts: { kind?: string; attachToProduct?: boolean } = {}): Promise<{ asset: Asset; img: HTMLImageElement | null } | null> {
     const ext = extOf(file);
     const type = file.type || (ext === 'svg' ? 'image/svg+xml' : ext === 'png' ? 'image/png' : 'image/jpeg');
     const path = `${ws}/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from('assets').upload(path, file, { contentType: type, upsert: false });
-    if (error) { toast(/size|large/i.test(error.message) ? `${file.name} is over 25 MB.` : `Couldn’t upload ${file.name}.`); return; }
-    const { w, h } = await dimsOf(file);
+    if (error) { toast(/size|large/i.test(error.message) ? `${file.name} is over 25 MB.` : `Couldn’t upload ${file.name}.`); return null; }
+    const local = URL.createObjectURL(file);
+    let img: HTMLImageElement | null = null;
+    try { img = await loadImg(local); } catch {} finally { URL.revokeObjectURL(local); }
+    const w = img?.naturalWidth || null, h = img?.naturalHeight || null;
+    const email = img ? await emailRendition(supabase, ws, img, { mime: type, bytes: file.size }) : null;
+    const images = email ? { email } : {};
     const base = baseName(file.name || 'Pasted image');
-    const prod = items.find((i) => i.kind === 'product' && i.pid === base);
+    const prod = opts.attachToProduct === false ? null : items.find((i) => i.kind === 'product' && i.pid === base);
     if (prod) {
-      await patchAsset(prod.id, { storage_path: path, mime: type, width: w, height: h, bytes: file.size });
+      await patchAsset(prod.id, { storage_path: path, mime: type, width: w, height: h, bytes: file.size, images: { ...(prod.images || {}), ...images } });
       toast(`Attached to ${prod.name}`);
-      return;
+      return { asset: { ...prod, storage_path: path }, img };
     }
-    const kind = /logo|wordmark|brandmark/i.test(base) || type === 'image/svg+xml' ? 'logo' : 'image';
-    const { error: e2 } = await supabase.from('assets').insert({
+    const kind = opts.kind || (/logo|wordmark|brandmark/i.test(base) || type === 'image/svg+xml' ? 'logo' : 'image');
+    const { data, error: e2 } = await supabase.from('assets').insert({
       workspace_id: ws, kind, name: base.replace(/[-_]+/g, ' ').slice(0, 120) || 'Image', storage_path: path, mime: type,
-      width: w, height: h, bytes: file.size, created_by: userId,
-    });
-    if (e2) toast('Couldn’t save the image.');
+      width: w, height: h, bytes: file.size, images, created_by: userId,
+    }).select('*').single();
+    if (e2 || !data) { toast('Couldn’t save the image.'); return null; }
+    return { asset: data as Asset, img };
   }
 
   async function importFeed(file: File) {
@@ -224,7 +247,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     // In Blocks, images become blocks: ask for the block type, then create them.
     if (view === 'block' && imgs.length) { setPendingFiles(imgs); setConvertFrom(null); setModal('blocktype'); return; }
     if (imgs.length > 1) toast(`Adding ${imgs.length} images…`);
-    for (const f of imgs) await uploadImage(f);
+    for (const f of imgs) await addImageAsset(f);
     if (imgs.length) loadAssets(ws);
   }
 
@@ -237,21 +260,22 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   }
 
   // ---------- block flows ----------
+  // Blocks use assets; they never move or replace them.
   async function uploadOriginal(file: File) {
     const ext = extOf(file);
     const mime = file.type || (ext === 'png' ? 'image/png' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg');
-    const original = `${ws}/${crypto.randomUUID()}.${ext}`;
+    const original = `${ws}/designs/${crypto.randomUUID()}.${ext}`;
     const up = await supabase.storage.from('assets').upload(original, file, { contentType: mime });
     if (up.error) throw up.error;
     const local = URL.createObjectURL(file);
     let img: HTMLImageElement;
     try { img = await loadImg(local); } finally { URL.revokeObjectURL(local); }
-    const name = baseName(file.name || 'Image').replace(/[-_]+/g, ' ').slice(0, 120);
+    const name = baseName(file.name || 'Design').replace(/[-_]+/g, ' ').slice(0, 120);
     return { original, img, name };
   }
 
-  // Render the email-ready crop for the block's image slot and save the block.
-  async function blockFromImage(img: HTMLImageElement, original: string, type: string, name: string) {
+  // Render the email-ready crop of a source image for the block's image slot and save the block.
+  async function blockFromImage(img: HTMLImageElement, src: { id?: string | null; storage_path: string; name: string }, type: string) {
     const bt = BLOCK_TYPES[type];
     const d = bt.fields.find((f) => f.type === 'image')!;
     const { w, h } = exportSize(d, img.naturalWidth, img.naturalHeight);
@@ -262,18 +286,19 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const up = await supabase.storage.from('assets').upload(path, blob, { contentType: type2 });
     if (up.error) throw up.error;
     const { data, error } = await supabase.from('assets').insert({
-      workspace_id: ws, kind: 'block', block_type: type, name: name || `${bt.name} block`, fields: {}, created_by: userId,
-      images: { [d.k]: { path, width: w, height: h, format: d.png ? 'png' : 'jpg', bytes: blob.size, alt: name, original_path: original } },
+      workspace_id: ws, kind: 'block', block_type: type, name: src.name || `${bt.name} block`, fields: {}, created_by: userId,
+      images: { [d.k]: { path, width: w, height: h, format: d.png ? 'png' : 'jpg', bytes: blob.size, alt: src.name, source_asset_id: src.id || null, original_path: src.storage_path } },
     }).select('*').single();
     if (error) throw error;
     return data as Asset;
   }
 
-  // A finished design: Emailsy reads it and saves an editable Card. Falls back to a Design block.
+  // A finished design: Emailsy reads it and saves an editable Card (its photo goes into Images).
+  // Falls back to a Design block.
   async function blockFromDesign(img: HTMLImageElement, original: string, name: string): Promise<{ row: Asset; note?: string }> {
     const r = await readDesign(img, ws);
     if (!r.ok) {
-      const row = await blockFromImage(img, original, 'design', name);
+      const row = await blockFromImage(img, { storage_path: original, name }, 'design');
       const note = r.reason === 'not_configured'
         ? 'Saved as a Design block. Add an Anthropic API key to let Emailsy read designs.'
         : r.reason === 'not_a_design'
@@ -281,10 +306,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         : `Couldn’t read the design${r.message ? ` (${r.message})` : ''}. Saved as a Design block.`;
       return { row, note };
     }
-    const built = await cardFromReading({ supabase, ws, img, originalPath: original, reading: r.reading, crop: r.crop });
-    const { data, error } = await supabase.from('assets').insert({
-      workspace_id: ws, kind: 'block', name: (r.reading.headline || name || 'Card block').slice(0, 120), created_by: userId, ...built,
-    }).select('*').single();
+    const title = (r.reading.headline || name || 'Card block').slice(0, 120);
+    const built = await cardFromReading({ supabase, ws, userId, name: title, img, originalPath: original, reading: r.reading, crop: r.crop });
+    const { data, error } = await supabase.from('assets').insert({ workspace_id: ws, kind: 'block', name: title, created_by: userId, ...built }).select('*').single();
     if (error) throw error;
     return { row: data as Asset };
   }
@@ -294,23 +318,31 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setPendingFiles([]); setModal(null);
     if (!files.length) return;
     const design = type === 'design';
+    const logoSlot = BLOCK_TYPES[type]?.fields.find((f) => f.type === 'image')?.png;
     toast(design ? (files.length > 1 ? `Reading ${files.length} designs…` : 'Reading your design…') : files.length > 1 ? `Making ${files.length} blocks…` : 'Making your block…');
     const made: Asset[] = [];
     let note: string | undefined;
     for (const f of files) {
       try {
-        const { original, img, name } = await uploadOriginal(f);
-        if (design) { const r = await blockFromDesign(img, original, name); made.push(r.row); note = note || r.note; }
-        else made.push(await blockFromImage(img, original, type, name));
+        if (design) {
+          const { original, img, name } = await uploadOriginal(f);
+          const r = await blockFromDesign(img, original, name);
+          made.push(r.row); note = note || r.note;
+        } else {
+          // The image becomes an asset in the library, and the block uses it.
+          const r = await addImageAsset(f, { kind: logoSlot ? 'logo' : 'image', attachToProduct: false });
+          if (!r?.img) throw new Error('upload');
+          made.push(await blockFromImage(r.img, r.asset as any, type));
+        }
       } catch { toast(`Couldn’t make a block from ${f.name}.`); }
     }
     if (!made.length) return;
-    setItems((list) => [...made, ...list]);
+    loadAssets(ws);
     setView('block');
     if (made.length === 1) {
       const b = made[0];
       setBlock({ ...b, fields: { ...(b.fields || {}) }, images: JSON.parse(JSON.stringify(b.images || {})) });
-      toast(note || (design ? 'Design read and saved as a Card. Check the copy.' : 'Block created. Add your copy.'));
+      toast(note || (design ? 'Design read and saved as a Card. Its photo is in Images. Check the copy.' : 'Block created. The image is also in your library. Add your copy.'));
     } else toast(note || `${made.length} blocks created`);
   }
 
@@ -321,9 +353,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (conv) {
       const slot = bt.fields.find((d) => d.type === 'image')!;
       draft.name = conv.name;
-      draft.convertFrom = conv.id;
-      draft.images[slot.k] = { source_asset_id: conv.id, alt: conv.name, dirty: true, original_path: conv.storage_path };
-      if (conv.kind === 'product') { draft.product_id = conv.id; Object.assign(draft.fields, { name: conv.name, price: conv.price || '', link: conv.link || '' }); }
+      if (conv.storage_path) draft.images[slot.k] = { source_asset_id: conv.id, alt: conv.name, dirty: true, original_path: conv.storage_path };
+      if (conv.kind === 'product') {
+        const pf = productAsBlock(conv).fields;
+        draft.product_id = conv.id;
+        Object.assign(draft.fields, type === 'product' ? pf : { headline: pf.name, body: pf.body, cta: pf.cta, link: pf.link });
+      }
     }
     setModal(null); setConvertFrom(null); setOpenId(null);
     setBlock(draft);
@@ -377,15 +412,17 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     <div className="app">
       <aside className={'side' + (sideOpen ? ' open' : '')} aria-label="Navigation">
         <div className="org"><span className="logo"><Icon.Mark /></span>Emailsy <span className="plan">CMS</span></div>
-        <button className="nav" type="button" aria-current={view === 'all'} onClick={() => nav('all')}><Icon.Home />Home<span className="count">{counts.all || ''}</span></button>
+        <button className="nav" type="button" aria-current={view === 'all'} onClick={() => nav('all')}><Icon.Home />All assets<span className="count">{counts.all || ''}</span></button>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); searchRef.current?.focus(); }}><Icon.Search />Search</button>
-        <div className="group">Library</div>
-        {KINDS.map((k) => (
+        <div className="group">Assets</div>
+        {KINDS.filter((k) => k !== 'block').map((k) => (
           <button key={k} className="nav" type="button" aria-current={view === k} onClick={() => nav(k)}>
             {k === 'image' ? <Icon.Image /> : k === 'logo' ? <Icon.Shield /> : k === 'product' ? <Icon.Tag /> : <Icon.Blocks />}
             {KIND_LABEL[k]}<span className="count">{counts[k] || ''}</span>
           </button>
         ))}
+        <div className="group">Email</div>
+        <button className="nav" type="button" aria-current={view === 'block'} onClick={() => nav('block')}><Icon.Blocks />{KIND_LABEL.block}<span className="count">{counts.block || ''}</span></button>
         <div className="group">Workspaces</div>
         {workspaces.map((w, i) => (
           <button key={w.id} className="nav ws" type="button" aria-current={w.id === ws} onClick={() => { setWs(w.id); nav('all'); }}>
@@ -444,7 +481,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   <div className="empty small">
                     <Wire type="hero" />
                     <h2>No blocks yet</h2>
-                    <p>A block is ready-to-use email content: images and copy together. Drop images here to start blocks from them, or create one from scratch.</p>
+                    <p>A block is an email module: images and copy together, built from your assets. Drop images or finished designs here, open any asset and choose “Use in a block”, or start from scratch.</p>
                     <div className="row">
                       <button className="primary" type="button" onClick={() => fileImg.current?.click()}><Icon.Plus size={16} />Upload images</button>
                       <button className="ghost" type="button" onClick={() => setModal('blocktype')}>Create a block</button>
@@ -455,7 +492,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 )
               ) : (
                 <div className="grid">
-                  {visible.map((it) => <Tile key={it.id} it={it} src={srcOf(it)} urls={urls} onOpen={() => (it.kind === 'block' ? setBlock({ ...it, images: JSON.parse(JSON.stringify(it.images || {})), fields: { ...(it.fields || {}) } }) : setOpenId(it.id))} />)}
+                  {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? setBlock({ ...it, images: JSON.parse(JSON.stringify(it.images || {})), fields: { ...(it.fields || {}) } }) : setOpenId(it.id))} />)}
                 </div>
               )}
             </>
@@ -476,6 +513,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onClose={() => setOpenId(null)}
           onPatch={(p) => patchAsset(openAsset.id, p)}
           onDelete={() => deleteAsset(openAsset)}
+          usedIn={usedIn[openAsset.id] || []}
+          onOpenBlock={(b) => { setOpenId(null); setBlock({ ...b, images: JSON.parse(JSON.stringify(b.images || {})), fields: { ...(b.fields || {}) } }); }}
           onMakeBlock={() => { setConvertFrom(openAsset.id); setOpenId(null); setModal('blocktype'); }}
           toast={toast}
         />
@@ -522,14 +561,15 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   );
 }
 
-function Tile({ it, src, urls, onOpen }: { it: Asset; src: string | null; urls: Record<string, string>; onOpen: () => void }) {
+function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | null; urls: Record<string, string>; used?: number; onOpen: () => void }) {
+  const usedLabel = used ? `In ${used} block${used > 1 ? 's' : ''}` : '';
   const onKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } };
   if (it.kind === 'block') {
     const bt = BLOCK_TYPES[it.block_type] || { name: 'Block', fields: [] };
     return (
       <div className="tile" role="button" tabIndex={0} title="Open block" onClick={onOpen} onKeyDown={onKey}>
         <div className="thumb block live">
-          {bt.fields.length ? <FitPreview><Preview b={it} bt={bt.fields} slotSrc={(s: any) => (s?.path ? urls[s.path] : undefined)} /></FitPreview> : <Wire type={it.block_type} />}
+          {bt.fields.length ? <FitPreview width={previewWidth(it)}><Preview b={it} bt={bt.fields} slotSrc={(s: any) => (s?.path ? urls[s.path] : undefined)} /></FitPreview> : <Wire type={it.block_type} />}
           <span className="tag">{bt.name}</span>
         </div>
         <div className="meta"><span className="t">{it.name}</span><span className="s">{it.figma?.node_id ? 'In Figma' : ''}</span></div>
@@ -541,14 +581,14 @@ function Tile({ it, src, urls, onOpen }: { it: Asset; src: string | null; urls: 
     return (
       <div className="tile" role="button" tabIndex={0} title="Click to open · drag the image into Figma" onClick={onOpen} onKeyDown={onKey}>
         <div className="thumb block live product">
-          <FitPreview><Preview b={pb} bt={BLOCK_TYPES.product.fields} slotSrc={(s: any) => (s?.path ? urls[s.path] : undefined)} drag={{ name: it.pid || it.name, png: it.mime === 'image/png' }} /></FitPreview>
+          <FitPreview width={300}><Preview b={pb} bt={BLOCK_TYPES.product.fields} slotSrc={(s: any) => (s?.path ? urls[s.path] : undefined)} drag={{ name: it.pid || it.name, png: it.mime === 'image/png' }} /></FitPreview>
           {!it.storage_path && <span className="tag noimgtag">No image</span>}
         </div>
-        <div className="meta"><span className="t">{it.name}</span><span className="s">{it.pid || ''}</span></div>
+        <div className="meta"><span className="t">{it.name}</span><span className="s">{usedLabel || it.pid || ''}</span></div>
       </div>
     );
   }
-  const right = it.width ? `${it.width}×${it.height}` : '';
+  const right = usedLabel || (it.width ? `${it.width}×${it.height}` : '');
   return (
     <div className="tile" role="button" tabIndex={0} title="Click to open · drag into Figma" onClick={onOpen} onKeyDown={onKey}>
       <div className={'thumb ' + it.kind}>

@@ -4,6 +4,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BLOCK_TYPES, exportSize } from './blockTypes';
 import { cropCanvas, drawFit, toBase64Jpeg, toBlob } from './images';
+import { emailRendition } from './renditions';
 
 export type Reading = {
   is_design: boolean;
@@ -43,12 +44,13 @@ export async function readDesign(img: HTMLImageElement, workspaceId: string): Pr
   return { ok: true, reading: r, crop };
 }
 
-// Build the Card's fields and images. Uploads the cropped photo; the original stays as the reference.
+// Build the Card's fields and images. The photo is saved as an Image asset (so it can be reused)
+// and the Card uses it; the original design stays attached as the reference.
 export async function cardFromReading(opts: {
-  supabase: SupabaseClient; ws: string; img: HTMLImageElement; originalPath: string;
+  supabase: SupabaseClient; ws: string; userId: string; name: string; img: HTMLImageElement; originalPath: string;
   reading: Reading; crop: { x: number; y: number; w: number; h: number } | null;
 }) {
-  const { supabase, ws, img, originalPath, reading: r, crop } = opts;
+  const { supabase, ws, userId, name, img, originalPath, reading: r, crop } = opts;
   const layout = ['top', 'left', 'right'].includes(r.layout) ? r.layout : 'top';
   const fields = {
     layout,
@@ -64,14 +66,25 @@ export async function cardFromReading(opts: {
     reference: { path: originalPath, width: img.naturalWidth, height: img.naturalHeight, note: 'Original design' },
   };
   if (crop) {
-    const d = BLOCK_TYPES.card.fields.find((f) => f.type === 'image')!;
     const src = cropCanvas(img, crop);
+    // 1. The photo as a reusable Image asset.
+    const full = await toBlob(src, 'image/jpeg', 0.9);
+    const photoPath = `${ws}/${crypto.randomUUID()}.jpg`;
+    const up1 = await supabase.storage.from('assets').upload(photoPath, full, { contentType: 'image/jpeg' });
+    if (up1.error) throw up1.error;
+    const email = await emailRendition(supabase, ws, src, { mime: 'image/jpeg', bytes: full.size });
+    const { data: asset } = await supabase.from('assets').insert({
+      workspace_id: ws, kind: 'image', name: `${name} photo`.slice(0, 120), storage_path: photoPath, mime: 'image/jpeg',
+      width: src.width, height: src.height, bytes: full.size, images: email ? { email } : {}, created_by: userId,
+    }).select('id').single();
+    // 2. The Card's image slot, cropped to its layout.
+    const d = BLOCK_TYPES.card.fields.find((f) => f.type === 'image')!;
     const { w, h } = exportSize(d, src.width, src.height, layout);
     const blob = await toBlob(drawFit(src, w, h, 'cover', null, true), 'image/jpeg', 0.88);
     const path = `${ws}/blocks/${crypto.randomUUID()}.jpg`;
-    const { error } = await supabase.storage.from('assets').upload(path, blob, { contentType: 'image/jpeg' });
-    if (error) throw error;
-    images.image = { path, width: w, height: h, format: 'jpg', bytes: blob.size, alt: fields.headline || fields.name || '', original_path: originalPath, crop };
+    const up2 = await supabase.storage.from('assets').upload(path, blob, { contentType: 'image/jpeg' });
+    if (up2.error) throw up2.error;
+    images.image = { path, width: w, height: h, format: 'jpg', bytes: blob.size, alt: fields.headline || fields.name || '', source_asset_id: asset?.id || null, original_path: photoPath };
   }
   return { block_type: 'card', fields, images };
 }

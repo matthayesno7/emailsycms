@@ -26,6 +26,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const [saving, setSaving] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [reading, setReading] = useState(false);
+  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const bt = BLOCK_TYPES[b.block_type] || BLOCK_TYPES.hero;
   const saved = !!b.id;
   const byId = (id?: string) => library.find((i) => i.id === id);
@@ -104,16 +105,10 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         ? await supabase.from('assets').update(row).eq('id', b.id).select('*').single()
         : await supabase.from('assets').insert({ ...row, created_by: userId }).select('*').single();
       if (res.error) throw res.error;
-      let convertedFrom: string | null = null;
-      if (b.convertFrom) {
-        const from = byId(b.convertFrom);
-        // Products stay in Products (they belong to the feed); images and logos move into Blocks.
-        if (from && from.kind !== 'product') { await supabase.from('assets').delete().eq('id', from.id); convertedFrom = from.id; }
-      }
       const next = { ...res.data, fields: { ...(res.data.fields || {}) }, images: JSON.parse(JSON.stringify(res.data.images || {})) };
       setB(next);
-      onSaved(res.data as Asset, convertedFrom);
-      toast(convertedFrom ? 'Moved to Blocks. Images are email-ready.' : 'Block saved. Images are email-ready.');
+      onSaved(res.data as Asset, null);
+      toast('Block saved. Images are email-ready.');
     } catch (err: any) {
       toast(`Couldn’t save the block${err?.message ? `: ${err.message}` : '.'}`);
     } finally {
@@ -136,13 +131,14 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         toast(r.reason === 'not_configured' ? 'Add an Anthropic API key to Railway to let Emailsy read designs.' : r.reason === 'not_a_design' ? 'No copy found in this image.' : `Couldn’t read the design${r.message ? `: ${r.message}` : '.'}`);
         return;
       }
-      const built = await cardFromReading({ supabase, ws: b.workspace_id || ws, img, originalPath: path, reading: r.reading, crop: r.crop });
+      const title = b.name && !/block$/.test(b.name) ? b.name : r.reading.headline || b.name;
+      const built = await cardFromReading({ supabase, ws: b.workspace_id || ws, userId, name: title, img, originalPath: path, reading: r.reading, crop: r.crop });
       if (slot?.path && slot.path !== path) await supabase.storage.from('assets').remove([slot.path]);
-      const res = await supabase.from('assets').update({ ...built, name: b.name && !/block$/.test(b.name) ? b.name : r.reading.headline || b.name }).eq('id', b.id).select('*').single();
+      const res = await supabase.from('assets').update({ ...built, name: title }).eq('id', b.id).select('*').single();
       if (res.error) throw res.error;
       setB({ ...res.data, fields: { ...(res.data.fields || {}) }, images: JSON.parse(JSON.stringify(res.data.images || {})) });
       onSaved(res.data as Asset, null);
-      toast('Design read and turned into a Card. Check the copy.');
+      toast('Design read and turned into a Card. Its photo is now in Images. Check the copy.');
     } catch (err: any) {
       toast(`Couldn’t read the design${err?.message ? `: ${err.message}` : '.'}`);
     } finally {
@@ -171,7 +167,18 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         <button className="x" type="button" aria-label="Close" onClick={onClose}><Icon.Close /></button>
       </header>
 
-      <div className="pvwrap"><Preview b={b} bt={bt.fields} slotSrc={slotSrc} /></div>
+      <div className="pvbar">
+        <span className="tip">Email preview · {device === 'desktop' ? `${previewWidth(b)}px` : '375px phone'}</span>
+        <div className="seg small" role="group" aria-label="Preview size">
+          <button type="button" aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')}>Desktop</button>
+          <button type="button" aria-pressed={device === 'mobile'} onClick={() => setDevice('mobile')}>Mobile</button>
+        </div>
+      </div>
+      <div className={'pvwrap ' + device}>
+        <FitPreview width={device === 'mobile' ? 375 : previewWidth(b)} fitHeight={false}>
+          <Preview b={b} bt={bt.fields} slotSrc={slotSrc} mobile={device === 'mobile'} />
+        </FitPreview>
+      </div>
 
       {b.block_type === 'design' && saved && (
         <div className="bf readcard">
@@ -269,14 +276,23 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   );
 }
 
-export function Preview({ b, bt, slotSrc, drag }: { b: any; bt: BlockField[]; slotSrc: (s: any) => string | undefined; drag?: { name: string; png: boolean } }) {
+// Width a block is designed at in a 600px email: cards and products usually sit two to a row.
+export function previewWidth(b: any) {
+  if (b.block_type === 'product') return 300;
+  if (b.block_type === 'card') return ['left', 'right'].includes(b.fields?.layout) ? 600 : 300;
+  return 600;
+}
+
+// How a block looks in an email, at real email sizes. On mobile, side-by-side cards stack.
+export function Preview({ b, bt, slotSrc, drag, mobile }: { b: any; bt: BlockField[]; slotSrc: (s: any) => string | undefined; drag?: { name: string; png: boolean }; mobile?: boolean }) {
   const f = b.fields || {};
   const layout = b.block_type === 'card' ? f.layout || 'top' : 'top';
-  const side = layout === 'left' || layout === 'right';
+  const side = !mobile && (layout === 'left' || layout === 'right');
+  const narrow = !mobile && previewWidth(b) <= 300;
   const imgs = bt.filter((d) => d.type === 'image').map((d) => {
     const s = slotSrc(b.images?.[d.k]);
     if (d.natural) return <div key={d.k} className="pv-img natural">{s && <img src={s} alt="" />}</div>;
-    const ar = side && d.side ? `${d.side.w}/${d.side.h}` : `${d.w}/${d.h}`;
+    const ar = side && d.side ? `${d.side.w}/${d.side.h}` : d.side && (layout === 'left' || layout === 'right') ? '3/2' : `${d.w}/${d.h}`;
     const dragProps = drag ? { draggable: true, 'data-drag': drag.name, 'data-png': drag.png ? '1' : '0' } : { draggable: false };
     return <div key={d.k} className={'pv-img ' + d.fit} style={{ aspectRatio: ar }}>{s && <img src={s} alt="" {...dragProps} />}</div>;
   });
@@ -292,11 +308,11 @@ export function Preview({ b, bt, slotSrc, drag }: { b: any; bt: BlockField[]; sl
     return <div key={d.k} className={cls}>{v}</div>;
   });
   if (side) return <div className={'pv pv-card side ' + layout}>{imgs}<div className="pv-txt">{texts}</div></div>;
-  return <div className={'pv pv-' + b.block_type}>{imgs}{texts}</div>;
+  return <div className={'pv pv-' + b.block_type + (narrow ? ' narrow' : '') + (mobile ? ' mobile' : '')}>{imgs}<div className="pv-txt">{texts}</div></div>;
 }
 
 // Scales a fixed-width preview down so all of it fits its container (width and height), centred.
-export function FitPreview({ children, width = 320 }: { children: React.ReactNode; width?: number }) {
+export function FitPreview({ children, width = 320, fitHeight = true }: { children: React.ReactNode; width?: number; fitHeight?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{ k: number; h: number } | null>(null);
@@ -309,7 +325,7 @@ export function FitPreview({ children, width = 320 }: { children: React.ReactNod
       const availW = host.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
       const availH = host.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
       const h = inn.offsetHeight || 1;
-      const k = Math.max(0.1, Math.min(availW / width, availH / h));
+      const k = Math.max(0.1, fitHeight ? Math.min(availW / width, availH / h) : Math.min(1, availW / width));
       setBox({ k, h });
     };
     const ro = new ResizeObserver(measure);
@@ -317,7 +333,7 @@ export function FitPreview({ children, width = 320 }: { children: React.ReactNod
     if (el.parentElement) ro.observe(el.parentElement);
     measure();
     return () => ro.disconnect();
-  }, [width]);
+  }, [width, fitHeight]);
   return (
     <div ref={ref} className="fitpv">
       <div style={{ width: box ? width * box.k : '100%', height: box ? box.h * box.k : undefined, overflow: 'hidden', margin: '0 auto' }}>

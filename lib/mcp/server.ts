@@ -24,6 +24,7 @@ export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const INSTRUCTIONS = `What each kind of asset becomes in Figma:
 - image and logo: stay images. Place them with push_image_to_figma; never add text to them.
 - block: an image plus copy. Build it as a component with the copy as live, editable text (get_block_for_figma).
+- Assets (images, logos, products) are the source material. Blocks are email modules built from assets; a block references its assets and never replaces them.
 - product: a card built from the product feed: image, label, name, description, price and button. Build it like a Product block with live text (get_block_for_figma works on products too). Leave out any part whose value is empty (e.g. no button if cta is empty).
 
 Emailsy CMS holds a team's email-ready assets, grouped into brand workspaces: images, logos, products (from a feed, keyed by PID) and blocks (content shapes like Hero, Card, Product, Button and Footer, with copy and email-ready images, plus Design blocks: a finished design saved as one flat image).
@@ -109,7 +110,7 @@ const TOOLS = [
         asset_id: { type: 'string' },
         upload_url: { type: 'string', description: 'The submitUrl returned by Figma\'s upload_assets.' },
         slot: { type: 'string', description: 'Block image slot. Defaults to the first image slot.' },
-        original: { type: 'boolean', description: 'For blocks: send the original upload instead of the email-ready crop.' },
+        original: { type: 'boolean', description: 'Send the original upload instead of the email-ready version (the default).' },
       },
       required: ['asset_id', 'upload_url'],
       additionalProperties: false,
@@ -179,7 +180,12 @@ async function allowedAsset(ctx: Ctx, id: string) {
 
 // Storage path of an asset's image, or of one of a block's image slots.
 function imagePath(a: AssetRow, slotArg?: string, original?: boolean): { path?: string | null; error?: string; width?: number; height?: number } {
-  if (a.kind !== 'block') return { path: a.storage_path || null, width: a.width, height: a.height };
+  if (a.kind !== 'block') {
+    // Images default to their email-ready copy (max 1200px wide, compressed).
+    const e = a.images?.email;
+    if (e?.path && !original) return { path: e.path, width: e.width, height: e.height };
+    return { path: a.storage_path || null, width: a.width, height: a.height };
+  }
   const slots = BLOCK_TYPES[a.block_type]?.fields.filter((f) => f.type === 'image').map((f) => f.k) || [];
   const key = slotArg || slots[0];
   const slot = a.images?.[key];
@@ -246,7 +252,11 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       if (r.error) return toolError(r.error);
       const a = r.asset!;
       const out = publicAsset(a, r.ws!.find((w) => w.id === a.workspace_id));
-      if (a.storage_path) out.image_url = await ctx.repo.signedUrl(a.storage_path);
+      if (a.images?.email?.path) {
+        out.image_url = await ctx.repo.signedUrl(a.images.email.path);
+        out.email_ready = { width: a.images.email.width, height: a.images.email.height, bytes: a.images.email.bytes };
+        if (a.storage_path) out.original_url = await ctx.repo.signedUrl(a.storage_path);
+      } else if (a.storage_path) out.image_url = await ctx.repo.signedUrl(a.storage_path);
       if (a.focus) out.focus = a.focus;
       if (a.kind === 'block') {
         out.fields = a.fields || {};
