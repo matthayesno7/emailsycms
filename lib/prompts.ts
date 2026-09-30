@@ -67,7 +67,7 @@ export const PROMPTS: PromptExample[] = [
   { id: 'carousel', category: 'social', title: 'Carousel, 5 slides', format: 'Instagram / LinkedIn · 1080×1350', uses: ['design', 'copy'],
     prompt: 'Build a 5-slide carousel for {brand}: "5 ways to wear it" featuring {product}. 1080×1350 each, consistent layout, brand fonts and colours, a cover and a final call to action. Save each slide to Emailsy.' },
   { id: 'youtube-thumb', category: 'social', title: 'YouTube thumbnail', format: 'YouTube · 1280×720', uses: ['design'],
-    prompt: 'Design a YouTube thumbnail for a {brand} video called "Behind the scenes: how it\'s made", 1280×720, bold readable text at small sizes. Save it to Emailsy.' },
+    prompt: 'Design a YouTube thumbnail for a video from {brand} called "Behind the scenes: how it\'s made", 1280×720, bold readable text at small sizes. Save it to Emailsy.' },
 
   // ---------- ads ----------
   { id: 'meta-ads', category: 'ads', title: 'Meta ad variations', format: 'Facebook / Instagram · 1080×1080', uses: ['design', 'copy'], needs: ['product'],
@@ -91,7 +91,7 @@ export const PROMPTS: PromptExample[] = [
   { id: 'product-reel', category: 'video', title: 'Product reel', format: 'Reel · 1080×1920 · 6s', uses: ['ai-video'], needs: ['product'],
     prompt: 'Make a 6-second vertical video of {product} for {brand}: slow camera move, soft light, the product unchanged. Show me the cost before you run the video model, then save the MP4 to Emailsy.' },
   { id: 'animated-banner', category: 'video', title: 'Animated email banner', format: 'Email · 1200×600', uses: ['motion'], needs: ['product'],
-    prompt: 'Design a {brand} email banner for {product} in {figma} and animate it: headline slides in, product fades up, button appears. Keep it under 4 seconds, export it as a video and save it to Emailsy.' },
+    prompt: 'Design an email banner from {brand} for {product} in {figma} and animate it: headline slides in, product fades up, button appears. Keep it under 4 seconds, export it as a video and save it to Emailsy.' },
   { id: 'launch-teaser', category: 'video', title: 'Launch teaser', format: 'Story · 1080×1920 · 10s', uses: ['motion', 'copy'], needs: ['logo'],
     prompt: 'Create a 10-second launch teaser for {brand} in {figma}: three short lines of text appearing one after another, then the logo. Brand colours and fonts. Export it as a video and save it to Emailsy.' },
   { id: 'kinetic-quote', category: 'video', title: 'Kinetic customer quote', format: 'Square · 1080×1080 · 8s', uses: ['motion'],
