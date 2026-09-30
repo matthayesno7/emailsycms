@@ -554,3 +554,24 @@ video.ed-out{background:#000;max-height:100%}
 .grid.masonry .thumb.image img{object-fit:cover}
 .grid.masonry .tile:hover .thumb{box-shadow:0 10px 26px rgba(20,20,22,.14)}
 .grid.masonry .thumb{transition:box-shadow .2s ease}
+
+/* ---------- editor layout fixes: the canvas fits the image, panels scroll ---------- */
+.editor{grid-template-rows:auto minmax(0,1fr)}
+.ed-body{grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden}
+.ed-canvas{min-height:0;overflow:hidden}
+.ed-side{min-height:0}
+.ed-stage{display:flex;align-items:center;justify-content:center}
+.ed-stage>.ed-out{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
+.ed-stage.actual{overflow:auto;display:flex;align-items:flex-start;justify-content:safe center}
+.ed-stage.actual>.ed-out{max-width:none;max-height:none;flex:none}
+.ed-crop{max-width:100%;max-height:100%}
+.ed-crop img{max-width:100%;max-height:calc(100vh - 200px);width:auto;height:auto}
+.ed-pv{display:block;overflow:auto;text-align:center}
+.ed-pv>.ed-mail{display:inline-block;text-align:left;vertical-align:top}
+.ed-pv>.hint{position:sticky;float:right;bottom:0}
+@media (max-width:900px){
+  .editor{grid-template-rows:none}
+  .ed-body{overflow:visible;grid-template-rows:none}
+  .ed-canvas{overflow:visible}
+  .ed-crop img{max-height:52vh}
+}
