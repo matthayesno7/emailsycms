@@ -30,7 +30,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [items, setItems] = useState<Asset[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(false);
-  const [view, setView] = useState('create');
+  // Three places: Create (home), Library (everything the brand has) and Brand kit; plus Settings.
+  const [page, setPage] = useState<'create' | 'library' | 'brand' | 'settings'>('create');
+  const [settingsTab, setSettingsTab] = useState<'workspace' | 'members' | 'claude' | 'help'>('workspace');
+  const [view, setView] = useState('all'); // which kind the library shows
+  const [addOpen, setAddOpen] = useState(false);
+  const [wsOpen, setWsOpen] = useState(false);
   const [connected, setConnected] = useState(true);
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -199,7 +204,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return m;
   }, [items]);
   const showOrigins = view === 'all' || view === 'image' || view === 'logo' || view === 'video';
-  const inView = useCallback((it: Asset) => (view === 'all' ? it.kind !== 'block' : it.kind === view), [view]);
+  const inView = useCallback((it: Asset) => (view === 'all' ? true : it.kind === view), [view]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -306,7 +311,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       const { error } = await supabase.from('assets').upsert(products.slice(i, i + 200), { onConflict: 'workspace_id,pid' });
       if (error) { toast(`Import stopped: ${error.message}`); return; }
     }
-    setView('product');
+    setView('product'); setPage('library');
     loadAssets(ws);
     const withImages = products.filter((p) => p.feed_image).length;
     toast(`${products.length} products imported${withImages ? '. Fetching their images…' : ''}`);
@@ -343,13 +348,14 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (imgs.length > 1) toast(`Adding ${imgs.length} images…`);
     for (const f of imgs) await addImageAsset(f);
     if (imgs.length) loadAssets(ws);
+    if (imgs.length || vids.length) setPage((p) => (p === 'brand' ? p : 'library'));
   }
 
   async function createWorkspace(name: string) {
     const { data, error } = await supabase.rpc('create_workspace', { ws_name: name });
     if (error || !data) { toast('Couldn’t create the workspace.'); return; }
     await loadWorkspaces((data as any).id);
-    setView('all');
+    setView('all'); setPage('create');
     toast(`${name} workspace created`);
   }
 
@@ -388,7 +394,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     }
     if (!made.length) return;
     loadAssets(ws);
-    setView('block');
+    setView('block'); setPage('library');
     if (made.length === 1) {
       const b = made[0];
       showBlock(blockDraft(b));
@@ -456,9 +462,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       if (e.key === 'Escape') {
         // Esc closes the top-most thing: a modal or block first, then the editor.
         // The block editor handles its own Esc (it checks for unsaved changes).
-        if (modal || sideOpen) { setModal(null); setSideOpen(false); } else if (!block && openId) openEditor(null);
+        if (addOpen || wsOpen) { setAddOpen(false); setWsOpen(false); } else if (modal || sideOpen) { setModal(null); setSideOpen(false); } else if (!block && openId) openEditor(null);
       }
-      if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName)) { e.preventDefault(); searchRef.current?.focus(); }
+      if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName) && !(e.target as HTMLElement)?.isContentEditable) { e.preventDefault(); setPage('library'); setTimeout(() => searchRef.current?.focus(), 0); }
     };
     window.addEventListener('dragenter', enter); window.addEventListener('dragover', over); window.addEventListener('dragleave', leave);
     window.addEventListener('drop', drop); window.addEventListener('paste', paste); document.addEventListener('dragstart', start);
@@ -470,7 +476,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     };
   });
 
-  const nav = (v: string) => { setView(v); setSideOpen(false); };
+  const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); };
+  const library = (k: string, o = 'any') => { setView(k); setOrigin(o); go('library'); };
+  const openSettings = (t: typeof settingsTab) => { setSettingsTab(t); go('settings'); };
+  const wsIndex = workspaces.findIndex((w) => w.id === ws);
+  const needsSetup = !connected || !curWs?.figma_file_key;
   const openAsset = openId ? itemById(openId) : null;
   // Prev/next walk the assets currently shown (images, logos and products with an image).
   const walk = useMemo(() => visible.filter((i) => i.kind !== 'block'), [visible]);
@@ -484,103 +494,137 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   return (
     <div className="app">
       <aside className={'side' + (sideOpen ? ' open' : '')} aria-label="Navigation">
-        <div className="org"><span className="logo"><Icon.Mark /></span>Emailsy <span className="plan">CMS</span></div>
-        <button className="nav" type="button" aria-current={view === 'create'} onClick={() => nav('create')}><Icon.Sparkle />Create</button>
-        <button className="nav" type="button" aria-current={view === 'all'} onClick={() => nav('all')}><Icon.Home />All assets<span className="count">{counts.all || ''}</span></button>
-        <button className="nav" type="button" onClick={() => { setSideOpen(false); searchRef.current?.focus(); }}><Icon.Search />Search</button>
-        <button className="nav" type="button" aria-current={view === 'brand'} onClick={() => nav('brand')}><Icon.Palette />Brand kit
-          {kitRow?.status === 'approved' ? null : <span className="count dotnote" title={kitRow ? 'Draft, not approved yet' : 'No brand kit yet'}>•</span>}
+        <div className="wsw">
+          <button className="wsw-btn" type="button" aria-expanded={wsOpen} onClick={() => setWsOpen((o) => !o)}>
+            <span className="dot" style={{ background: WS_COLORS[Math.max(0, wsIndex) % WS_COLORS.length] }}>{(curWs?.name[0] || 'E').toUpperCase()}</span>
+            <span className="wsw-name"><b>{curWs?.name || 'Emailsy'}</b><small>Emailsy</small></span>
+            <Icon.Chevron />
+          </button>
+          {wsOpen && (
+            <div className="wsw-menu" role="menu">
+              {workspaces.map((w, i) => (
+                <button key={w.id} type="button" role="menuitem" aria-current={w.id === ws} onClick={() => { setWs(w.id); go('create'); }}>
+                  <span className="dot" style={{ background: WS_COLORS[i % WS_COLORS.length] }}>{(w.name[0] || '?').toUpperCase()}</span>{w.name}{w.id === ws && <em>✓</em>}
+                </button>
+              ))}
+              {newWs === null ? (
+                <button type="button" role="menuitem" className="muted" onClick={() => setNewWs('')}><Icon.Plus size={16} />New brand</button>
+              ) : (
+                <form className="newws" onSubmit={(e) => { e.preventDefault(); const n = newWs.trim(); if (n) createWorkspace(n); setNewWs(null); setWsOpen(false); }}>
+                  <input className="in" autoFocus value={newWs} maxLength={40} placeholder="Brand name" onChange={(e) => setNewWs(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setNewWs(null)} />
+                  <button className="btn" type="submit">Add</button>
+                </form>
+              )}
+            </div>
+          )}
+        </div>
+
+        <nav className="mainnav">
+          <button className="nav big" type="button" aria-current={page === 'create'} onClick={() => go('create')}><Icon.Sparkle />Create</button>
+          <button className="nav big" type="button" aria-current={page === 'library'} onClick={() => library(view === 'all' ? 'all' : view)}><Icon.Image />Library
+            {drafts > 0 ? <span className="count pill-n" title="Waiting for approval">{drafts}</span> : null}
+          </button>
+          <button className="nav big" type="button" aria-current={page === 'brand'} onClick={() => go('brand')}><Icon.Palette />Brand kit
+            {kitRow?.status === 'approved' ? null : <span className="count dotnote" title={kitRow ? 'Draft, not approved yet' : 'Not set up yet'}>•</span>}
+          </button>
+        </nav>
+
+        <div className="fill" />
+        <button className="nav" type="button" aria-current={page === 'settings'} onClick={() => openSettings(!connected ? 'claude' : 'workspace')}><Icon.Settings />Settings
+          {needsSetup && <span className="count dotnote" title={!connected ? 'Claude isn’t connected yet' : 'No Figma file connected'}>•</span>}
         </button>
-        <div className="group">Assets</div>
-        {KINDS.filter((k) => k !== 'block').map((k) => (
-          <button key={k} className="nav" type="button" aria-current={view === k} onClick={() => nav(k)}>
-            {k === 'image' ? <Icon.Image /> : k === 'logo' ? <Icon.Shield /> : k === 'video' ? <Icon.Video /> : k === 'product' ? <Icon.Tag /> : <Icon.Blocks />}
-            {KIND_LABEL[k]}<span className="count">{counts[k] || ''}</span>
-          </button>
-        ))}
-        <div className="group">Email</div>
-        <button className="nav" type="button" aria-current={view === 'block'} onClick={() => nav('block')}><Icon.Blocks />{KIND_LABEL.block}<span className="count">{counts.block || ''}</span></button>
-        <div className="group">Workspaces</div>
-        {workspaces.map((w, i) => (
-          <button key={w.id} className="nav ws" type="button" aria-current={w.id === ws} onClick={() => { setWs(w.id); nav('create'); }}>
-            <span className="dot" style={{ background: WS_COLORS[i % WS_COLORS.length] }}>{(w.name[0] || '?').toUpperCase()}</span>{w.name}
-          </button>
-        ))}
-        {newWs === null ? (
-          <button className="nav muted" type="button" onClick={() => setNewWs('')}><Icon.Plus />New workspace</button>
-        ) : (
-          <form className="newws" onSubmit={(e) => { e.preventDefault(); const n = newWs.trim(); if (n) createWorkspace(n); setNewWs(null); }}>
-            <input className="in" autoFocus value={newWs} maxLength={40} placeholder="Brand name" onChange={(e) => setNewWs(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setNewWs(null)} />
-            <button className="btn" type="submit">Add</button>
-          </form>
-        )}
-        <div className="group">Team &amp; Claude</div>
-        <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('settings'); }}><Icon.Settings />Workspace settings{!curWs?.figma_file_key && <span className="count dotnote" title="No Figma file connected">•</span>}</button>
-        <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('members'); }}><Icon.Users />Members</button>
-        <button className="nav" type="button" aria-current={view === 'connect'} onClick={() => nav('connect')}><Icon.Plug />Connect Claude{!connected && <span className="count dotnote" title="Not connected yet">•</span>}</button>
-        <div className="group">Help</div>
-        <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('help-figma'); }}><Icon.Send />Using assets in Figma</button>
-        <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('help-feed'); }}><Icon.Table />Product feed format</button>
         <div className="me"><span title={email}>{email}</span><button type="button" onClick={async () => { await supabase.auth.signOut(); location.href = '/login'; }}>Sign out</button></div>
       </aside>
+      {wsOpen && <div className="clickaway" onClick={() => setWsOpen(false)} />}
 
       <main>
-        <div className="bar">
+        <div className="bar mobile-only">
           <button className="menu" type="button" aria-label="Open navigation" onClick={() => setSideOpen(true)}><Icon.Menu /></button>
-          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{view === 'brand' ? 'Brand kit' : view === 'create' ? 'Create' : view === 'connect' ? 'Connect Claude' : KIND_LABEL[view]}</b></div>
-          <div className="spacer" />
-          <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search name or PID" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /></label>
-          <button className="ghost" type="button" onClick={() => fileCsv.current?.click()}><Icon.Download /><span className="lbl">Import feed</span></button>
-          <button className="primary" type="button" onClick={() => fileImg.current?.click()}><Icon.Plus size={16} /><span className="lbl">Upload</span></button>
+          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{page === 'create' ? 'Create' : page === 'library' ? 'Library' : page === 'brand' ? 'Brand kit' : 'Settings'}</b></div>
         </div>
 
         <div className="content">
-          {view === 'create' && curWs ? (
+          {page === 'create' && curWs ? (
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
-              onConnect={() => nav('connect')} onBrandKit={() => nav('brand')} onReview={() => { setOrigin('draft'); nav('all'); }}
+              onConnect={() => openSettings('claude')} onBrandKit={() => go('brand')} onReview={() => library('all', 'draft')}
               onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
-          ) : view === 'connect' ? (
-            <Connector supabase={supabase} toast={toast} full />
-          ) : view === 'brand' && curWs ? (
+          ) : page === 'settings' && curWs ? (
+            <div className="settings-page">
+              <div className="head"><h1>Settings</h1></div>
+              <div className="seg tabs" role="tablist">
+                {([['workspace', 'Brand workspace'], ['members', 'Team'], ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
+                  <button key={k} type="button" role="tab" aria-pressed={settingsTab === k} onClick={() => setSettingsTab(k)}>{l}{k === 'claude' && !connected ? ' •' : ''}</button>
+                ))}
+              </div>
+              <div className="settings-body">
+                {settingsTab === 'workspace' && <WorkspaceSettings supabase={supabase} ws={curWs} toast={toast} onSaved={() => loadWorkspaces(curWs.id)} />}
+                {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} />}
+                {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
+                {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
+              </div>
+            </div>
+          ) : page === 'brand' && curWs ? (
             ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); }} /> : <p className="loading">Loading your brand kit…</p>
           ) : !ready ? (
             <p className="loading">Loading your library…</p>
-          ) : !items.length ? (
-            <div className="empty">
-              <div dangerouslySetInnerHTML={{ __html: ART }} />
-              <h2>No assets yet</h2>
-              <p>Drop images, logos or a product feed anywhere on this page, then size them for email and drag them into Figma.</p>
-              <div className="row">
-                <button className="primary" type="button" onClick={() => fileImg.current?.click()}><Icon.Plus size={16} />Upload assets</button>
-                <button className="ghost" type="button" onClick={() => fileCsv.current?.click()}>Import a product feed</button>
-              </div>
-            </div>
           ) : (
             <>
-              <div className="head">
-                <h1>{KIND_LABEL[view]}</h1><span className="n">{visible.length}</span>
-                {view === 'block' && (<><span className="spacer" /><button className="primary" type="button" onClick={() => setModal('blocktype')}><Icon.Plus size={16} />New block</button></>)}
+              <div className="lib-head">
+                <h1>Library</h1>
+                <span className="spacer" />
+                <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search names and PIDs" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /><kbd>/</kbd></label>
+                <div className="addwrap">
+                  <button className="primary" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((o) => !o)}><Icon.Plus size={16} />Add</button>
+                  {addOpen && (
+                    <div className="addmenu" role="menu" onClick={() => setAddOpen(false)}>
+                      <button type="button" role="menuitem" onClick={() => fileImg.current?.click()}><Icon.Image /><span><b>Upload files</b><small>Images, logos, videos. Or drop them anywhere.</small></span></button>
+                      <button type="button" role="menuitem" onClick={() => fileCsv.current?.click()}><Icon.Table /><span><b>Import a product feed</b><small>CSV from Shopify, Google Merchant…</small></span></button>
+                      <button type="button" role="menuitem" onClick={() => setModal('blocktype')}><Icon.Blocks /><span><b>New email block</b><small>Hero, card, product, button, footer</small></span></button>
+                    </div>
+                  )}
+                </div>
               </div>
-              {showOrigins && (
-                <div className="seg origins" role="group" aria-label="Where assets came from">
-                  {ORIGINS.filter(([k]) => (k !== 'product_feed' || view === 'all') && (k !== 'draft' || drafts)).map(([k, l]) => (
-                    <button key={k} type="button" aria-pressed={origin === k} onClick={() => setOrigin(k)}>{l}{k === 'draft' ? ` (${drafts})` : ''}</button>
+              {addOpen && <div className="clickaway" onClick={() => setAddOpen(false)} />}
+
+              <div className="lib-tabs">
+                <div className="tabs-row" role="tablist" aria-label="Kind">
+                  {['all', 'image', 'logo', 'video', 'product', 'block'].filter((k) => k === 'all' || k === 'image' || k === 'block' || counts[k] > 0).map((k) => (
+                    <button key={k} type="button" role="tab" aria-pressed={view === k} onClick={() => setView(k)}>
+                      {k === 'all' ? 'All' : k === 'block' ? 'Email blocks' : KIND_LABEL[k]}<span>{k === 'all' ? counts.all + (counts.block || 0) : counts[k] || 0}</span>
+                    </button>
                   ))}
                 </div>
-              )}
-              {!visible.length ? (
+                {showOrigins && (
+                  <select className="in source" value={origin} onChange={(e) => setOrigin(e.target.value)} aria-label="Where assets came from">
+                    {ORIGINS.filter(([k]) => (k !== 'product_feed' || view === 'all') && (k !== 'draft' || drafts || origin === 'draft')).map(([k, l]) => (
+                      <option key={k} value={k}>{k === 'any' ? 'From anywhere' : k === 'draft' ? `To review (${drafts})` : k === 'generated' ? 'Made with Claude' : l}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {!items.length ? (
+                <div className="empty">
+                  <div dangerouslySetInnerHTML={{ __html: ART }} />
+                  <h2>Your brand’s library</h2>
+                  <p>Drop images, logos, videos or a product feed anywhere on this page. Claude uses them to design, and everything it makes lands here too.</p>
+                  <div className="row">
+                    <button className="primary" type="button" onClick={() => fileImg.current?.click()}><Icon.Plus size={16} />Upload files</button>
+                    <button className="ghost" type="button" onClick={() => fileCsv.current?.click()}>Import a product feed</button>
+                  </div>
+                </div>
+              ) : !visible.length ? (
                 view === 'block' && !q ? (
                   <div className="empty small">
                     <Wire type="hero" />
-                    <h2>No blocks yet</h2>
-                    <p>A block is an email module: images and copy together, built from your assets. Drop images here, open any asset and choose “Use in a block”, or start from scratch.</p>
+                    <h2>No email blocks yet</h2>
+                    <p>A block is an email module: images and copy together, built from your assets, ready for Claude to turn into a Figma component.</p>
                     <div className="row">
-                      <button className="primary" type="button" onClick={() => fileImg.current?.click()}><Icon.Plus size={16} />Upload images</button>
-                      <button className="ghost" type="button" onClick={() => setModal('blocktype')}>Create a block</button>
+                      <button className="primary" type="button" onClick={() => setModal('blocktype')}><Icon.Plus size={16} />New block</button>
                     </div>
                   </div>
                 ) : (
-                  <p className="nomatch">{q ? `Nothing matches “${q}”.` : showOrigins && origin === 'generated' ? 'Nothing generated yet. Ask Claude to make an image for this workspace and it arrives here as a draft.' : showOrigins && origin !== 'any' ? 'Nothing here with that filter.' : `No ${KIND_LABEL[view].toLowerCase()} in ${curWs?.name} yet. Drop some onto the page.`}</p>
+                  <p className="nomatch">{q ? `Nothing matches “${q}”.` : showOrigins && origin === 'generated' ? 'Nothing made with Claude yet. Head to Create and make something.' : showOrigins && origin !== 'any' ? 'Nothing here with that filter.' : `No ${KIND_LABEL[view].toLowerCase()} yet. Drop some onto the page.`}</p>
                 )
               ) : (
                 <div className={'grid' + (['all', 'image', 'video'].includes(view) ? ' masonry' : '')}>
@@ -636,7 +680,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onClose={closeBlock}
           onSaved={(row, convertedFrom) => {
             setItems((list) => list.some((i) => i.id === row.id) ? list.map((i) => (i.id === row.id ? row : i)) : [row, ...list.filter((i) => i.id !== convertedFrom)]);
-            if (row.kind === 'block') { setView('block'); setUrl('block', row.id, true); }
+            if (row.kind === 'block') { setView('block'); setPage('library'); setUrl('block', row.id, true); }
           }}
           onDelete={(b) => deleteAsset(b.kind === 'product' ? itemById(b.id) || b : b)}
         />
@@ -646,14 +690,6 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <Modal wide onClose={() => { setModal(null); setConvertFrom(null); }}>
           <BlockTypePicker from={convertFrom ? itemById(convertFrom) : null}
             onPick={(t) => startBlock(t, convertFrom)} />
-        </Modal>
-      )}
-      {modal === 'help-figma' && <Modal onClose={() => setModal(null)}><HelpFigma /></Modal>}
-      {modal === 'help-feed' && <Modal onClose={() => setModal(null)}><HelpFeed /></Modal>}
-      {modal === 'members' && curWs && <Modal onClose={() => setModal(null)}><Members supabase={supabase} ws={curWs} userId={userId} toast={toast} /></Modal>}
-      {modal === 'settings' && curWs && (
-        <Modal onClose={() => setModal(null)}>
-          <WorkspaceSettings supabase={supabase} ws={curWs} toast={toast} onSaved={() => loadWorkspaces(curWs.id)} />
         </Modal>
       )}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
