@@ -2,6 +2,9 @@
 // transport. Each POST carries one message (or a batch) and gets a JSON reply.
 import { BLOCK_TYPES, isReadDesign } from '../blockTypes';
 import { productAsBlock } from '../products';
+import { mergeKit, missing, normaliseKit, warnings } from '../brandKit';
+import { fetchLimited, IMAGE_EXT } from '../net';
+import { imageSize } from '../imageSize';
 
 export type Workspace = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 export type AssetRow = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -10,18 +13,34 @@ export type AssetRow = Record<string, any> & { id: string; workspace_id: string;
 // tests pass an in-memory fake.
 export interface Repo {
   workspacesForUser(userId: string): Promise<Workspace[]>;
-  listAssets(workspaceIds: string[], opts: { kind?: string; query?: string; limit: number }): Promise<AssetRow[]>;
+  listAssets(workspaceIds: string[], opts: { kind?: string; origin?: string; status?: string; query?: string; limit: number }): Promise<AssetRow[]>;
   getAsset(id: string): Promise<AssetRow | null>;
   signedUrl(path: string): Promise<string | null>;
   download(path: string): Promise<{ blob: Blob; mime: string } | null>;
   updateAsset(id: string, patch: Record<string, any>): Promise<void>;
+  insertAsset(row: Record<string, any>): Promise<AssetRow>;
+  upload(path: string, buf: Buffer, type: string): Promise<void>;
+  getBrandKit(workspaceId: string): Promise<Record<string, any> | null>;
+  saveBrandKit(row: Record<string, any>): Promise<Record<string, any>>;
 }
 
 export type Ctx = { repo: Repo; userId: string; fetchImpl?: typeof fetch };
 
 export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
-const INSTRUCTIONS = `What each kind of asset becomes in Figma:
+const INSTRUCTIONS = `Brand kit: each workspace has one brand kit: colours by role, fonts with email-safe fallbacks, button style, content width, logos, imagery style and voice. Call get_brand_kit before building or generating anything for a workspace and follow it; never guess colours or fonts the kit gives you. A draft kit hasn't been approved by the team yet: use it, but mention that.
+
+Creating a brand kit from a Figma email design system (the user asks to set up, build or import their brand kit from Figma):
+1. Read the file with the Figma connector: get_variable_defs for colour and number variables, search_design_system or get_metadata for text styles and the button component, and get_screenshot of the foundations page or a finished email.
+2. Map to roles: primary (the signature brand colour), secondary, accent, text, text_muted, background, surface, border, link, button_bg, button_text. Heading and body fonts: family, weight and sizes in px at email scale (if the file is drawn at 2x, halve the sizes). Button: style (filled, outline, underline), radius, padding, weight, case. Content width (usually 600-640).
+3. Logo: if the file has a logo, export it with Figma's download_assets (SVG preferred) and pass the https URL as logo_url, or pass an Emailsy logo asset id in kit.logos.primary.
+4. Call save_brand_kit with source.figma_url. It is saved as a draft that the team reviews and approves in Emailsy (Brand kit). Tell the user what you filled in and what the tool reports as missing or worth checking.
+Never invent values: leave a role empty rather than guess. Email Love design systems keep their foundations in variables (colour/brand/*, typography/*); treat those names as the strongest signal.
+Building from a website instead happens in Emailsy itself (Brand kit → From your website); suggest that when the user has no design system.
+
+Where assets come from: each asset has an origin: uploaded (added by the team), product_feed (from the product feed, keyed by PID) or generated (made by AI), and a status: approved or draft. Generated assets start as drafts and carry provenance (prompt, model, source product). Images you create for a workspace go into the library with add_generated_asset; a person approves them in Emailsy, so never describe a draft as approved. Prefer approved assets when building emails; use drafts only when the user asks for them.
+
+What each kind of asset becomes in Figma:
 - image and logo: stay images. Place them with push_image_to_figma; never add text to them.
 - block: an image plus copy. Build it as a component with the copy as live, editable text (get_block_for_figma).
 - Use an asset's alt text (alt, when present) as the image's alt text in the email.
@@ -70,12 +89,14 @@ const TOOLS = [
   },
   {
     name: 'list_assets',
-    description: 'List assets. Filter by workspace, kind (image, logo, product, block) and a search over names and product IDs.',
+    description: 'List assets. Filter by workspace, kind (image, logo, product, block), origin (uploaded, product_feed, generated), status (approved, draft) and a search over names and product IDs.',
     inputSchema: {
       type: 'object',
       properties: {
         workspace_id: { type: 'string', description: 'Workspace id from list_workspaces. Omit to search all.' },
         kind: { type: 'string', enum: ['image', 'logo', 'product', 'block'] },
+        origin: { type: 'string', enum: ['uploaded', 'product_feed', 'generated'], description: 'Where the asset came from.' },
+        status: { type: 'string', enum: ['approved', 'draft'], description: 'Generated assets start as drafts until a person approves them.' },
         query: { type: 'string', description: 'Matches asset names and product IDs.' },
         limit: { type: 'number', minimum: 1, maximum: 200, default: 50 },
       },
@@ -147,6 +168,51 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'get_brand_kit',
+    description: 'The workspace\'s brand kit: colours by role (hex), heading and body fonts with web font links and email-safe fallbacks, sizes, button style, content width, logos (with temporary URLs), imagery style and do/don\'t rules, and voice. Also its status (draft or approved), what is missing and anything worth checking. Call this before building or generating anything for a workspace.',
+    inputSchema: { type: 'object', properties: { workspace_id: { type: 'string' } }, required: ['workspace_id'], additionalProperties: false },
+  },
+  {
+    name: 'save_brand_kit',
+    description: 'Create or update a workspace\'s brand kit, e.g. from a Figma email design system. Saved as a draft for the team to approve in Emailsy. mode "merge" (default) fills and updates only the values you pass; "replace" starts from empty. Colours are #rrggbb. Logo: pass logo_url (an https image URL such as Figma download_assets output) to import it, or kit.logos.primary with an Emailsy logo asset id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        kit: {
+          type: 'object',
+          description: 'Any of: name, colors {primary, secondary, accent, text, text_muted, background, surface, border, link, button_bg, button_text}, dark {background, surface, text, link}, type {heading {family, weight, url, fallback}, body {…}, sizes {h1, h2, body, small}, heading_case none|upper|title}, button {style filled|outline|underline, radius, padding_y, padding_x, weight, case}, layout {width, radius, spacing}, imagery {style, do[], dont[]}, voice {tone[], samples[]}, logos {primary, reversed, icon}, notes.',
+        },
+        logo_url: { type: 'string', description: 'https URL of the primary logo to import into the workspace\'s Logos.' },
+        source: { type: 'object', properties: { figma_url: { type: 'string' }, file_key: { type: 'string' } }, additionalProperties: false },
+        mode: { type: 'string', enum: ['merge', 'replace'], default: 'merge' },
+      },
+      required: ['workspace_id', 'kit'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'add_generated_asset',
+    description: 'Save an image you generated (e.g. a hero made from a product with an image model) into a workspace\'s library as a draft, with where it came from. Pass a public https URL of the finished image. A person approves it in Emailsy.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        image_url: { type: 'string', description: 'Public https URL of the image (PNG, JPEG or WebP).' },
+        name: { type: 'string' },
+        kind: { type: 'string', enum: ['image', 'logo'], default: 'image' },
+        alt: { type: 'string', description: 'Alt text for email.' },
+        prompt: { type: 'string', description: 'The prompt or brief used to make it.' },
+        model: { type: 'string', description: 'The model or tool that made it.' },
+        source_product_pid: { type: 'string', description: 'PID of the product it was made from, if any.' },
+        source_asset_ids: { type: 'array', items: { type: 'string' }, description: 'Emailsy assets used as inputs (product photo, reference images).' },
+        style: { type: 'string', description: 'Short style label, e.g. "studio, warm light".' },
+      },
+      required: ['workspace_id', 'image_url', 'name'],
+      additionalProperties: false,
+    },
+  },
 ];
 
 function figmaFile(w?: Workspace) {
@@ -161,8 +227,11 @@ function publicAsset(a: AssetRow, ws?: Workspace) {
     name: a.name,
     workspace_id: a.workspace_id,
     workspace: wsName,
+    origin: a.origin || (a.kind === 'product' ? 'product_feed' : 'uploaded'),
+    status: a.status || 'approved',
     updated_at: a.updated_at,
   };
+  if (a.origin === 'generated' && a.provenance) out.provenance = a.provenance;
   if (a.width) Object.assign(out, { width: a.width, height: a.height });
   if (a.fields?.alt) out.alt = a.fields.alt;
   if (a.kind === 'product') Object.assign(out, { pid: a.pid, price: a.price, link: a.link, description: a.fields?.description || '', has_image: !!a.storage_path });
@@ -225,11 +294,13 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
     case 'list_workspaces': {
       const ws = await ctx.repo.workspacesForUser(ctx.userId);
       const assets = ws.length ? await ctx.repo.listAssets(ws.map((w) => w.id), { limit: 5000 }) : [];
+      const kits: Record<string, string> = {};
+      for (const w of ws) { const k = await ctx.repo.getBrandKit(w.id); if (k) kits[w.id] = k.status; }
       return text(
         ws.map((w) => {
           const mine = assets.filter((a) => a.workspace_id === w.id);
           const count = (k: string) => mine.filter((a) => a.kind === k).length;
-          return { id: w.id, name: w.name, role: w.role, figma_file: figmaFile(w), images: count('image'), logos: count('logo'), products: count('product'), blocks: count('block') };
+          return { id: w.id, name: w.name, role: w.role, figma_file: figmaFile(w), brand_kit: kits[w.id] || 'none', images: count('image'), logos: count('logo'), products: count('product'), blocks: count('block'), drafts: mine.filter((a) => a.status === 'draft').length };
         }),
       );
     }
@@ -245,7 +316,9 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const kind = name === 'search_products' ? 'product' : args.kind;
       if (kind && !['image', 'logo', 'product', 'block'].includes(kind)) return toolError('kind must be image, logo, product or block.');
       const limit = Math.min(Math.max(Number(args.limit) || (name === 'search_products' ? 20 : 50), 1), 200);
-      const rows = await ctx.repo.listAssets(ids, { kind, query: args.query ? String(args.query) : undefined, limit });
+      if (args.origin && !['uploaded', 'product_feed', 'generated'].includes(args.origin)) return toolError('origin must be uploaded, product_feed or generated.');
+      if (args.status && !['approved', 'draft'].includes(args.status)) return toolError('status must be approved or draft.');
+      const rows = await ctx.repo.listAssets(ids, { kind, origin: args.origin, status: args.status, query: args.query ? String(args.query) : undefined, limit });
       const byId = Object.fromEntries(ws.map((w) => [w.id, w]));
       return text(rows.map((a) => publicAsset(a, byId[a.workspace_id])));
     }
@@ -363,9 +436,138 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       await ctx.repo.updateAsset(r.asset!.id, { figma });
       return text({ ok: true, figma });
     }
+    case 'get_brand_kit': {
+      const w = await ownWorkspace(ctx, args.workspace_id);
+      if ('error' in w) return toolError(w.error);
+      const row = await ctx.repo.getBrandKit(w.ws.id);
+      if (!row) return text({ workspace: w.ws.name, status: 'none', kit: null, how_to: 'No brand kit yet. Build one from the brand\'s Figma email design system with save_brand_kit (see the server instructions), or ask the user to build it from their website in Emailsy → Brand kit.' });
+      const kit = normaliseKit(row.kit, w.ws.name);
+      const logos: Record<string, any> = {};
+      for (const [role, id] of Object.entries(kit.logos)) {
+        if (!id) continue;
+        const a = await ctx.repo.getAsset(id);
+        if (a && a.workspace_id === w.ws.id) logos[role] = { asset_id: a.id, name: a.name, mime: a.mime, url: a.storage_path ? await ctx.repo.signedUrl(a.storage_path) : null };
+      }
+      const references: { asset_id: string; name: string }[] = [];
+      for (const id of kit.imagery.references) {
+        const a = await ctx.repo.getAsset(id);
+        if (a && a.workspace_id === w.ws.id) references.push({ asset_id: a.id, name: a.name });
+      }
+      return text({
+        workspace: w.ws.name,
+        status: row.status,
+        version: row.version,
+        source: row.source,
+        kit: { ...kit, logos, imagery: { ...kit.imagery, references } },
+        font_stacks: {
+          heading: [kit.type.heading.family && `'${kit.type.heading.family}'`, kit.type.heading.fallback].filter(Boolean).join(', '),
+          body: [kit.type.body.family && `'${kit.type.body.family}'`, kit.type.body.fallback].filter(Boolean).join(', '),
+        },
+        missing: missing(kit),
+        warnings: warnings(kit),
+        how_to: 'Use these values, not guesses: colours by role, the font stacks (the family first, then the email-safe fallback), sizes in px, the button style and the content width. For generated imagery follow imagery.style and its do/don\'t rules (view_image on a reference to see the look). Keep headline copy as live text, not baked into images.',
+      });
+    }
+    case 'save_brand_kit': {
+      const w = await ownWorkspace(ctx, args.workspace_id);
+      if ('error' in w) return toolError(w.error);
+      if (!args.kit || typeof args.kit !== 'object') return toolError('Pass kit as an object (see the tool description for its shape).');
+      const existing = await ctx.repo.getBrandKit(w.ws.id);
+      const base = args.mode === 'replace' || !existing ? normaliseKit({ name: w.ws.name }, w.ws.name) : normaliseKit(existing.kit, w.ws.name);
+      const kit = mergeKit(base, args.kit);
+      // Logo and reference ids must be this workspace's own assets.
+      for (const role of ['primary', 'reversed', 'icon'] as const) {
+        const id = kit.logos[role];
+        if (id && !(await sameWorkspaceAsset(ctx, id, w.ws.id))) kit.logos[role] = null;
+      }
+      const refs: string[] = [];
+      for (const id of kit.imagery.references) if (await sameWorkspaceAsset(ctx, id, w.ws.id)) refs.push(id);
+      kit.imagery.references = refs;
+      const notes: string[] = [];
+      if (args.logo_url) {
+        const got = await fetchLimited(String(args.logo_url), { accept: 'image/*', maxBytes: 5_000_000, fetchImpl: ctx.fetchImpl });
+        if ('error' in got || !(got.type.startsWith('image/') || /\.svg(\?|$)/i.test(String(args.logo_url)))) notes.push(`Couldn't import the logo from logo_url (${'error' in got ? got.error : 'not an image'}).`);
+        else {
+          const type = got.type.startsWith('image/') ? got.type : 'image/svg+xml';
+          const path = `${w.ws.id}/brand/${crypto.randomUUID()}.${IMAGE_EXT[type] || 'png'}`;
+          await ctx.repo.upload(path, got.buf, type);
+          const size = imageSize(got.buf);
+          const logo = await ctx.repo.insertAsset({
+            workspace_id: w.ws.id, kind: 'logo', name: `${kit.name || w.ws.name} logo`.slice(0, 120), storage_path: path, mime: type, bytes: got.buf.length,
+            width: size?.w ?? null, height: size?.h ?? null, origin: 'uploaded', status: 'approved', created_by: ctx.userId,
+            provenance: { via: 'brand_kit', imported_from: args.source?.figma_url || String(args.logo_url).slice(0, 300), at: new Date().toISOString() },
+          });
+          kit.logos.primary = logo.id;
+          notes.push('Logo imported into Logos.');
+        }
+      }
+      const figmaUrl = args.source?.figma_url ? String(args.source.figma_url).slice(0, 500) : null;
+      const saved = await ctx.repo.saveBrandKit({
+        workspace_id: w.ws.id,
+        kit,
+        status: 'draft',
+        version: (existing?.version || 0) + 1,
+        source: figmaUrl || args.source?.file_key
+          ? { type: 'figma', url: figmaUrl, file_key: args.source?.file_key ? String(args.source.file_key).slice(0, 80) : null, at: new Date().toISOString() }
+          : existing?.source || { type: 'manual', at: new Date().toISOString() },
+        updated_by: ctx.userId,
+      });
+      return text({ ok: true, workspace: w.ws.name, status: saved.status, version: saved.version, kit, missing: missing(kit), warnings: warnings(kit), notes, next: 'Saved as a draft. Ask the user to review and approve it in Emailsy → Brand kit.' });
+    }
+    case 'add_generated_asset': {
+      const w = await ownWorkspace(ctx, args.workspace_id);
+      if ('error' in w) return toolError(w.error);
+      const kind = args.kind === 'logo' ? 'logo' : 'image';
+      const name = String(args.name || '').trim().slice(0, 120);
+      if (!name) return toolError('Give the asset a name.');
+      let u: URL;
+      try { u = new URL(String(args.image_url)); } catch { return toolError('image_url is not a valid URL.'); }
+      if (u.protocol !== 'https:') return toolError('image_url must be an https address.');
+      const got = await fetchLimited(u, { accept: 'image/*', maxBytes: 25 * 1024 * 1024, timeoutMs: 20000, fetchImpl: ctx.fetchImpl });
+      if ('error' in got) return toolError(`Couldn't download the image (${got.error}).`);
+      if (!/image\/(png|jpeg|webp|gif|svg\+xml)/.test(got.type)) return toolError(`That URL isn't a PNG, JPEG or WebP image (${got.type || 'unknown type'}).`);
+      let product: AssetRow | null = null;
+      if (args.source_product_pid) {
+        const hits = await ctx.repo.listAssets([w.ws.id], { kind: 'product', query: String(args.source_product_pid), limit: 20 });
+        product = hits.find((h) => h.pid === String(args.source_product_pid)) || null;
+      }
+      const sources: string[] = [];
+      for (const id of Array.isArray(args.source_asset_ids) ? args.source_asset_ids.slice(0, 10) : []) if (await sameWorkspaceAsset(ctx, String(id), w.ws.id)) sources.push(String(id));
+      if (product && !sources.includes(product.id)) sources.unshift(product.id);
+      const kitRow = await ctx.repo.getBrandKit(w.ws.id);
+      const path = `${w.ws.id}/generated/${crypto.randomUUID()}.${IMAGE_EXT[got.type] || 'png'}`;
+      await ctx.repo.upload(path, got.buf, got.type);
+      const size = imageSize(got.buf);
+      const row = await ctx.repo.insertAsset({
+        workspace_id: w.ws.id, kind, name, storage_path: path, mime: got.type, bytes: got.buf.length, width: size?.w ?? null, height: size?.h ?? null,
+        origin: 'generated', status: 'draft', created_by: ctx.userId,
+        fields: args.alt ? { alt: String(args.alt).slice(0, 300) } : {},
+        provenance: {
+          prompt: args.prompt ? String(args.prompt).slice(0, 4000) : null,
+          model: args.model ? String(args.model).slice(0, 120) : null,
+          style: args.style ? String(args.style).slice(0, 200) : null,
+          source_product_pid: product?.pid || (args.source_product_pid ? String(args.source_product_pid).slice(0, 80) : null),
+          source_asset_ids: sources,
+          brand_kit_version: kitRow?.version ?? null,
+          generated_at: new Date().toISOString(),
+        },
+      });
+      return text({ ok: true, asset: publicAsset(row, w.ws), next: 'Saved as a draft in Emailsy. A person approves it there before it counts as approved.' });
+    }
     default:
       return null;
   }
+}
+
+async function ownWorkspace(ctx: Ctx, id: unknown): Promise<{ ws: Workspace } | { error: string }> {
+  const ws = await ctx.repo.workspacesForUser(ctx.userId);
+  const w = ws.find((x) => x.id === id);
+  return w ? { ws: w } : { error: 'That workspace is not one of yours. Call list_workspaces for valid ids.' };
+}
+
+async function sameWorkspaceAsset(ctx: Ctx, id: string, workspaceId: string) {
+  const a = await ctx.repo.getAsset(id);
+  return !!a && a.workspace_id === workspaceId;
 }
 
 type RpcMessage = { jsonrpc: '2.0'; id?: string | number | null; method?: string; params?: any };
@@ -385,7 +587,7 @@ export async function handleMessage(msg: RpcMessage, ctx: Ctx): Promise<object |
         return reply({
           protocolVersion: SUPPORTED_VERSIONS.includes(asked) ? asked : SUPPORTED_VERSIONS[0],
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'emailsy-cms', title: 'Emailsy CMS', version: '0.1.0' },
+          serverInfo: { name: 'emailsy-cms', title: 'Emailsy CMS', version: '0.2.0' },
           instructions: INSTRUCTIONS,
         });
       }

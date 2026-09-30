@@ -6,6 +6,8 @@ A home for a team's email-ready assets: images, logos, feed products and content
 - **Email-ready images:** crop to email sizes, remove white backgrounds, then drag straight into Figma.
 - **Blocks:** Hero, Card, Product, Button and Footer content with copy and email-ready images, made in one click from any image or product.
 - **Claude connector (MCP):** Claude can find assets, push full-size images into Figma, and turn blocks into components in any Figma design system.
+- **Brand kit:** one per workspace (colours by role, fonts with email-safe fallbacks, buttons, logos, imagery style, voice). Built for you from the brand's website, or by Claude from a Figma email design system; reviewed against a live email preview, then approved.
+- **Where assets come from:** every asset is *uploaded*, *from the product feed* or *generated* by AI. Generated assets arrive as drafts with their prompt, model and source product, and a person approves them.
 - **Teams:** brand workspaces, invites and owner/editor roles.
 
 Stack: Next.js 15 (App Router) · Supabase (Postgres, Auth, Storage) · Railway.
@@ -20,6 +22,7 @@ Stack: Next.js 15 (App Router) · Supabase (Postgres, Auth, Storage) · Railway.
    - **Dashboard:** SQL Editor → paste `supabase/migrations/20260923000000_init.sql` → Run.
 
    This creates the tables, row level security, the private `assets` storage bucket and realtime.
+   Run the later migrations in `supabase/migrations/` in date order too (the dashboard route needs each one pasted and run; `db push` does it for you).
 3. Authentication → URL Configuration:
    - **Site URL:** your app URL (e.g. `https://emailsy-cms.up.railway.app`)
    - **Redirect URLs:** add `https://<your-app>/auth/callback`, `https://<your-app>/login`, and `http://localhost:3000/**` for local work.
@@ -39,10 +42,10 @@ npm run dev                  # http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API (anon / publishable key) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API (service_role / secret key). Server only. |
 | `NEXT_PUBLIC_APP_URL` | The public URL of the app, no trailing slash |
-| `ANTHROPIC_API_KEY` | Optional. Turns on AI alt text for uploaded images. Server only. |
-| `ANTHROPIC_MODEL` | Optional. Defaults to `claude-sonnet-5`. |
+| `ANTHROPIC_API_KEY` | Optional. Turns on AI alt text, and lets Claude assign roles when building a brand kit from a website (without it a simpler heuristic does it). Server only. |
+| `ANTHROPIC_MODEL` | Optional. Defaults to `claude-sonnet-5-5`. |
 
-Check the MCP handler without a database: `npx tsx scripts/mcp-selftest.ts`.
+Check the MCP handler without a database: `npx tsx scripts/mcp-selftest.ts`. Check the website brand extractor on a fixture page: `npx tsx scripts/brand-extract-selftest.ts`.
 
 ## 3. GitHub → Railway
 
@@ -73,7 +76,10 @@ app/
   api/mcp/[key]/route.ts   MCP endpoint (streamable HTTP, stateless JSON)
   api/keys/route.ts        create connector links (only a hash is stored)
   api/invites/route.ts     invite teammates (owners)
-components/                Library, AssetPanel, BlockEditor, Modals
+  api/brand-kit/extract/   build a draft brand kit from a website
+components/                Library, AssetPanel, BlockEditor, BrandKit, Modals
+lib/brandKit.ts            brand kit shape, validation, merge, contrast checks
+lib/brandExtract.ts        reads colours, fonts, buttons and logo from HTML/CSS
 lib/mcp/server.ts          MCP protocol + tools (tested with a fake DB)
 lib/mcp/repo.ts            Supabase data access for the MCP tools
 lib/blockTypes.ts          block shapes and email export sizes
@@ -92,11 +98,22 @@ supabase/migrations/       schema, RLS, storage bucket
 | `view_image` | Returns the image itself so Claude can read a finished design's text and layout |
 | `push_image_to_figma` | Server uploads the image to a Figma `upload_assets` URL and returns the imageHash |
 | `record_figma_placement` | Saves where a block or image lives in Figma |
+| `get_brand_kit` | The workspace's brand kit, font stacks, logo URLs, what's missing and contrast warnings |
+| `save_brand_kit` | Creates or updates the kit (e.g. from a Figma design system), imports a logo from a URL; always saved as a draft |
+| `add_generated_asset` | Saves an AI-made image from a public https URL as a draft, with prompt, model and source product |
+
+`list_assets` also filters by `origin` (uploaded, product_feed, generated) and `status` (approved, draft).
+
+### Brand kit from a website
+
+`/api/brand-kit/extract` fetches the page and its first six stylesheets, reads CSS variables, body/heading/link styles, the main button, `@font-face` and Google Fonts links, theme-color, the logo (scored images and inline SVGs near "logo" in the header, falling back to the touch icon) and the share image. Claude assigns roles and describes the imagery style from the share image; the logo and share image go into the library. It's a plain fetch, so sites that render everything with JavaScript give thinner results (a headless browser on Railway would fix that).
 
 `push_image_to_figma` exists so images never pass through Claude: Claude asks Figma for an upload URL, and the Emailsy server sends the full-size file straight to Figma. Only `https://*.figma.com` upload URLs are accepted.
 
 ## Next up
 
+- `generate_hero(product_pid, style, format)`: keep the real product cut-out, generate the scene around it with the brand kit's imagery rules, composite, save as a draft.
+- Approval of brand kits is owner-only in the app; enforce it in the database too.
 - Automatic feed sync (Google Merchant / Shopify URL on a schedule).
 - OAuth sign-in for the Claude connector, replacing link keys.
 - Server-side email renditions, so Claude can push any preset size.

@@ -10,11 +10,17 @@ import AssetPanel from './AssetPanel';
 import BlockEditor, { FitPreview, Preview, previewWidth } from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
 import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
+import BrandKitView from './BrandKit';
+import type { BrandKitRow } from '@/lib/brandKit';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
 export type Ws = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 const WS_COLORS = ['#2f5bff', '#26313e', '#32a5db', '#e8a317', '#7b61ff', '#2f9e6e'];
 const KINDS = ['image', 'logo', 'product', 'block'];
+// Where assets come from. Products always come from the feed and blocks are made by the team,
+// so the filter shows on the views where it means something.
+const ORIGINS: [string, string][] = [['any', 'All'], ['uploaded', 'Uploaded'], ['product_feed', 'From feed'], ['generated', 'Generated'], ['draft', 'To review']];
+const originOf = (a: Asset) => a.origin || (a.kind === 'product' ? 'product_feed' : 'uploaded');
 
 export default function Library({ userId, email, appUrl }: { userId: string; email: string; appUrl: string }) {
   const supabase = useMemo(() => createClient(), []);
@@ -33,6 +39,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [dropping, setDropping] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [newWs, setNewWs] = useState<string | null>(null);
+  const [origin, setOrigin] = useState('any');
+  const [kitRow, setKitRow] = useState<BrandKitRow | null>(null);
   const toastT = useRef<any>(null);
   const fileImg = useRef<HTMLInputElement>(null);
   const fileCsv = useRef<HTMLInputElement>(null);
@@ -66,18 +74,27 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setReady(true);
   }, [supabase, toast]);
 
+  const loadKit = useCallback(async (wsId: string) => {
+    if (!wsId) return;
+    const { data } = await supabase.from('brand_kits').select('*').eq('workspace_id', wsId).maybeSingle();
+    setKitRow((data as BrandKitRow) || null);
+  }, [supabase]);
+
   useEffect(() => { loadWorkspaces(); }, [loadWorkspaces]);
   useEffect(() => {
     if (!ws) return;
     try { localStorage.setItem('emailsy.ws', ws); } catch {}
     setReady(false);
+    setKitRow(null);
     loadAssets(ws);
+    loadKit(ws);
     const ch = supabase
       .channel('assets-' + ws)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assets', filter: `workspace_id=eq.${ws}` }, () => loadAssets(ws))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'brand_kits', filter: `workspace_id=eq.${ws}` }, () => loadKit(ws))
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [ws, supabase, loadAssets]);
+  }, [ws, supabase, loadAssets, loadKit]);
 
   // Private bucket: sign every image path we need to show (valid for an hour).
   useEffect(() => {
@@ -116,10 +133,16 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     }
     return m;
   }, [items]);
+  const showOrigins = view === 'all' || view === 'image' || view === 'logo';
+  const inView = useCallback((it: Asset) => (view === 'all' ? it.kind !== 'block' : it.kind === view), [view]);
+  const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return items.filter((it) => (view === 'all' ? it.kind !== 'block' : it.kind === view) && (!s || it.name.toLowerCase().includes(s) || (it.pid || '').toLowerCase().includes(s)));
-  }, [items, view, q]);
+    const o = showOrigins ? origin : 'any';
+    return items.filter((it) => inView(it)
+      && (o === 'any' || (o === 'draft' ? it.status === 'draft' : originOf(it) === o))
+      && (!s || it.name.toLowerCase().includes(s) || (it.pid || '').toLowerCase().includes(s)));
+  }, [items, inView, q, origin, showOrigins]);
 
   // ---------- writes ----------
   async function patchAsset(id: string, patch: Record<string, any>) {
@@ -203,7 +226,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       }
       const imageChanged = !!ex && !!feedImage && ex.feed_image !== feedImage;
       return {
-        workspace_id: ws, kind: 'product', pid,
+        workspace_id: ws, kind: 'product', origin: 'product_feed', pid,
         name: edited.includes('name') && ex ? ex.name : feedName,
         price: ci.price >= 0 ? (r[ci.price] || '').trim() : null, link: ci.link >= 0 ? (r[ci.link] || '').trim() : null,
         feed_image: feedImage || null, fields,
@@ -386,6 +409,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <div className="org"><span className="logo"><Icon.Mark /></span>Emailsy <span className="plan">CMS</span></div>
         <button className="nav" type="button" aria-current={view === 'all'} onClick={() => nav('all')}><Icon.Home />All assets<span className="count">{counts.all || ''}</span></button>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); searchRef.current?.focus(); }}><Icon.Search />Search</button>
+        <button className="nav" type="button" aria-current={view === 'brand'} onClick={() => nav('brand')}><Icon.Palette />Brand kit
+          {kitRow?.status === 'approved' ? null : <span className="count dotnote" title={kitRow ? 'Draft, not approved yet' : 'No brand kit yet'}>•</span>}
+        </button>
         <div className="group">Assets</div>
         {KINDS.filter((k) => k !== 'block').map((k) => (
           <button key={k} className="nav" type="button" aria-current={view === k} onClick={() => nav(k)}>
@@ -422,7 +448,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       <main>
         <div className="bar">
           <button className="menu" type="button" aria-label="Open navigation" onClick={() => setSideOpen(true)}><Icon.Menu /></button>
-          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{KIND_LABEL[view]}</b></div>
+          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{view === 'brand' ? 'Brand kit' : KIND_LABEL[view]}</b></div>
           <div className="spacer" />
           <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search name or PID" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /></label>
           <button className="ghost" type="button" onClick={() => fileCsv.current?.click()}><Icon.Download /><span className="lbl">Import feed</span></button>
@@ -430,7 +456,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </div>
 
         <div className="content">
-          {!ready ? (
+          {view === 'brand' && curWs ? (
+            ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); }} /> : <p className="loading">Loading your brand kit…</p>
+          ) : !ready ? (
             <p className="loading">Loading your library…</p>
           ) : !items.length ? (
             <div className="empty">
@@ -448,6 +476,13 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 <h1>{KIND_LABEL[view]}</h1><span className="n">{visible.length}</span>
                 {view === 'block' && (<><span className="spacer" /><button className="primary" type="button" onClick={() => setModal('blocktype')}><Icon.Plus size={16} />New block</button></>)}
               </div>
+              {showOrigins && (
+                <div className="seg origins" role="group" aria-label="Where assets came from">
+                  {ORIGINS.filter(([k]) => (k !== 'product_feed' || view === 'all') && (k !== 'draft' || drafts)).map(([k, l]) => (
+                    <button key={k} type="button" aria-pressed={origin === k} onClick={() => setOrigin(k)}>{l}{k === 'draft' ? ` (${drafts})` : ''}</button>
+                  ))}
+                </div>
+              )}
               {!visible.length ? (
                 view === 'block' && !q ? (
                   <div className="empty small">
@@ -460,7 +495,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     </div>
                   </div>
                 ) : (
-                  <p className="nomatch">{q ? `Nothing matches “${q}”.` : `No ${KIND_LABEL[view].toLowerCase()} in ${curWs?.name} yet. Drop some onto the page.`}</p>
+                  <p className="nomatch">{q ? `Nothing matches “${q}”.` : showOrigins && origin === 'generated' ? 'Nothing generated yet. Ask Claude to make an image for this workspace and it arrives here as a draft.' : showOrigins && origin !== 'any' ? 'Nothing here with that filter.' : `No ${KIND_LABEL[view].toLowerCase()} in ${curWs?.name} yet. Drop some onto the page.`}</p>
                 )
               ) : (
                 <div className="grid">
@@ -573,6 +608,7 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
           <div className="noimg"><code>{it.pid}</code>Drop {it.pid}.jpg to add its image</div>
         )}
         {src && <span className="drag">Drag to Figma</span>}
+        {it.origin === 'generated' && <span className={'tag ' + (it.status === 'draft' ? 'draft' : 'ai')}>{it.status === 'draft' ? 'Draft · AI' : 'AI'}</span>}
       </div>
       <div className="meta"><span className="t">{it.name}</span><span className="s">{right}</span></div>
     </div>

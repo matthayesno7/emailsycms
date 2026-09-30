@@ -1,3 +1,4 @@
+import { MODEL } from '@/lib/anthropic';
 import { createClient } from '@/lib/supabase/server';
 
 // Optional AI alt text for email images. Needs ANTHROPIC_API_KEY (ANTHROPIC_MODEL optional);
@@ -6,7 +7,6 @@ import { createClient } from '@/lib/supabase/server';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 
 export async function POST(request: Request) {
   const supabase = await createClient();

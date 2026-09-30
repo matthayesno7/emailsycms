@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { imageSize } from '@/lib/imageSize';
+import { allowedUrl, fetchLimited, IMAGE_EXT } from '@/lib/net';
 
 // Downloads product images from a feed's image_link URLs into storage.
 // The browser can't do this itself (other sites block cross-origin reads), so the server fetches them.
@@ -11,38 +12,14 @@ export const maxDuration = 60;
 const BATCH = 12;
 const MAX_BYTES = 25 * 1024 * 1024;
 
-function allowedUrl(raw: string) {
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
-    const h = u.hostname.toLowerCase();
-    // No local or private network addresses.
-    if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || /^(127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h) || h.includes(':') || h === '[::1]') return null;
-    return u;
-  } catch {
-    return null;
-  }
-}
-
 async function fetchImage(url: URL) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 15000);
-  try {
-    const res = await fetch(url, { signal: ctl.signal, redirect: 'follow', headers: { 'user-agent': 'EmailsyCMS/1.0 (+product feed import)', accept: 'image/*' } });
-    if (!res.ok) return { error: `HTTP ${res.status}` };
-    const type = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    if (!type.startsWith('image/')) return { error: `Not an image (${type || 'unknown'})` };
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > MAX_BYTES) return { error: 'Over 25 MB' };
-    return { buf, type };
-  } catch (e: any) {
-    return { error: e?.name === 'AbortError' ? 'Timed out' : 'Could not download' };
-  } finally {
-    clearTimeout(timer);
-  }
+  const r = await fetchLimited(url, { accept: 'image/*', maxBytes: MAX_BYTES, ua: 'EmailsyCMS/1.0 (+product feed import)' });
+  if ('error' in r) return { error: r.error === 'Too large' ? 'Over 25 MB' : r.error };
+  if (!r.type.startsWith('image/')) return { error: `Not an image (${r.type || 'unknown'})` };
+  return { buf: r.buf, type: r.type };
 }
 
-const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/avif': 'avif' };
+const EXT = IMAGE_EXT;
 
 export async function POST(request: Request) {
   const supabase = await createClient();

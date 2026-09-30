@@ -15,9 +15,11 @@ export function supabaseRepo(db: SupabaseClient): Repo {
         .map((r: any) => (r.workspaces ? { id: r.workspaces.id, name: r.workspaces.name, role: r.role, figma_file_url: r.workspaces.figma_file_url, figma_file_key: r.workspaces.figma_file_key, figma_file_name: r.workspaces.figma_file_name } : null))
         .filter(Boolean) as Workspace[];
     },
-    async listAssets(workspaceIds, { kind, query, limit }) {
+    async listAssets(workspaceIds, { kind, origin, status, query, limit }) {
       let q = db.from('assets').select('*').in('workspace_id', workspaceIds).order('updated_at', { ascending: false }).limit(limit);
       if (kind) q = q.eq('kind', kind);
+      if (origin) q = q.eq('origin', origin);
+      if (status) q = q.eq('status', status);
       if (query) {
         const s = query.replace(/[%,()]/g, ' ').trim();
         if (s) q = q.or(`name.ilike.%${s}%,pid.ilike.%${s}%`);
@@ -43,6 +45,25 @@ export function supabaseRepo(db: SupabaseClient): Repo {
     async updateAsset(id, patch) {
       const { error } = await db.from('assets').update(patch).eq('id', id);
       if (error) throw error;
+    },
+    async insertAsset(row) {
+      const { data, error } = await db.from('assets').insert(row).select('*').single();
+      if (error) throw error;
+      return data as AssetRow;
+    },
+    async upload(path, buf, type) {
+      const { error } = await db.storage.from('assets').upload(path, buf, { contentType: type });
+      if (error) throw error;
+    },
+    async getBrandKit(workspaceId) {
+      const { data, error } = await db.from('brand_kits').select('*').eq('workspace_id', workspaceId).maybeSingle();
+      if (error) throw error;
+      return (data as any) || null;
+    },
+    async saveBrandKit(row) {
+      const { data, error } = await db.from('brand_kits').upsert(row, { onConflict: 'workspace_id' }).select('*').single();
+      if (error) throw error;
+      return data as any;
     },
   };
 }

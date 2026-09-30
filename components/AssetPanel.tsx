@@ -122,6 +122,17 @@ export default function AssetPanel({ it, src, usedIn = [], onOpenBlock, onClose,
         <button ref={closeRef} className="x" type="button" aria-label="Close" onClick={onClose}><Icon.Close /></button>
       </header>
 
+      {it.origin === 'generated' && (
+        <div className={'origin-box' + (it.status === 'draft' ? ' draft' : '')}>
+          <div className="bl"><b>{it.status === 'draft' ? 'Generated · waiting for approval' : 'Generated · approved'}</b>
+            {it.status === 'draft' && <button className="primary" type="button" onClick={async () => { if (await onPatch({ status: 'approved' })) toast('Approved'); }}>Approve</button>}
+          </div>
+          {it.provenance?.prompt && <p className="tip">“{it.provenance.prompt}”</p>}
+          <p className="tip">{[it.provenance?.model, it.provenance?.style, it.provenance?.source_product_pid && `from product ${it.provenance.source_product_pid}`, it.provenance?.brand_kit_version && `brand kit v${it.provenance.brand_kit_version}`].filter(Boolean).join(' · ')}</p>
+        </div>
+      )}
+      {it.provenance?.via === 'brand_kit' && <p className="tip">Imported from {(() => { try { return new URL(it.provenance.site || it.provenance.imported_from).hostname; } catch { return 'your brand kit'; } })()} when the brand kit was built.</p>}
+
       <div className="seg" role="group" aria-label="Asset type">
         {TYPES.map(([k, l]) => <button key={k} type="button" aria-pressed={it.kind === k} onClick={() => setKind(k)}>{l}</button>)}
       </div>
