@@ -22,6 +22,7 @@ export const Icon = {
   Palette: (p: P) => <S {...p}><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.8-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8z" /><circle cx="7.5" cy="11" r="1.2" /><circle cx="10" cy="7" r="1.2" /><circle cx="15" cy="7.5" r="1.2" /></S>,
   Sparkle: (p: P) => <S {...p}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" /></S>,
   Back: (p: P) => <S {...p}><path d="M19 12H5M11 18l-6-6 6-6" /></S>,
+  Video: (p: P) => <S {...p}><rect x="3" y="5" width="13" height="14" rx="2" /><path d="m16 10 5-3v10l-5-3" /></S>,
   Plug: (p: P) => <S {...p}><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4" /></S>,
   Send: (p: P) => <S {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></S>,
   Table: (p: P) => <S {...p}><path d="M4 4h16v16H4z" /><path d="M4 9h16M9 9v11" /></S>,

@@ -7,6 +7,7 @@ import { Icon } from './icons';
 import type { Asset } from './Library';
 
 const TYPES: [string, string][] = [['image', 'Image'], ['logo', 'Logo'], ['product', 'Product']];
+const VIDEO_TYPES: [string, string][] = [['video', 'Video']];
 type Focus = { x: number; y: number };
 
 // Full-page editor for one image, logo or product image: a big canvas on the left,
@@ -42,6 +43,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   useEffect(() => setName(it.name), [it.name]);
   useEffect(() => { if (!dragging.current) { const f = it.focus || { x: 0.5, y: 0.5 }; setFocus(f); setRenderFocus(f); } }, [it.focus]);
 
+  const isVideo = it.kind === 'video';
   const pr = PRESETS.find((p) => p.id === preset)!;
   const cropping = it.kind === 'image' && !!pr.w;
   useEffect(() => { if (!cropping) setMode('result'); }, [cropping]);
@@ -50,7 +52,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (!src) return;
+      if (!src || isVideo) return;
       try {
         if (cache.current.src !== src) cache.current = { src, img: await loadImg(src) };
         const img = cache.current.img!;
@@ -150,7 +152,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
             <button className="x" type="button" aria-label="Next asset" disabled={!onNext} onClick={onNext}><Icon.Chevron /></button>
           </div>
         )}
-        {src && <>
+        {src && isVideo && <a className="btn" href={src} download={`${it.name.replace(/[^\w.-]+/g, '-')}.mp4`} target="_blank" rel="noreferrer">Download</a>}
+        {src && !isVideo && <>
           <button className="btn" type="button" onClick={download} disabled={!out}><span className="lbl">Download</span><span className="sm">PNG</span></button>
           <button className="primary" type="button" onClick={copyImage} disabled={!out}>Copy image</button>
         </>}
@@ -159,14 +162,14 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
       <div className="ed-body">
         <section className="ed-canvas" aria-label="Canvas">
           <div className="ed-tools">
-            {cropping && (
+            {cropping && !isVideo && (
               <div className="seg" role="group" aria-label="View">
                 <button type="button" aria-pressed={mode === 'result'} onClick={() => setMode('result')}>Result</button>
                 <button type="button" aria-pressed={mode === 'crop'} onClick={() => setMode('crop')}>Adjust crop</button>
               </div>
             )}
             <span className="spacer" />
-            {mode === 'result' && (
+            {mode === 'result' && !isVideo && (
               <div className="seg" role="group" aria-label="Zoom">
                 <button type="button" aria-pressed={zoom === 'fit'} onClick={() => setZoom('fit')}>Fit</button>
                 <button type="button" aria-pressed={zoom === '1x'} onClick={() => setZoom('1x')}>100%</button>
@@ -175,7 +178,9 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
           </div>
 
           <div className={'ed-stage' + (zoom === '1x' && mode === 'result' ? ' actual' : '') + (it.kind !== 'image' ? ' light' : '')}>
-            {!src ? (
+            {isVideo && src ? (
+              <video className="ed-out" src={src} controls playsInline autoPlay muted loop />
+            ) : !src ? (
               <p className="tip">No image yet.{it.pid ? <> Drop <code>{it.pid}.jpg</code> (or .png) onto the library and it attaches to this product.</> : null}</p>
             ) : mode === 'crop' && box ? (
               <div className="ed-crop"
@@ -193,7 +198,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 onPointerDown={(e) => { if (it.kind === 'image' && preset === 'orig') setFocus(pointAt(e)); }}
                 onPointerUp={(e) => { if (it.kind === 'image' && preset === 'orig') commitFocus(pointAt(e)); }} />
             ) : <p className="tip">Preparing…</p>}
-            {src && out && (
+            {src && out && !isVideo && (
               <span className="hint">{mode === 'crop' ? 'Drag to choose what stays in the crop' : `${out.w}×${out.h}${removeBg ? ' · cut out' : ''} · drag into Figma`}</span>
             )}
           </div>
@@ -213,11 +218,11 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
           <div className="ed-sec">
             <div className="label">Type</div>
             <div className="seg" role="group" aria-label="Asset type">
-              {TYPES.map(([k, l]) => <button key={k} type="button" aria-pressed={it.kind === k} onClick={() => setKind(k)}>{l}</button>)}
+              {(isVideo ? VIDEO_TYPES : TYPES).map(([k, l]) => <button key={k} type="button" aria-pressed={it.kind === k} onClick={() => setKind(k)}>{l}</button>)}
             </div>
           </div>
 
-          {src && (
+          {src && !isVideo && (
             <div className="ed-sec">
               <div className="label">Size for email</div>
               <div className="ed-sizes">
@@ -235,7 +240,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
             </div>
           )}
 
-          {src && it.kind !== 'product' && (
+          {src && it.kind !== 'product' && !isVideo && (
             <div className="ed-sec">
               <div className="label">Alt text</div>
               <div className="fields">
@@ -260,7 +265,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
             </div>
           )}
 
-          <div className="ed-sec">
+          {isVideo && <p className="tip">Videos go into Figma, social and ads as they are. For email, most inboxes don’t play video: use a still or an animated GIF with a link to it.</p>}
+          {!isVideo && <div className="ed-sec">
             <div className="label">In email</div>
             <div className="usedin">
               <button type="button" className="btn" onClick={() => (src || it.kind === 'product' ? onMakeBlock() : toast('Add an image first.'))}>Use in a block</button>
@@ -268,7 +274,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
             </div>
             <p className="tip">{usedIn.length ? `Used in ${usedIn.length} block${usedIn.length > 1 ? 's' : ''}. It stays here in your assets.` : 'Blocks use this asset without moving it; it stays here.'}
               {it.images?.email ? ` Email-ready copy: ${it.images.email.width}×${it.images.email.height}, ${Math.round(it.images.email.bytes / 1024)} KB.` : ''}</p>
-          </div>
+          </div>}
 
           {it.provenance?.via === 'brand_kit' && <p className="tip">Imported from {hostOf(it.provenance.site || it.provenance.imported_from)} when the brand kit was built.</p>}
 

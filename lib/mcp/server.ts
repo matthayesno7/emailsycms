@@ -5,6 +5,7 @@ import { productAsBlock } from '../products';
 import { mergeKit, missing, normaliseKit, warnings } from '../brandKit';
 import { fetchLimited, IMAGE_EXT } from '../net';
 import { imageSize } from '../imageSize';
+import { PROMPTS, fillPrompt, USE_LABEL } from '../prompts';
 
 export type Workspace = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 export type AssetRow = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -28,7 +29,9 @@ export type Ctx = { repo: Repo; userId: string; fetchImpl?: typeof fetch };
 
 export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
-const INSTRUCTIONS = `Brand kit: each workspace has one brand kit: colours by role, fonts with email-safe fallbacks, button style, content width, logos, imagery style and voice. Call get_brand_kit before building or generating anything for a workspace and follow it; never guess colours or fonts the kit gives you. A draft kit hasn't been approved by the team yet: use it, but mention that.
+const INSTRUCTIONS = `Emailsy is the brand's creative library for Claude: its brand kit, logos, images, product feed and email blocks, plus everything made with Claude. Work from these, make things in Figma, and save what you make back here.
+
+Brand kit: each workspace has one brand kit: colours by role, fonts with email-safe fallbacks, button style, content width, logos, imagery style and voice. Call get_brand_kit before building or generating anything for a workspace and follow it; never guess colours or fonts the kit gives you. A draft kit hasn't been approved by the team yet: use it, but mention that.
 
 Creating a brand kit from a Figma email design system (the user asks to set up, build or import their brand kit from Figma):
 1. Read the file with the Figma connector: get_variable_defs for colour and number variables, search_design_system or get_metadata for text styles and the button component, and get_screenshot of the foundations page or a finished email.
@@ -39,6 +42,13 @@ Never invent values: leave a role empty rather than guess. Email Love design sys
 Building from a website instead happens in Emailsy itself (Brand kit → From your website); suggest that when the user has no design system.
 
 Where assets come from: each asset has an origin: uploaded (added by the team), product_feed (from the product feed, keyed by PID) or generated (made by AI), and a status: approved or draft. Generated assets start as drafts and carry provenance (prompt, model, source product). Images you create for a workspace go into the library with add_generated_asset; a person approves them in Emailsy, so never describe a draft as approved. Prefer approved assets when building emails; use drafts only when the user asks for them.
+
+Making things (Emailsy holds the brand and the source assets; the Figma connector does the making):
+- Designs (banners, social posts, ads, slides): build them in Figma from the brand kit and Emailsy assets (push_image_to_figma), headline as live text, then save the finished frame with add_generated_asset.
+- New imagery (a product in a new scene, a seasonal backdrop, a cut-out): use Figma's Weave models. weave_find_model (e.g. "nano banana 2" for images), pass the product photo's image_url from get_asset as the reference image, and describe the scene using the brand kit's imagery.style and do/don't rules. Never alter the product itself: say so in the prompt, and prefer compositing the real cut-out over a generated scene in Figma when the product must be exact. Weave runs cost the user credits: always quote the cost and get an explicit yes before running.
+- Video: either a Weave video model (e.g. "veo 3") from a product image, or animate a Figma frame and export it with export_video (MP4). Save the MP4 with add_generated_asset (kind video).
+- Always finish by saving the result to Emailsy with add_generated_asset, then tell the user it's waiting for approval there.
+The user can pick ready-made requests from this server's prompts (the Emailsy prompt library).
 
 Saving something you designed in Figma back into Emailsy (a banner, a social image, a finished email section): call Figma's download_assets on the finished frame, take its export URL (a temporary https link) and pass it straight to add_generated_asset as image_url, with figma_file_key and figma_node_id, the Emailsy asset ids you used in source_asset_ids, and a short description of the brief as prompt. Do it as the last step whenever you make a finished image for a workspace, without being asked, and tell the user it's waiting for approval in Emailsy. Never tell the user to export and upload by hand.
 
@@ -96,7 +106,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         workspace_id: { type: 'string', description: 'Workspace id from list_workspaces. Omit to search all.' },
-        kind: { type: 'string', enum: ['image', 'logo', 'product', 'block'] },
+        kind: { type: 'string', enum: ['image', 'logo', 'video', 'product', 'block'] },
         origin: { type: 'string', enum: ['uploaded', 'product_feed', 'generated'], description: 'Where the asset came from.' },
         status: { type: 'string', enum: ['approved', 'draft'], description: 'Generated assets start as drafts until a person approves them.' },
         query: { type: 'string', description: 'Matches asset names and product IDs.' },
@@ -201,9 +211,9 @@ const TOOLS = [
       type: 'object',
       properties: {
         workspace_id: { type: 'string' },
-        image_url: { type: 'string', description: 'Public https URL of the image (PNG, JPEG or WebP).' },
+        image_url: { type: 'string', description: 'https URL of the file: PNG, JPEG, WebP or GIF image, or MP4/WebM video.' },
         name: { type: 'string' },
-        kind: { type: 'string', enum: ['image', 'logo'], default: 'image' },
+        kind: { type: 'string', enum: ['image', 'logo', 'video'], default: 'image', description: 'video for MP4/WebM files (e.g. from export_video or a Weave video model).' },
         alt: { type: 'string', description: 'Alt text for email.' },
         prompt: { type: 'string', description: 'The prompt or brief used to make it.' },
         model: { type: 'string', description: 'The model or tool that made it, e.g. "Figma" for a design you built there.' },
@@ -304,7 +314,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
         ws.map((w) => {
           const mine = assets.filter((a) => a.workspace_id === w.id);
           const count = (k: string) => mine.filter((a) => a.kind === k).length;
-          return { id: w.id, name: w.name, role: w.role, figma_file: figmaFile(w), brand_kit: kits[w.id] || 'none', images: count('image'), logos: count('logo'), products: count('product'), blocks: count('block'), drafts: mine.filter((a) => a.status === 'draft').length };
+          return { id: w.id, name: w.name, role: w.role, figma_file: figmaFile(w), brand_kit: kits[w.id] || 'none', images: count('image'), logos: count('logo'), videos: count('video'), products: count('product'), blocks: count('block'), drafts: mine.filter((a) => a.status === 'draft').length };
         }),
       );
     }
@@ -318,7 +328,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       }
       if (!ids.length) return text([]);
       const kind = name === 'search_products' ? 'product' : args.kind;
-      if (kind && !['image', 'logo', 'product', 'block'].includes(kind)) return toolError('kind must be image, logo, product or block.');
+      if (kind && !['image', 'logo', 'video', 'product', 'block'].includes(kind)) return toolError('kind must be image, logo, video, product or block.');
       const limit = Math.min(Math.max(Number(args.limit) || (name === 'search_products' ? 20 : 50), 1), 200);
       if (args.origin && !['uploaded', 'product_feed', 'generated'].includes(args.origin)) return toolError('origin must be uploaded, product_feed or generated.');
       if (args.status && !['approved', 'draft'].includes(args.status)) return toolError('status must be approved or draft.');
@@ -521,15 +531,23 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
     case 'add_generated_asset': {
       const w = await ownWorkspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
-      const kind = args.kind === 'logo' ? 'logo' : 'image';
+      let kind = args.kind === 'logo' ? 'logo' : args.kind === 'video' ? 'video' : 'image';
       const name = String(args.name || '').trim().slice(0, 120);
       if (!name) return toolError('Give the asset a name.');
       let u: URL;
       try { u = new URL(String(args.image_url)); } catch { return toolError('image_url is not a valid URL.'); }
       if (u.protocol !== 'https:') return toolError('image_url must be an https address.');
-      const got = await fetchLimited(u, { accept: 'image/*', maxBytes: 25 * 1024 * 1024, timeoutMs: 20000, fetchImpl: ctx.fetchImpl });
-      if ('error' in got) return toolError(`Couldn't download the image (${got.error}).`);
-      if (!/image\/(png|jpeg|webp|gif|svg\+xml)/.test(got.type)) return toolError(`That URL isn't a PNG, JPEG or WebP image (${got.type || 'unknown type'}).`);
+      const got = await fetchLimited(u, { accept: 'image/*,video/*', maxBytes: 100 * 1024 * 1024, timeoutMs: 45000, fetchImpl: ctx.fetchImpl });
+      if ('error' in got) return toolError(`Couldn't download the file (${got.error}).`);
+      // Some storage hosts send a generic type: fall back to the file extension.
+      let type = got.type;
+      if (!/^(image|video)\//.test(type)) {
+        const ext = u.pathname.toLowerCase().match(/\.(png|jpe?g|webp|gif|mp4|webm|mov)$/)?.[1];
+        type = ext ? ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' } as Record<string, string>)[ext] : type;
+      }
+      if (/^video\//.test(type)) kind = 'video';
+      if (!/image\/(png|jpeg|webp|gif|svg\+xml)|video\/(mp4|webm|quicktime)/.test(type)) return toolError(`That URL isn't an image (PNG, JPEG, WebP) or video (MP4, WebM): ${got.type || 'unknown type'}.`);
+      if (kind !== 'video' && got.buf.length > 25 * 1024 * 1024) return toolError('That image is over 25 MB.');
       let product: AssetRow | null = null;
       if (args.source_product_pid) {
         const hits = await ctx.repo.listAssets([w.ws.id], { kind: 'product', query: String(args.source_product_pid), limit: 20 });
@@ -539,11 +557,12 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       for (const id of Array.isArray(args.source_asset_ids) ? args.source_asset_ids.slice(0, 10) : []) if (await sameWorkspaceAsset(ctx, String(id), w.ws.id)) sources.push(String(id));
       if (product && !sources.includes(product.id)) sources.unshift(product.id);
       const kitRow = await ctx.repo.getBrandKit(w.ws.id);
-      const path = `${w.ws.id}/generated/${crypto.randomUUID()}.${IMAGE_EXT[got.type] || 'png'}`;
-      await ctx.repo.upload(path, got.buf, got.type);
-      const size = imageSize(got.buf);
+      const ext = IMAGE_EXT[type] || ({ 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov' } as Record<string, string>)[type] || 'png';
+      const path = `${w.ws.id}/generated/${crypto.randomUUID()}.${ext}`;
+      await ctx.repo.upload(path, got.buf, type);
+      const size = kind === 'video' ? null : imageSize(got.buf);
       const row = await ctx.repo.insertAsset({
-        workspace_id: w.ws.id, kind, name, storage_path: path, mime: got.type, bytes: got.buf.length, width: size?.w ?? null, height: size?.h ?? null,
+        workspace_id: w.ws.id, kind, name, storage_path: path, mime: type, bytes: got.buf.length, width: size?.w ?? null, height: size?.h ?? null,
         origin: 'generated', status: 'draft', created_by: ctx.userId,
         fields: args.alt ? { alt: String(args.alt).slice(0, 300) } : {},
         provenance: {
@@ -591,7 +610,7 @@ export async function handleMessage(msg: RpcMessage, ctx: Ctx): Promise<object |
         const asked = msg.params?.protocolVersion;
         return reply({
           protocolVersion: SUPPORTED_VERSIONS.includes(asked) ? asked : SUPPORTED_VERSIONS[0],
-          capabilities: { tools: { listChanged: false } },
+          capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
           serverInfo: { name: 'emailsy-cms', title: 'Emailsy CMS', version: '0.2.0' },
           instructions: INSTRUCTIONS,
         });
@@ -609,7 +628,34 @@ export async function handleMessage(msg: RpcMessage, ctx: Ctx): Promise<object |
       case 'resources/list':
         return reply({ resources: [] });
       case 'prompts/list':
-        return reply({ prompts: [] });
+        return reply({
+          prompts: PROMPTS.map((p) => ({
+            name: p.id,
+            title: p.title,
+            description: `${p.format} · ${p.uses.map((u) => USE_LABEL[u]).join(' + ')}`,
+            arguments: [
+              { name: 'brand', description: 'Workspace (brand) name', required: false },
+              ...(p.prompt.includes('{product}') ? [{ name: 'product', description: 'Product name or PID from Emailsy', required: false }] : []),
+              ...(p.prompt.includes('{image}') ? [{ name: 'image', description: 'Image name from Emailsy', required: false }] : []),
+            ],
+          })),
+        });
+      case 'prompts/get': {
+        const p = PROMPTS.find((x) => x.id === msg.params?.name);
+        if (!p) return fail(-32602, `Unknown prompt: ${msg.params?.name}`);
+        const a = msg.params?.arguments || {};
+        const ws = await ctx.repo.workspacesForUser(ctx.userId);
+        const w = ws.find((x) => x.name.toLowerCase() === String(a.brand || '').toLowerCase()) || (ws.length === 1 ? ws[0] : undefined);
+        const product = a.product ? String(a.product) : null;
+        const text = fillPrompt(p.prompt, {
+          brand: w?.name || (a.brand ? String(a.brand) : ''),
+          product,
+          pid: product && /^[\w-]+$/.test(product) ? product : null,
+          image: a.image ? String(a.image) : null,
+          figma: w?.figma_file_url || null,
+        });
+        return reply({ description: p.title, messages: [{ role: 'user', content: { type: 'text', text: `${text}\n\n(Use the Emailsy CMS connector for the brand kit and assets.)` } }] });
+      }
       default:
         return fail(-32601, `Method not found: ${msg.method}`);
     }

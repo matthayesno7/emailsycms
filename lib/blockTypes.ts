@@ -128,6 +128,7 @@ export const KIND_LABEL: Record<string, string> = {
   all: 'All assets',
   image: 'Images',
   logo: 'Logos',
+  video: 'Videos',
   product: 'Products',
   block: 'Blocks',
 };

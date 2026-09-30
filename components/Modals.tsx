@@ -139,10 +139,11 @@ export function Members({ supabase, ws, userId, toast }: { supabase: SupabaseCli
   );
 }
 
-export function Connector({ supabase, toast }: { supabase: SupabaseClient; toast: (m: string) => void }) {
+export function Connector({ supabase, toast, full }: { supabase: SupabaseClient; toast: (m: string) => void; full?: boolean }) {
   const [keys, setKeys] = useState<any[]>([]);
   const [fresh, setFresh] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [app, setApp] = useState<'claude' | 'code'>('claude');
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('api_keys').select('id, name, prefix, created_at, last_used_at').order('created_at', { ascending: false });
@@ -152,7 +153,7 @@ export function Connector({ supabase, toast }: { supabase: SupabaseClient; toast
 
   async function create() {
     setBusy(true);
-    const res = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Claude' }) });
+    const res = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: app === 'code' ? 'Claude Code' : 'Claude' }) });
     const json = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { toast(json.error || 'Couldn’t create a link.'); return; }
@@ -166,38 +167,69 @@ export function Connector({ supabase, toast }: { supabase: SupabaseClient; toast
     toast('Link turned off');
   }
 
+  const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast(t); } };
   const when = (d?: string) => (d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never');
+  const link = fresh || '<your Emailsy link>';
+  const cmdEmailsy = `claude mcp add --transport http emailsy "${link}"`;
+  const cmdFigma = 'claude mcp add --transport http figma https://mcp.figma.com/mcp';
+  const Cmd = ({ text }: { text: string }) => (
+    <div className="cmd"><code>{text}</code><button className="btn quiet" type="button" onClick={() => copy(text)}>Copy</button></div>
+  );
 
   return (
-    <>
-      <h2>Claude connector</h2>
-      <p className="tip" style={{ marginBottom: 12 }}>
-        Connect Claude to your library so it can find assets, push images into Figma and turn blocks into components. In Claude, open
-        Settings → Connectors → Add custom connector, name it Emailsy CMS and paste your link.
-      </p>
-      {fresh && (
+    <div className={full ? 'connect' : ''}>
+      {full ? <div className="head"><h1>Connect Claude</h1></div> : <h2>Claude connector</h2>}
+      <p className="tip cn-lede">Emailsy gives Claude your brand kit and assets, and a place to save what it makes. Figma is where Claude designs, animates and runs image and video models. Connect both once, then everything happens in a chat.</p>
+
+      <div className="seg" role="group" aria-label="App">
+        <button type="button" aria-pressed={app === 'claude'} onClick={() => setApp('claude')}>Claude (web and desktop)</button>
+        <button type="button" aria-pressed={app === 'code'} onClick={() => setApp('code')}>Claude Code</button>
+      </div>
+
+      <ol className="cn-steps">
+        <li>
+          <b>Create your Emailsy link</b>
+          {fresh ? (
+            <>
+              <div className="label">Your link (shown once, keep it private)</div>
+              <div className="keybox">{fresh}</div>
+              <div className="actions"><button className="primary" type="button" onClick={() => copy(fresh)}>Copy link</button><button className="btn quiet" type="button" onClick={() => setFresh(null)}>Hide</button></div>
+            </>
+          ) : (
+            <div className="actions"><button className="primary" type="button" disabled={busy} onClick={create}>{busy ? 'Creating…' : keys.length ? 'Create a new link' : 'Create my link'}</button></div>
+          )}
+        </li>
+        {app === 'claude' ? (
+          <>
+            <li><b>Add it to Claude</b><span>In Claude, open <a href="https://claude.ai/settings/connectors" target="_blank" rel="noreferrer">Settings → Connectors</a> → <em>Add custom connector</em>. Name it <em>Emailsy</em> and paste your link.</span></li>
+            <li><b>Add Figma</b><span>In the same place, add the <em>Figma</em> connector from the directory and sign in. Claude designs, animates and generates images and video there.</span></li>
+            <li><b>Start a new chat</b><span>Connectors load when a chat starts. Then pick anything from the prompt library on the Create page.</span></li>
+          </>
+        ) : (
+          <>
+            <li><b>Add Emailsy</b><span>Run this in your terminal{fresh ? '' : ' (create a link first, it fills in here)'}:</span><Cmd text={cmdEmailsy} /></li>
+            <li><b>Add Figma</b><span>Then sign in when Claude Code asks (<code>/mcp</code>):</span><Cmd text={cmdFigma} /></li>
+            <li><b>Ask for something</b><span>Start <code>claude</code> and paste a prompt from the Create page. The prompts also show up in Claude Code’s <code>/</code> menu under Emailsy.</span></li>
+          </>
+        )}
+      </ol>
+
+      {keys.length > 0 && (
         <>
-          <div className="label">Your new link (shown once, keep it private)</div>
-          <div className="keybox">{fresh}</div>
-          <div className="actions" style={{ marginBottom: 12 }}>
-            <button className="primary" type="button" onClick={async () => { try { await navigator.clipboard.writeText(fresh); toast('Copied'); } catch { toast(fresh); } }}>Copy link</button>
-            <button className="btn quiet" type="button" onClick={() => setFresh(null)}>Done</button>
+          <div className="label">Your links</div>
+          <div className="rows">
+            {keys.map((k) => (
+              <div className="row" key={k.id}>
+                <span className="grow"><code>{k.prefix}…</code> {k.name}</span>
+                <span className="muted">Last used {when(k.last_used_at)}</span>
+                <button className="btn quiet" type="button" onClick={() => revoke(k.id)}>Turn off</button>
+              </div>
+            ))}
           </div>
+          <p className="tip">A link lets whoever has it read your workspaces and save into them, so treat it like a password.</p>
         </>
       )}
-      {keys.length > 0 && (
-        <div className="rows">
-          {keys.map((k) => (
-            <div className="row" key={k.id}>
-              <span className="grow"><code>{k.prefix}…</code></span>
-              <span className="muted">Last used {when(k.last_used_at)}</span>
-              <button className="btn quiet" type="button" onClick={() => revoke(k.id)}>Turn off</button>
-            </div>
-          ))}
-        </div>
-      )}
-      {!fresh && <button className="primary" type="button" disabled={busy} onClick={create}>{busy ? 'Creating…' : keys.length ? 'Create another link' : 'Create my connector link'}</button>}
-    </>
+    </div>
   );
 }
 

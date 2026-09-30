@@ -11,12 +11,13 @@ import BlockEditor, { FitPreview, Preview, previewWidth } from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
 import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
 import BrandKitView from './BrandKit';
+import Create from './Create';
 import type { BrandKitRow } from '@/lib/brandKit';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
 export type Ws = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 const WS_COLORS = ['#2f5bff', '#26313e', '#32a5db', '#e8a317', '#7b61ff', '#2f9e6e'];
-const KINDS = ['image', 'logo', 'product', 'block'];
+const KINDS = ['image', 'logo', 'video', 'product', 'block'];
 // Where assets come from. Products always come from the feed and blocks are made by the team,
 // so the filter shows on the views where it means something.
 const ORIGINS: [string, string][] = [['any', 'All'], ['uploaded', 'Uploaded'], ['product_feed', 'From feed'], ['generated', 'Generated'], ['draft', 'To review']];
@@ -29,7 +30,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [items, setItems] = useState<Asset[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(false);
-  const [view, setView] = useState('all');
+  const [view, setView] = useState('create');
+  const [connected, setConnected] = useState(true);
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [block, setBlock] = useState<any>(null);
@@ -129,6 +131,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   }, [supabase]);
 
   useEffect(() => { loadWorkspaces(); }, [loadWorkspaces]);
+  // Has Claude ever used one of this user's connector links?
+  useEffect(() => {
+    supabase.from('api_keys').select('last_used_at').not('last_used_at', 'is', null).limit(1).then(({ data }) => setConnected(!!data?.length));
+  }, [supabase, view]);
   useEffect(() => {
     if (!ws) return;
     try { localStorage.setItem('emailsy.ws', ws); } catch {}
@@ -192,7 +198,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     }
     return m;
   }, [items]);
-  const showOrigins = view === 'all' || view === 'image' || view === 'logo';
+  const showOrigins = view === 'all' || view === 'image' || view === 'logo' || view === 'video';
   const inView = useCallback((it: Asset) => (view === 'all' ? it.kind !== 'block' : it.kind === view), [view]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
   const visible = useMemo(() => {
@@ -232,20 +238,22 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const path = `${ws}/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from('assets').upload(path, file, { contentType: type, upsert: false });
     if (error) { toast(/size|large/i.test(error.message) ? `${file.name} is over 25 MB.` : `Couldn’t upload ${file.name}.`); return null; }
+    const video = /^video\//.test(type);
     const local = URL.createObjectURL(file);
     let img: HTMLImageElement | null = null;
-    try { img = await loadImg(local); } catch {} finally { URL.revokeObjectURL(local); }
+    if (!video) { try { img = await loadImg(local); } catch {} }
+    URL.revokeObjectURL(local);
     const w = img?.naturalWidth || null, h = img?.naturalHeight || null;
     const email = img ? await emailRendition(supabase, ws, img, { mime: type, bytes: file.size }) : null;
     const images = email ? { email } : {};
     const base = baseName(file.name || 'Pasted image');
-    const prod = opts.attachToProduct === false ? null : items.find((i) => i.kind === 'product' && i.pid === base);
+    const prod = opts.attachToProduct === false || video ? null : items.find((i) => i.kind === 'product' && i.pid === base);
     if (prod) {
       await patchAsset(prod.id, { storage_path: path, mime: type, width: w, height: h, bytes: file.size, images: { ...(prod.images || {}), ...images } });
       toast(`Attached to ${prod.name}`);
       return { asset: { ...prod, storage_path: path }, img };
     }
-    const kind = opts.kind || (/logo|wordmark|brandmark/i.test(base) || type === 'image/svg+xml' ? 'logo' : 'image');
+    const kind = opts.kind || (video ? 'video' : /logo|wordmark|brandmark/i.test(base) || type === 'image/svg+xml' ? 'logo' : 'image');
     const { data, error: e2 } = await supabase.from('assets').insert({
       workspace_id: ws, kind, name: base.replace(/[-_]+/g, ' ').slice(0, 120) || 'Image', storage_path: path, mime: type,
       width: w, height: h, bytes: file.size, images, created_by: userId,
@@ -326,6 +334,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const list = [...files];
     if (!list.length || !ws) return;
     for (const f of list.filter((f) => /\.csv$/i.test(f.name) || f.type === 'text/csv')) await importFeed(f);
+    const vids = list.filter((f) => /^video\/(mp4|webm|quicktime)/.test(f.type));
+    for (const f of vids) await addImageAsset(f, { kind: 'video' });
+    if (vids.length) loadAssets(ws);
     const imgs = list.filter((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name));
     // In Blocks, images become blocks: ask for the block type, then create them.
     if (view === 'block' && imgs.length) { await blocksFromImages(imgs); return; }
@@ -474,6 +485,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     <div className="app">
       <aside className={'side' + (sideOpen ? ' open' : '')} aria-label="Navigation">
         <div className="org"><span className="logo"><Icon.Mark /></span>Emailsy <span className="plan">CMS</span></div>
+        <button className="nav" type="button" aria-current={view === 'create'} onClick={() => nav('create')}><Icon.Sparkle />Create</button>
         <button className="nav" type="button" aria-current={view === 'all'} onClick={() => nav('all')}><Icon.Home />All assets<span className="count">{counts.all || ''}</span></button>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); searchRef.current?.focus(); }}><Icon.Search />Search</button>
         <button className="nav" type="button" aria-current={view === 'brand'} onClick={() => nav('brand')}><Icon.Palette />Brand kit
@@ -482,7 +494,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <div className="group">Assets</div>
         {KINDS.filter((k) => k !== 'block').map((k) => (
           <button key={k} className="nav" type="button" aria-current={view === k} onClick={() => nav(k)}>
-            {k === 'image' ? <Icon.Image /> : k === 'logo' ? <Icon.Shield /> : k === 'product' ? <Icon.Tag /> : <Icon.Blocks />}
+            {k === 'image' ? <Icon.Image /> : k === 'logo' ? <Icon.Shield /> : k === 'video' ? <Icon.Video /> : k === 'product' ? <Icon.Tag /> : <Icon.Blocks />}
             {KIND_LABEL[k]}<span className="count">{counts[k] || ''}</span>
           </button>
         ))}
@@ -490,7 +502,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <button className="nav" type="button" aria-current={view === 'block'} onClick={() => nav('block')}><Icon.Blocks />{KIND_LABEL.block}<span className="count">{counts.block || ''}</span></button>
         <div className="group">Workspaces</div>
         {workspaces.map((w, i) => (
-          <button key={w.id} className="nav ws" type="button" aria-current={w.id === ws} onClick={() => { setWs(w.id); nav('all'); }}>
+          <button key={w.id} className="nav ws" type="button" aria-current={w.id === ws} onClick={() => { setWs(w.id); nav('create'); }}>
             <span className="dot" style={{ background: WS_COLORS[i % WS_COLORS.length] }}>{(w.name[0] || '?').toUpperCase()}</span>{w.name}
           </button>
         ))}
@@ -505,7 +517,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <div className="group">Team &amp; Claude</div>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('settings'); }}><Icon.Settings />Workspace settings{!curWs?.figma_file_key && <span className="count dotnote" title="No Figma file connected">•</span>}</button>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('members'); }}><Icon.Users />Members</button>
-        <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('connector'); }}><Icon.Plug />Claude connector</button>
+        <button className="nav" type="button" aria-current={view === 'connect'} onClick={() => nav('connect')}><Icon.Plug />Connect Claude{!connected && <span className="count dotnote" title="Not connected yet">•</span>}</button>
         <div className="group">Help</div>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('help-figma'); }}><Icon.Send />Using assets in Figma</button>
         <button className="nav" type="button" onClick={() => { setSideOpen(false); setModal('help-feed'); }}><Icon.Table />Product feed format</button>
@@ -515,7 +527,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       <main>
         <div className="bar">
           <button className="menu" type="button" aria-label="Open navigation" onClick={() => setSideOpen(true)}><Icon.Menu /></button>
-          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{view === 'brand' ? 'Brand kit' : KIND_LABEL[view]}</b></div>
+          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{view === 'brand' ? 'Brand kit' : view === 'create' ? 'Create' : view === 'connect' ? 'Connect Claude' : KIND_LABEL[view]}</b></div>
           <div className="spacer" />
           <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search name or PID" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /></label>
           <button className="ghost" type="button" onClick={() => fileCsv.current?.click()}><Icon.Download /><span className="lbl">Import feed</span></button>
@@ -523,7 +535,13 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </div>
 
         <div className="content">
-          {view === 'brand' && curWs ? (
+          {view === 'create' && curWs ? (
+            ready ? <Create ws={curWs} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
+              onConnect={() => nav('connect')} onBrandKit={() => nav('brand')} onReview={() => { setOrigin('draft'); nav('all'); }}
+              onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
+          ) : view === 'connect' ? (
+            <Connector supabase={supabase} toast={toast} full />
+          ) : view === 'brand' && curWs ? (
             ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); }} /> : <p className="loading">Loading your brand kit…</p>
           ) : !ready ? (
             <p className="loading">Loading your library…</p>
@@ -574,9 +592,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </div>
       </main>
 
-      <input ref={fileImg} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
+      <input ref={fileImg} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,video/mp4,video/webm,video/quicktime,.csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       <input ref={fileCsv} type="file" accept=".csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
-      {dropping && <div className="drop"><div><strong>{view === 'block' ? 'Drop to make blocks' : 'Drop to add'}</strong><span>{view === 'block' ? 'Each image goes into your assets and becomes a block: Hero if wide, Card otherwise.' : 'Images, logos, or a product feed CSV'}</span></div></div>}
+      {dropping && <div className="drop"><div><strong>{view === 'block' ? 'Drop to make blocks' : 'Drop to add'}</strong><span>{view === 'block' ? 'Each image goes into your assets and becomes a block: Hero if wide, Card otherwise.' : 'Images, logos, videos, or a product feed CSV'}</span></div></div>}
       {(modal || sideOpen) && <div className="scrim" onClick={() => { setModal(null); setSideOpen(false); }} />}
 
       {openAsset && (
@@ -633,7 +651,6 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       {modal === 'help-figma' && <Modal onClose={() => setModal(null)}><HelpFigma /></Modal>}
       {modal === 'help-feed' && <Modal onClose={() => setModal(null)}><HelpFeed /></Modal>}
       {modal === 'members' && curWs && <Modal onClose={() => setModal(null)}><Members supabase={supabase} ws={curWs} userId={userId} toast={toast} /></Modal>}
-      {modal === 'connector' && <Modal onClose={() => setModal(null)}><Connector supabase={supabase} toast={toast} /></Modal>}
       {modal === 'settings' && curWs && (
         <Modal onClose={() => setModal(null)}>
           <WorkspaceSettings supabase={supabase} ws={curWs} toast={toast} onSaved={() => loadWorkspaces(curWs.id)} />
@@ -678,6 +695,19 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
           {!it.storage_path && <span className="tag noimgtag">No image</span>}
         </div>
         <div className="meta"><span className="t">{it.name}</span><span className="s">{usedLabel || it.pid || ''}</span></div>
+      </div>
+    );
+  }
+  if (it.kind === 'video') {
+    const vsrc = it.storage_path ? urls[it.storage_path] : undefined;
+    return (
+      <div className="tile" role="button" tabIndex={0} title="Open video" onClick={onOpen} onKeyDown={onKey}>
+        <div className="thumb video">
+          {vsrc && <video src={vsrc} muted loop playsInline preload="metadata" onMouseEnter={(e) => e.currentTarget.play().catch(() => {})} onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }} />}
+          <span className="tag vid">Video</span>
+          {it.origin === 'generated' && <span className={'tag ' + (it.status === 'draft' ? 'draft' : 'ai')} style={{ left: 'auto', right: 8 }}>{it.status === 'draft' ? 'Draft · AI' : 'AI'}</span>}
+        </div>
+        <div className="meta"><span className="t">{it.name}</span><span className="s">{it.bytes ? `${(it.bytes / 1048576).toFixed(1)} MB` : ''}</span></div>
       </div>
     );
   }
