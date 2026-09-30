@@ -6,7 +6,7 @@ import { baseName, drawFit, extOf, loadImg, parseCSV, toBlob } from '@/lib/image
 import { emailRendition } from '@/lib/renditions';
 import { suggestAlt } from '@/lib/alt';
 import { cleanText, productAsBlock, shortDescription } from '@/lib/products';
-import AssetPanel from './AssetPanel';
+import AssetEditor from './AssetEditor';
 import BlockEditor, { FitPreview, Preview, previewWidth } from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
 import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
@@ -73,6 +73,34 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setItems((data as Asset[]) || []);
     setReady(true);
   }, [supabase, toast]);
+
+  // The editor has its own address (?asset=<id>), so Back closes it and links open it.
+  const openEditor = useCallback((id: string | null, replace = false) => {
+    setOpenId(id);
+    try {
+      const u = new URL(location.href);
+      if (id) u.searchParams.set('asset', id); else u.searchParams.delete('asset');
+      if (u.toString() !== location.href) history[replace || !id ? 'replaceState' : 'pushState']({ asset: id }, '', u);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    const pop = () => setOpenId(new URL(location.href).searchParams.get('asset'));
+    window.addEventListener('popstate', pop);
+    return () => window.removeEventListener('popstate', pop);
+  }, []);
+  // Opened from a link: switch to that asset's workspace first.
+  const linked = useRef(false);
+  useEffect(() => {
+    if (linked.current || !workspaces.length) return;
+    linked.current = true;
+    const id = new URL(location.href).searchParams.get('asset');
+    if (!id) return;
+    supabase.from('assets').select('id, workspace_id').eq('id', id).maybeSingle().then(({ data }) => {
+      if (!data) { openEditor(null, true); toast('That asset isn’t in your workspaces any more.'); return; }
+      setWs(data.workspace_id);
+      setOpenId(data.id);
+    });
+  }, [workspaces, supabase, openEditor, toast]);
 
   const loadKit = useCallback(async (wsId: string) => {
     if (!wsId) return;
@@ -161,7 +189,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (error) { toast('Couldn’t delete. Try again.'); return; }
     if (paths.length) await supabase.storage.from('assets').remove(paths);
     setItems((list) => list.filter((i) => i.id !== a.id));
-    setOpenId(null); setBlock(null);
+    openEditor(null); setBlock(null);
     toast('Deleted');
   }
 
@@ -330,7 +358,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   function openProduct(p: Asset) {
     const pb = productAsBlock(p) as any;
     if (pb.images.image) pb.images.image.alt = p.fields?.alt || '';
-    setOpenId(null);
+    openEditor(null);
     setBlock({ ...pb, id: p.id, kind: 'product', workspace_id: p.workspace_id, name: p.name, product_id: p.id });
   }
 
@@ -355,7 +383,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         Object.assign(draft.fields, type === 'product' ? pf : { headline: pf.name, body: pf.body, cta: pf.cta, link: pf.link });
       }
     }
-    setModal(null); setConvertFrom(null); setOpenId(null);
+    setModal(null); setConvertFrom(null); openEditor(null);
     setBlock(draft);
   }
 
@@ -386,7 +414,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     };
     const end = () => { internalDrag.current = false; };
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setOpenId(null); setBlock(null); setModal(null); setSideOpen(false); }
+      if (e.key === 'Escape') {
+        // Esc closes the top-most thing: a modal or block first, then the editor.
+        if (modal || block || sideOpen) { setBlock(null); setModal(null); setSideOpen(false); } else if (openId) openEditor(null);
+      }
       if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName)) { e.preventDefault(); searchRef.current?.focus(); }
     };
     window.addEventListener('dragenter', enter); window.addEventListener('dragover', over); window.addEventListener('dragleave', leave);
@@ -401,6 +432,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   const nav = (v: string) => { setView(v); setSideOpen(false); };
   const openAsset = openId ? itemById(openId) : null;
+  // Prev/next walk the assets currently shown (images, logos and products with an image).
+  const walk = useMemo(() => visible.filter((i) => i.kind !== 'block'), [visible]);
+  const at = openAsset ? walk.findIndex((i) => i.id === openAsset.id) : -1;
 
   // ---------- render ----------
   return (
@@ -499,7 +533,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 )
               ) : (
                 <div className="grid">
-                  {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? setBlock({ ...it, images: JSON.parse(JSON.stringify(it.images || {})), fields: { ...(it.fields || {}) } }) : it.kind === 'product' ? openProduct(it) : setOpenId(it.id))} />)}
+                  {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? setBlock({ ...it, images: JSON.parse(JSON.stringify(it.images || {})), fields: { ...(it.fields || {}) } }) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />)}
                 </div>
               )}
             </>
@@ -510,19 +544,22 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       <input ref={fileImg} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       <input ref={fileCsv} type="file" accept=".csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       {dropping && <div className="drop"><div><strong>{view === 'block' ? 'Drop to make blocks' : 'Drop to add'}</strong><span>{view === 'block' ? 'Each image goes into your assets and becomes a block: Hero if wide, Card otherwise.' : 'Images, logos, or a product feed CSV'}</span></div></div>}
-      {(openAsset || block || modal || sideOpen) && <div className="scrim" onClick={() => { setOpenId(null); setBlock(null); setModal(null); setSideOpen(false); }} />}
+      {(block || modal || sideOpen) && <div className="scrim" onClick={() => { setBlock(null); setModal(null); setSideOpen(false); }} />}
 
       {openAsset && (
-        <AssetPanel
+        <AssetEditor
           key={openAsset.id}
           it={openAsset}
           src={srcOf(openAsset)}
-          onClose={() => setOpenId(null)}
+          onClose={() => openEditor(null)}
           onPatch={(p) => patchAsset(openAsset.id, p)}
           onDelete={() => deleteAsset(openAsset)}
           usedIn={usedIn[openAsset.id] || []}
-          onOpenBlock={(b) => { setOpenId(null); setBlock({ ...b, images: JSON.parse(JSON.stringify(b.images || {})), fields: { ...(b.fields || {}) } }); }}
+          onOpenBlock={(b) => { openEditor(null); setBlock({ ...b, images: JSON.parse(JSON.stringify(b.images || {})), fields: { ...(b.fields || {}) } }); }}
           onMakeBlock={() => useInBlock(openAsset)}
+          onPrev={at > 0 ? () => openEditor(walk[at - 1].id, true) : undefined}
+          onNext={at >= 0 && at < walk.length - 1 ? () => openEditor(walk[at + 1].id, true) : undefined}
+          position={at >= 0 ? `${at + 1} of ${walk.length}` : undefined}
           toast={toast}
         />
       )}
@@ -531,7 +568,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <BlockEditor
           key={(block.kind || 'block') + (block.id || 'new')}
           product={block.kind === 'product' ? itemById(block.id) || null : null}
-          onImageTools={() => { const id = block.id; setBlock(null); setOpenId(id); }}
+          onImageTools={() => { const id = block.id; setBlock(null); openEditor(id); }}
           onUseInBlock={() => { const p = itemById(block.id); setBlock(null); if (p) startBlock(autoBlockType(p.width, p.height), p.id); }}
           draft={block}
           ws={ws}
