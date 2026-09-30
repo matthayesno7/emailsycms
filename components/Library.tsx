@@ -74,33 +74,53 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setReady(true);
   }, [supabase, toast]);
 
-  // The editor has its own address (?asset=<id>), so Back closes it and links open it.
-  const openEditor = useCallback((id: string | null, replace = false) => {
-    setOpenId(id);
+  // Editors have their own address (?asset=, ?block=, ?product=), so Back closes them and links open them.
+  const setUrl = useCallback((key: 'asset' | 'block' | 'product' | null, id: string | null, replace = false) => {
     try {
       const u = new URL(location.href);
-      if (id) u.searchParams.set('asset', id); else u.searchParams.delete('asset');
-      if (u.toString() !== location.href) history[replace || !id ? 'replaceState' : 'pushState']({ asset: id }, '', u);
+      for (const k of ['asset', 'block', 'product']) u.searchParams.delete(k);
+      if (key && id) u.searchParams.set(key, id);
+      if (u.toString() !== location.href) history[replace || !id ? 'replaceState' : 'pushState']({}, '', u);
     } catch {}
   }, []);
+  const openEditor = useCallback((id: string | null, replace = false) => {
+    setOpenId(id);
+    if (id) setBlock(null);
+    setUrl(id ? 'asset' : null, id, replace);
+  }, [setUrl]);
+  // Blocks and product cards open in the block editor (a draft object, saved or not).
+  const showBlock = useCallback((d: any, replace = false) => {
+    setOpenId(null);
+    setBlock(d);
+    if (d?.id) setUrl(d.kind === 'product' ? 'product' : 'block', d.id, replace); else setUrl(null, null, true);
+  }, [setUrl]);
+  const closeBlock = useCallback(() => { setBlock(null); setUrl(null, null); }, [setUrl]);
+  // What the address asks for; opened once the asset is loaded (and after switching workspace).
+  const pending = useRef<{ key: string; id: string } | null>(null);
+  const [tick, setTick] = useState(0);
+  const readUrl = useCallback(() => {
+    const q = new URL(location.href).searchParams;
+    for (const key of ['asset', 'block', 'product']) { const id = q.get(key); if (id) return { key, id }; }
+    return null;
+  }, []);
   useEffect(() => {
-    const pop = () => setOpenId(new URL(location.href).searchParams.get('asset'));
+    const pop = () => { const r = readUrl(); setOpenId(null); setBlock(null); pending.current = r; setTick((t) => t + 1); };
     window.addEventListener('popstate', pop);
     return () => window.removeEventListener('popstate', pop);
-  }, []);
-  // Opened from a link: switch to that asset's workspace first.
+  }, [readUrl]);
   const linked = useRef(false);
   useEffect(() => {
     if (linked.current || !workspaces.length) return;
     linked.current = true;
-    const id = new URL(location.href).searchParams.get('asset');
-    if (!id) return;
-    supabase.from('assets').select('id, workspace_id').eq('id', id).maybeSingle().then(({ data }) => {
-      if (!data) { openEditor(null, true); toast('That asset isn’t in your workspaces any more.'); return; }
+    const r = readUrl();
+    if (!r) return;
+    supabase.from('assets').select('id, workspace_id').eq('id', r.id).maybeSingle().then(({ data }) => {
+      if (!data) { setUrl(null, null, true); toast('That isn’t in your workspaces any more.'); return; }
+      pending.current = r;
       setWs(data.workspace_id);
-      setOpenId(data.id);
+      setTick((t) => t + 1);
     });
-  }, [workspaces, supabase, openEditor, toast]);
+  }, [workspaces, supabase, readUrl, setUrl, toast]);
 
   const loadKit = useCallback(async (wsId: string) => {
     if (!wsId) return;
@@ -123,6 +143,17 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [ws, supabase, loadAssets, loadKit]);
+
+  useEffect(() => {
+    const r = pending.current;
+    if (!r || !ready) return;
+    const it = items.find((i) => i.id === r.id);
+    if (!it) return;
+    pending.current = null;
+    if (r.key === 'asset') { setOpenId(it.id); setBlock(null); }
+    else if (it.kind === 'product') showBlock(productDraft(it), true);
+    else showBlock(blockDraft(it), true);
+  }, [items, ready, tick, showBlock]);
 
   // Private bucket: sign every image path we need to show (valid for an hour).
   useEffect(() => {
@@ -189,7 +220,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (error) { toast('Couldn’t delete. Try again.'); return; }
     if (paths.length) await supabase.storage.from('assets').remove(paths);
     setItems((list) => list.filter((i) => i.id !== a.id));
-    openEditor(null); setBlock(null);
+    setOpenId(null); setBlock(null); setUrl(null, null, true);
     toast('Deleted');
   }
 
@@ -349,17 +380,14 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setView('block');
     if (made.length === 1) {
       const b = made[0];
-      setBlock({ ...b, fields: { ...(b.fields || {}) }, images: JSON.parse(JSON.stringify(b.images || {})) });
+      showBlock(blockDraft(b));
       toast(`${BLOCK_TYPES[b.block_type].name} block created. Add your copy.`);
     } else toast(`${made.length} blocks created`);
   }
 
   // A product opens as its email card: edit the copy right there.
   function openProduct(p: Asset) {
-    const pb = productAsBlock(p) as any;
-    if (pb.images.image) pb.images.image.alt = p.fields?.alt || '';
-    openEditor(null);
-    setBlock({ ...pb, id: p.id, kind: 'product', workspace_id: p.workspace_id, name: p.name, product_id: p.id });
+    showBlock(productDraft(p));
   }
 
   // One click from an asset: logos make a Footer, images and products a Hero or Card.
@@ -383,8 +411,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         Object.assign(draft.fields, type === 'product' ? pf : { headline: pf.name, body: pf.body, cta: pf.cta, link: pf.link });
       }
     }
-    setModal(null); setConvertFrom(null); openEditor(null);
-    setBlock(draft);
+    setModal(null); setConvertFrom(null);
+    showBlock(draft);
   }
 
   // ---------- global events ----------
@@ -416,7 +444,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         // Esc closes the top-most thing: a modal or block first, then the editor.
-        if (modal || block || sideOpen) { setBlock(null); setModal(null); setSideOpen(false); } else if (openId) openEditor(null);
+        // The block editor handles its own Esc (it checks for unsaved changes).
+        if (modal || sideOpen) { setModal(null); setSideOpen(false); } else if (!block && openId) openEditor(null);
       }
       if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName)) { e.preventDefault(); searchRef.current?.focus(); }
     };
@@ -435,6 +464,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   // Prev/next walk the assets currently shown (images, logos and products with an image).
   const walk = useMemo(() => visible.filter((i) => i.kind !== 'block'), [visible]);
   const at = openAsset ? walk.findIndex((i) => i.id === openAsset.id) : -1;
+  // In the block editor, prev/next walk the blocks (or products) currently shown.
+  const bWalk = useMemo(() => (block ? visible.filter((i) => i.kind === (block.kind === 'product' ? 'product' : 'block')) : []), [visible, block]);
+  const bAt = block?.id ? bWalk.findIndex((i) => i.id === block.id) : -1;
+  const openWalk = (it: Asset) => showBlock(it.kind === 'product' ? productDraft(it) : blockDraft(it), true);
 
   // ---------- render ----------
   return (
@@ -533,7 +566,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 )
               ) : (
                 <div className="grid">
-                  {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? setBlock({ ...it, images: JSON.parse(JSON.stringify(it.images || {})), fields: { ...(it.fields || {}) } }) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />)}
+                  {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? showBlock(blockDraft(it)) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />)}
                 </div>
               )}
             </>
@@ -544,7 +577,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       <input ref={fileImg} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       <input ref={fileCsv} type="file" accept=".csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       {dropping && <div className="drop"><div><strong>{view === 'block' ? 'Drop to make blocks' : 'Drop to add'}</strong><span>{view === 'block' ? 'Each image goes into your assets and becomes a block: Hero if wide, Card otherwise.' : 'Images, logos, or a product feed CSV'}</span></div></div>}
-      {(block || modal || sideOpen) && <div className="scrim" onClick={() => { setBlock(null); setModal(null); setSideOpen(false); }} />}
+      {(modal || sideOpen) && <div className="scrim" onClick={() => { setModal(null); setSideOpen(false); }} />}
 
       {openAsset && (
         <AssetEditor
@@ -555,7 +588,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onPatch={(p) => patchAsset(openAsset.id, p)}
           onDelete={() => deleteAsset(openAsset)}
           usedIn={usedIn[openAsset.id] || []}
-          onOpenBlock={(b) => { openEditor(null); setBlock({ ...b, images: JSON.parse(JSON.stringify(b.images || {})), fields: { ...(b.fields || {}) } }); }}
+          onOpenBlock={(b) => showBlock(blockDraft(b))}
           onMakeBlock={() => useInBlock(openAsset)}
           onPrev={at > 0 ? () => openEditor(walk[at - 1].id, true) : undefined}
           onNext={at >= 0 && at < walk.length - 1 ? () => openEditor(walk[at + 1].id, true) : undefined}
@@ -568,8 +601,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <BlockEditor
           key={(block.kind || 'block') + (block.id || 'new')}
           product={block.kind === 'product' ? itemById(block.id) || null : null}
-          onImageTools={() => { const id = block.id; setBlock(null); openEditor(id); }}
-          onUseInBlock={() => { const p = itemById(block.id); setBlock(null); if (p) startBlock(autoBlockType(p.width, p.height), p.id); }}
+          onImageTools={() => openEditor(block.id)}
+          onUseInBlock={() => { const p = itemById(block.id); if (p) startBlock(autoBlockType(p.width, p.height), p.id); }}
+          onPrev={bAt > 0 ? () => openWalk(bWalk[bAt - 1]) : undefined}
+          onNext={bAt >= 0 && bAt < bWalk.length - 1 ? () => openWalk(bWalk[bAt + 1]) : undefined}
+          position={bAt >= 0 ? `${bAt + 1} of ${bWalk.length}` : undefined}
           draft={block}
           ws={ws}
           userId={userId}
@@ -579,10 +615,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           figmaFile={curWs?.figma_file_key ? { url: curWs.figma_file_url || '', name: curWs.figma_file_name || '' } : null}
           supabase={supabase}
           toast={toast}
-          onClose={() => setBlock(null)}
+          onClose={closeBlock}
           onSaved={(row, convertedFrom) => {
             setItems((list) => list.some((i) => i.id === row.id) ? list.map((i) => (i.id === row.id ? row : i)) : [row, ...list.filter((i) => i.id !== convertedFrom)]);
-            if (row.kind === 'block') setView('block');
+            if (row.kind === 'block') { setView('block'); setUrl('block', row.id, true); }
           }}
           onDelete={(b) => deleteAsset(b.kind === 'product' ? itemById(b.id) || b : b)}
         />
@@ -606,6 +642,16 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </div>
   );
+}
+
+// Editable copies, so the editor can change them freely until Save.
+function blockDraft(b: Asset) {
+  return { ...b, fields: { ...(b.fields || {}) }, images: JSON.parse(JSON.stringify(b.images || {})) };
+}
+function productDraft(p: Asset) {
+  const pb = productAsBlock(p) as any;
+  if (pb.images.image) pb.images.image.alt = p.fields?.alt || '';
+  return { ...pb, id: p.id, kind: 'product', workspace_id: p.workspace_id, name: p.name, product_id: p.id };
 }
 
 function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | null; urls: Record<string, string>; used?: number; onOpen: () => void }) {

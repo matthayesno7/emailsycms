@@ -6,8 +6,13 @@ import { cropCanvas, drawFit, loadImg, toBlob } from '@/lib/images';
 import { Icon } from './icons';
 import type { Asset } from './Library';
 
-export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, figmaFile, supabase, toast, onClose, onSaved, onDelete, product, onImageTools, onUseInBlock }: {
+// Full-page block editor: the email preview is the canvas, the copy and images sit on the right.
+// Also edits a feed product as its email card. Click any part of the preview to jump to its field.
+export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, figmaFile, supabase, toast, onClose, onSaved, onDelete, product, onImageTools, onUseInBlock, onPrev, onNext, position }: {
   draft: any;
+  onPrev?: () => void;
+  onNext?: () => void;
+  position?: string;
   product?: Asset | null; // editing a feed product as its email card (saves to the product itself)
   onImageTools?: () => void;
   onUseInBlock?: () => void;
@@ -28,6 +33,13 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const [saving, setSaving] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [inEmail, setInEmail] = useState(true);
+  // Unsaved changes: leaving asks first (Save, Discard or stay).
+  const [base, setBase] = useState(() => JSON.stringify(draft));
+  const [leaving, setLeaving] = useState<null | (() => void)>(null);
+  const dirty = JSON.stringify(b) !== base || !b.id;
+  const sideRef = useRef<HTMLDivElement>(null);
+  const guard = (go?: () => void) => () => { if (!go) return; if (dirty && (b.id || hasContent(b))) setLeaving(() => go); else go(); };
   const bt = BLOCK_TYPES[b.block_type] || BLOCK_TYPES.hero;
   const saved = !!b.id;
   const byId = (id?: string) => library.find((i) => i.id === id);
@@ -70,10 +82,10 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   }
 
   // Product card: copy saves onto the product; edited copy is kept when the feed syncs.
-  async function saveProduct() {
-    if (!product) return;
+  async function saveProduct(): Promise<boolean> {
+    if (!product) return false;
     const over = bt.fields.find((d) => d.max && (b.fields[d.k] || '').length > d.max);
-    if (over) { toast(`${over.label} is longer than ${over.max} characters.`); return; }
+    if (over) { toast(`${over.label} is longer than ${over.max} characters.`); return false; }
     setSaving(true);
     try {
       const f = b.fields || {};
@@ -88,19 +100,22 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
         fields: { ...prev, ...copy, edited: [...edited] },
       }).eq('id', product.id).select('*').single();
       if (res.error) throw res.error;
+      setBase(JSON.stringify(b));
       onSaved(res.data as Asset, null);
       toast('Product card saved');
+      return true;
     } catch (err: any) {
       toast(`Couldn’t save${err?.message ? `: ${err.message}` : '.'}`);
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
-  async function save() {
+  async function save(): Promise<boolean> {
     if (product) return saveProduct();
     const over = bt.fields.find((d) => d.max && (b.fields[d.k] || '').length > d.max);
-    if (over) { toast(`${over.label} is longer than ${over.max} characters.`); return; }
+    if (over) { toast(`${over.label} is longer than ${over.max} characters.`); return false; }
     setSaving(true);
     try {
       const images = { ...b.images };
@@ -137,10 +152,13 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
       if (res.error) throw res.error;
       const next = { ...res.data, fields: { ...(res.data.fields || {}) }, images: JSON.parse(JSON.stringify(res.data.images || {})) };
       setB(next);
+      setBase(JSON.stringify(next));
       onSaved(res.data as Asset, null);
       toast('Block saved. Images are email-ready.');
+      return true;
     } catch (err: any) {
       toast(`Couldn’t save the block${err?.message ? `: ${err.message}` : '.'}`);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -157,141 +175,208 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
     ? `Using Emailsy CMS, rebuild my design block "${b.name}" (id ${b.id}) as an editable component in my design system${where}. Look at the design first, keep the photo as an image, and turn all the text into live text laid out exactly as in the design.`
     : `Using Emailsy CMS, turn my block "${b.name}" (id ${b.id}) into a ${bt.name.toLowerCase()} component and add it to my design system${where}.`;
 
+  // Esc goes back (asking first if there are unsaved changes); ⌘S saves; arrows move between blocks.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (!saving) save(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); if (leaving) setLeaving(null); else if (pickFor) setPickFor(null); else guard(onClose)(); return; }
+      if (typing) return;
+      if (e.key === 'ArrowLeft' && onPrev) { e.preventDefault(); guard(onPrev)(); }
+      if (e.key === 'ArrowRight' && onNext) { e.preventDefault(); guard(onNext)(); }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  });
+
+  // Clicking part of the preview jumps to its field (images open the picker).
+  function jumpTo(e: React.MouseEvent) {
+    const el = (e.target as HTMLElement).closest('[data-k]') as HTMLElement | null;
+    const k = el?.dataset.k;
+    if (!k) return;
+    const d = bt.fields.find((f) => f.k === k);
+    if (d?.type === 'image' && !product) setPickFor(k);
+    const target = sideRef.current?.querySelector<HTMLElement>(`#bf-${k}`) || sideRef.current?.querySelector<HTMLElement>(`[data-field="${k}"]`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (target && /INPUT|TEXTAREA|SELECT/.test(target.tagName)) setTimeout(() => target.focus({ preventScroll: true }), 250);
+  }
+
+  const width = device === 'mobile' ? 375 : previewWidth(b);
+  const titleText = product ? b.fields?.name || product.name : b.name;
+
   return (
-    <aside className="sheet wide" role="dialog" aria-modal="true" aria-label={b.name}>
-      <header>
-        <div style={{ flex: 1, minWidth: 0 }}>
+    <div className="editor" role="dialog" aria-modal="true" aria-label={`Editing ${titleText}`}>
+      <header className="ed-bar">
+        <button className="ghost" type="button" onClick={guard(onClose)} title="Back to the library (Esc)"><Icon.Back />{product ? 'Products' : 'Blocks'}</button>
+        <div className="ed-title">
           {product ? (
-            <div className="title-in" style={{ border: 0 }}>{b.fields?.name || product.name}</div>
+            <div className="title-in">{titleText}</div>
           ) : (
             <input className="title-in" value={b.name} maxLength={120} aria-label="Block name" onChange={(e) => setB({ ...b, name: e.target.value })} />
           )}
           <div className="sub">
-            {product ? <span className="tip">Product {product.pid} · from your feed · price, link and image follow the feed</span> : <select className="bsel" aria-label="Block type" value={b.block_type} onChange={(e) => setType(e.target.value)}>
+            {product ? <>Product {product.pid} · price, link and image follow the feed</> : <select className="bsel" aria-label="Block type" value={b.block_type} onChange={(e) => setType(e.target.value)}>
               {Object.entries(BLOCK_TYPES).filter(([k, t]) => !t.legacy || k === b.block_type).map(([k, t]) => <option key={k} value={k}>{t.name} block</option>)}
             </select>}
           </div>
         </div>
-        <button className="x" type="button" aria-label="Close" onClick={onClose}><Icon.Close /></button>
-      </header>
-
-      <div className="pvbar">
-        <span className="tip">Email preview · {device === 'desktop' ? `${previewWidth(b)}px` : '375px phone'}</span>
-        <div className="seg small" role="group" aria-label="Preview size">
-          <button type="button" aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')}>Desktop</button>
-          <button type="button" aria-pressed={device === 'mobile'} onClick={() => setDevice('mobile')}>Mobile</button>
-        </div>
-      </div>
-      <div className={'pvwrap ' + device}>
-        <FitPreview width={device === 'mobile' ? 375 : previewWidth(b)} fitHeight={false}>
-          <Preview b={b} bt={bt.fields} slotSrc={slotSrc} mobile={device === 'mobile'} />
-        </FitPreview>
-      </div>
-
-      {b.block_type === 'product' && !product && (
-        <div className="bf">
-          <div className="bl"><label htmlFor="bprod">Fill from product</label></div>
-          <select className="in" id="bprod" value={b.product_id || ''} onChange={(e) => fillFromProduct(e.target.value)}>
-            <option value="">{products.length ? 'Choose a product…' : 'Import a product feed first'}</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.pid} · {p.name}</option>)}
-          </select>
-        </div>
-      )}
-
-      {bt.fields.filter((d) => b.block_type !== 'design' || isReadDesign(b) || ['image', 'notes'].includes(d.k)).map((d) => {
-        const v = b.fields[d.k] || '';
-        if (d.type === 'image' && product) {
-          const slot = b.images[d.k];
-          return (
-            <div className="bf" key={d.k}>
-              <div className="bl"><label>Image</label><span className="cnt">from the feed</span></div>
-              <div className="slot">
-                <div className={'sthumb ' + d.fit}>{slotSrc(slot) && <img src={slotSrc(slot)} alt="" />}</div>
-                <div className="sinfo">
-                  <span>{product.storage_path ? `${product.width || '?'}×${product.height || '?'}` : `No image yet. Drop ${product.pid}.jpg on the page.`}</span>
-                  {onImageTools && product.storage_path && <button className="btn" type="button" onClick={onImageTools}>Image tools</button>}
-                </div>
-              </div>
-              <input className="in" placeholder="Alt text" maxLength={150} value={slot?.alt || ''} onChange={(e) => setImage(d.k, { ...slot, alt: e.target.value })} />
-            </div>
-          );
-        }
-        if (d.type === 'image') {
-          const slot = b.images[d.k];
-          const s = slotSrc(slot);
-          const src = byId(slot?.source_asset_id);
-          return (
-            <div className="bf" key={d.k}>
-              <div className="bl"><label>{d.label}</label><span className="cnt">{d.natural ? (slot?.width && !slot.dirty ? `${slot.width}×${slot.height}` : `up to ${(d.w || 600) * 2}px wide, same shape`) : `${(d.w || 0) * 2}×${(d.h || 0) * 2}`} {d.png ? 'PNG' : 'JPG'}</span></div>
-              <div className="slot">
-                <div className={'sthumb ' + d.fit}>{s && <img src={s} alt="" />}</div>
-                <div className="sinfo">
-                  <span>{src ? src.name : s ? 'Saved image' : 'No image chosen'}</span>
-                  <button className="btn" type="button" onClick={() => setPickFor(pickFor === d.k ? null : d.k)}>{s ? 'Change' : 'Choose image'}</button>
-                </div>
-              </div>
-              {pickFor === d.k && (
-                <div className="picker">
-                  {pickable.length ? pickable.map((i) => (
-                    <button key={i.id} type="button" className={'pk ' + i.kind} title={i.name}
-                      onClick={() => { setImage(d.k, { ...(slot || {}), source_asset_id: i.id, alt: i.fields?.alt || i.name, dirty: true, original_path: i.storage_path, crop: undefined }); setPickFor(null); }}>
-                      <img src={urls[i.storage_path]} alt={i.name} />
-                    </button>
-                  )) : <p className="tip">Upload images first, then pick one here.</p>}
-                </div>
-              )}
-              {s && <input className="in" placeholder="Alt text" maxLength={120} value={slot?.alt || ''} onChange={(e) => setImage(d.k, { ...slot, alt: e.target.value })} />}
-            </div>
-          );
-        }
-        if (d.type === 'choice') {
-          return (
-            <div className="bf" key={d.k}>
-              <div className="bl"><label htmlFor={'bf-' + d.k}>{d.label}</label></div>
-              <select className="in" id={'bf-' + d.k} value={v || (d.k === 'layout' ? 'top' : '')} onChange={(e) => setField(d.k, e.target.value)}>
-                {(d.options || []).map(([ov, ol]) => <option key={ov} value={ov}>{ol}</option>)}
-              </select>
-            </div>
-          );
-        }
-        return (
-          <div className="bf" key={d.k}>
-            <div className="bl"><label>{d.label}</label>{d.max ? <span className={'cnt' + (v.length > d.max ? ' over' : '')}>{v.length}/{d.max}</span> : null}</div>
-            {d.type === 'long'
-              ? <textarea className="in" rows={3} value={v} onChange={(e) => setField(d.k, e.target.value)} />
-              : <input className={'in' + (d.type === 'url' ? ' mono' : '')} type={d.type === 'url' ? 'url' : 'text'} placeholder={d.type === 'url' ? 'https://' : ''} value={v} onChange={(e) => setField(d.k, e.target.value)} />}
+        <span className="spacer" />
+        {leaving ? (
+          <div className="ed-leave" role="alert">
+            <span>Unsaved changes</span>
+            <button className="primary" type="button" disabled={saving} onClick={async () => { const go = leaving; if (await save()) { setLeaving(null); go(); } }}>{saving ? 'Saving…' : 'Save'}</button>
+            <button className="btn" type="button" onClick={() => { const go = leaving; setLeaving(null); go(); }}>Discard</button>
+            <button className="btn quiet" type="button" onClick={() => setLeaving(null)}>Stay</button>
           </div>
-        );
-      })}
-
-      {saved && (
-        <div className="figma">
-          <div className="label">Make it a Figma component</div>
-          <p className="tip">{b.block_type === 'design'
-            ? 'Ask Claude with the Emailsy CMS and Figma connectors on. It looks at this design, keeps the photo as an image and rebuilds the text as live, editable text in your design system.'
-            : 'Ask Claude with the Emailsy CMS and Figma connectors on. It builds a component from this block in the design system you choose, using your styles.'}</p>
-          <div className="promptbox">{prompt}</div>
-          <button className="btn" type="button" onClick={async () => { try { await navigator.clipboard.writeText(prompt); toast('Copied. Paste it to Claude.'); } catch { toast(prompt); } }}>Copy request for Claude</button>
-          {b.figma?.node_id && <p className="tip">In Figma: file {b.figma.file_key}, node {b.figma.node_id}.</p>}
-        </div>
-      )}
-
-      <div className="fill" />
-      <div className="actions">
-        {confirmDel ? (
-          <><span className="tip">{product ? 'Delete this product?' : 'Delete this block?'}</span><button className="btn" type="button" onClick={() => onDelete(b)}>Delete</button><button className="btn quiet" type="button" onClick={() => setConfirmDel(false)}>Keep</button></>
         ) : (
           <>
-            <button className="primary" type="button" disabled={saving} onClick={save}>{saving ? (product ? 'Saving…' : 'Making images email-ready…') : saved ? 'Save changes' : 'Save block'}</button>
-            <button className="btn quiet" type="button" onClick={onClose}>Close</button>
-            <span className="spacer" />
-            {product && onUseInBlock && <button className="btn quiet" type="button" title="Make a Hero or Card that uses this product" onClick={onUseInBlock}>Use in a Hero or Card</button>}
-            {saved && <button className="btn quiet" type="button" onClick={() => setConfirmDel(true)}>Delete</button>}
+            {(onPrev || onNext) && (
+              <div className="ed-nav">
+                <button className="x" type="button" aria-label="Previous" disabled={!onPrev} onClick={guard(onPrev)}><Icon.Chevron /></button>
+                {position && <span>{position}</span>}
+                <button className="x" type="button" aria-label="Next" disabled={!onNext} onClick={guard(onNext)}><Icon.Chevron /></button>
+              </div>
+            )}
+            {saved && dirty && <span className="ed-dirty">Unsaved</span>}
+            <button className="primary" type="button" disabled={saving || (saved && !dirty)} onClick={save}>
+              {saving ? (product ? 'Saving…' : 'Making images email-ready…') : saved ? (dirty ? 'Save changes' : 'Saved') : 'Save block'}
+            </button>
           </>
         )}
+      </header>
+
+      <div className="ed-body">
+        <section className="ed-canvas" aria-label="Email preview">
+          <div className="ed-tools">
+            <div className="seg" role="group" aria-label="Preview size">
+              <button type="button" aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')}>Desktop</button>
+              <button type="button" aria-pressed={device === 'mobile'} onClick={() => setDevice('mobile')}>Mobile</button>
+            </div>
+            <span className="tip">{device === 'desktop' ? `${previewWidth(b)}px${previewWidth(b) < 600 ? ' column in a 600px email' : ''}` : '375px phone'}</span>
+            <span className="spacer" />
+            <label className="toggle small"><input type="checkbox" checked={inEmail} onChange={(e) => setInEmail(e.target.checked)} /> Show in an email</label>
+          </div>
+          <div className="ed-stage light ed-pv" onClick={jumpTo}>
+            <div className={'ed-mail' + (inEmail ? ' framed' : '') + ' ' + device} style={{ width: device === 'mobile' ? 375 : inEmail ? 600 : width }}>
+              {inEmail && <div className="ed-mail-top"><span /><span /><span /></div>}
+              <div className="ed-mail-body" style={{ justifyContent: inEmail && device === 'desktop' && width < 600 ? 'flex-start' : 'center' }}>
+                <div style={{ width }}><Preview b={b} bt={bt.fields} slotSrc={slotSrc} mobile={device === 'mobile'} /></div>
+              </div>
+            </div>
+            <span className="hint">Click any part to edit it</span>
+          </div>
+        </section>
+
+        <aside className="ed-side" aria-label="Content" ref={sideRef}>
+          {b.block_type === 'product' && !product && (
+            <div className="bf">
+              <div className="bl"><label htmlFor="bprod">Fill from product</label></div>
+              <select className="in" id="bprod" value={b.product_id || ''} onChange={(e) => fillFromProduct(e.target.value)}>
+                <option value="">{products.length ? 'Choose a product…' : 'Import a product feed first'}</option>
+                {products.map((p) => <option key={p.id} value={p.id}>{p.pid} · {p.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {bt.fields.filter((d) => b.block_type !== 'design' || isReadDesign(b) || ['image', 'notes'].includes(d.k)).map((d) => {
+            const v = b.fields[d.k] || '';
+            if (d.type === 'image' && product) {
+              const slot = b.images[d.k];
+              return (
+                <div className="bf" key={d.k} data-field={d.k}>
+                  <div className="bl"><label>Image</label><span className="cnt">from the feed</span></div>
+                  <div className="slot">
+                    <div className={'sthumb ' + d.fit}>{slotSrc(slot) && <img src={slotSrc(slot)} alt="" />}</div>
+                    <div className="sinfo">
+                      <span>{product.storage_path ? `${product.width || '?'}×${product.height || '?'}` : `No image yet. Drop ${product.pid}.jpg on the page.`}</span>
+                      {onImageTools && product.storage_path && <button className="btn" type="button" onClick={guard(onImageTools)}>Edit image</button>}
+                    </div>
+                  </div>
+                  <input className="in" placeholder="Alt text" maxLength={150} value={slot?.alt || ''} onChange={(e) => setImage(d.k, { ...slot, alt: e.target.value })} />
+                </div>
+              );
+            }
+            if (d.type === 'image') {
+              const slot = b.images[d.k];
+              const s = slotSrc(slot);
+              const src = byId(slot?.source_asset_id);
+              return (
+                <div className="bf" key={d.k} data-field={d.k}>
+                  <div className="bl"><label>{d.label}</label><span className="cnt">{d.natural ? (slot?.width && !slot.dirty ? `${slot.width}×${slot.height}` : `up to ${(d.w || 600) * 2}px wide, same shape`) : `${(d.w || 0) * 2}×${(d.h || 0) * 2}`} {d.png ? 'PNG' : 'JPG'}</span></div>
+                  <div className="slot">
+                    <div className={'sthumb ' + d.fit}>{s && <img src={s} alt="" />}</div>
+                    <div className="sinfo">
+                      <span>{src ? src.name : s ? 'Saved image' : 'No image chosen'}</span>
+                      <button className="btn" type="button" onClick={() => setPickFor(pickFor === d.k ? null : d.k)}>{s ? 'Change' : 'Choose image'}</button>
+                    </div>
+                  </div>
+                  {pickFor === d.k && (
+                    <div className="picker">
+                      {pickable.length ? pickable.map((i) => (
+                        <button key={i.id} type="button" className={'pk ' + i.kind} title={i.name}
+                          onClick={() => { setImage(d.k, { ...(slot || {}), source_asset_id: i.id, alt: i.fields?.alt || i.name, dirty: true, original_path: i.storage_path, crop: undefined }); setPickFor(null); }}>
+                          <img src={urls[i.storage_path]} alt={i.name} />
+                        </button>
+                      )) : <p className="tip">Upload images first, then pick one here.</p>}
+                    </div>
+                  )}
+                  {s && <input className="in" placeholder="Alt text" maxLength={120} value={slot?.alt || ''} onChange={(e) => setImage(d.k, { ...slot, alt: e.target.value })} />}
+                </div>
+              );
+            }
+            if (d.type === 'choice') {
+              return (
+                <div className="bf" key={d.k}>
+                  <div className="bl"><label htmlFor={'bf-' + d.k}>{d.label}</label></div>
+                  <select className="in" id={'bf-' + d.k} value={v || (d.k === 'layout' ? 'top' : '')} onChange={(e) => setField(d.k, e.target.value)}>
+                    {(d.options || []).map(([ov, ol]) => <option key={ov} value={ov}>{ol}</option>)}
+                  </select>
+                </div>
+              );
+            }
+            return (
+              <div className="bf" key={d.k}>
+                <div className="bl"><label htmlFor={'bf-' + d.k}>{d.label}</label>{d.max ? <span className={'cnt' + (v.length > d.max ? ' over' : '')}>{v.length}/{d.max}</span> : null}</div>
+                {d.type === 'long'
+                  ? <textarea className="in" id={'bf-' + d.k} rows={3} value={v} onChange={(e) => setField(d.k, e.target.value)} />
+                  : <input className={'in' + (d.type === 'url' ? ' mono' : '')} id={'bf-' + d.k} type={d.type === 'url' ? 'url' : 'text'} placeholder={d.type === 'url' ? 'https://' : ''} value={v} onChange={(e) => setField(d.k, e.target.value)} />}
+              </div>
+            );
+          })}
+
+          {saved && (
+            <div className="figma">
+              <div className="label">Make it a Figma component</div>
+              <p className="tip">{b.block_type === 'design'
+                ? 'Ask Claude with the Emailsy CMS and Figma connectors on. It looks at this design, keeps the photo as an image and rebuilds the text as live, editable text in your design system.'
+                : 'Ask Claude with the Emailsy CMS and Figma connectors on. It builds a component from this block in the design system you choose, using your styles.'}</p>
+              <div className="promptbox">{prompt}</div>
+              <button className="btn" type="button" onClick={async () => { try { await navigator.clipboard.writeText(prompt); toast('Copied. Paste it to Claude.'); } catch { toast(prompt); } }}>Copy request for Claude</button>
+              {b.figma?.node_id && <p className="tip">In Figma: file {b.figma.file_key}, node {b.figma.node_id}.</p>}
+            </div>
+          )}
+
+          <div className="fill" />
+          <div className="actions">
+            {confirmDel ? (
+              <><span className="tip">{product ? 'Delete this product?' : 'Delete this block?'}</span><button className="btn" type="button" onClick={() => onDelete(b)}>Delete</button><button className="btn quiet" type="button" onClick={() => setConfirmDel(false)}>Keep</button></>
+            ) : (
+              <>
+                {product && onUseInBlock && <button className="btn quiet" type="button" title="Make a Hero or Card that uses this product" onClick={guard(onUseInBlock)}>Use in a Hero or Card</button>}
+                <span className="spacer" />
+                {saved && <button className="btn quiet" type="button" onClick={() => setConfirmDel(true)}>{product ? 'Delete product' : 'Delete block'}</button>}
+              </>
+            )}
+          </div>
+        </aside>
       </div>
-    </aside>
+    </div>
   );
+}
+
+// A new, unsaved block with nothing in it can be left without asking.
+function hasContent(b: any) {
+  return Object.values(b.fields || {}).some((v) => !!v && v !== 'top') || Object.keys(b.images || {}).length > 0;
 }
 
 // Width a block is designed at in a 600px email: cards and products usually sit two to a row.
@@ -311,21 +396,21 @@ export function Preview({ b, bt, slotSrc, drag, mobile }: { b: any; bt: BlockFie
   const narrow = !mobile && previewWidth(b) <= 300;
   const imgs = bt.filter((d) => d.type === 'image').map((d) => {
     const s = slotSrc(b.images?.[d.k]);
-    if (d.natural) return <div key={d.k} className="pv-img natural">{s && <img src={s} alt="" />}</div>;
+    if (d.natural) return <div key={d.k} data-k={d.k} className="pv-img natural">{s && <img src={s} alt="" />}</div>;
     const ar = side && d.side ? `${d.side.w}/${d.side.h}` : d.side && (layout === 'left' || layout === 'right') ? '3/2' : `${d.w}/${d.h}`;
     const dragProps = drag ? { draggable: true, 'data-drag': drag.name, 'data-png': drag.png ? '1' : '0' } : { draggable: false };
-    return <div key={d.k} className={'pv-img ' + d.fit} style={{ aspectRatio: ar }}>{s && <img src={s} alt="" {...dragProps} />}</div>;
+    return <div key={d.k} data-k={d.k} className={'pv-img ' + d.fit} style={{ aspectRatio: ar }}>{s && <img src={s} alt="" {...dragProps} />}</div>;
   });
   const texts = b.block_type === 'design' ? [] : bt.filter((d) => d.type !== 'image' && d.type !== 'url' && d.k !== 'layout').map((d) => {
     const v = f[d.k];
     if (!v) return null;
-    if (d.k === 'rating') return <div key={d.k} className="pv-stars" aria-label={`${v} stars`}>{'★'.repeat(Number(v) || 0)}</div>;
+    if (d.k === 'rating') return <div key={d.k} data-k={d.k} className="pv-stars" aria-label={`${v} stars`}>{'★'.repeat(Number(v) || 0)}</div>;
     const cls = /cta/.test(d.k) ? 'pv-btn'
       : d.k === 'eyebrow' ? 'pv-e'
       : d.k === 'name' && b.block_type === 'card' ? 'pv-name'
       : /headline|name/.test(d.k) ? 'pv-h'
       : /subhead|price/.test(d.k) ? 'pv-s' : 'pv-p';
-    return <div key={d.k} className={cls}>{v}</div>;
+    return <div key={d.k} data-k={d.k} className={cls}>{v}</div>;
   });
   if (side) return <div className={'pv pv-card side ' + layout}>{imgs}<div className="pv-txt">{texts}</div></div>;
   return <div className={'pv pv-' + b.block_type + (narrow ? ' narrow' : '') + (mobile ? ' mobile' : '')}>{imgs}<div className="pv-txt">{texts}</div></div>;
@@ -353,17 +438,17 @@ function DesignPreview({ b, bt, slotSrc, mobile }: { b: any; bt: BlockField[]; s
   const texts = bt.filter((d) => d.type !== 'image' && d.type !== 'url' && !['layout', 'notes'].includes(d.k)).map((d) => {
     const v = f[d.k];
     if (!v) return null;
-    if (d.k === 'rating') return <div key={d.k} className="pv-stars" style={{ color: hex(st.accent, 'inherit') }}>{'★'.repeat(Number(v) || 0)}</div>;
-    if (d.k === 'eyebrow') return <div key={d.k} className="pv-e" style={{ color: hex(st.accent, '#666') }}>{v}</div>;
-    if (d.k === 'headline') return <div key={d.k} className="pv-h" style={{ color: hex(st.headline, 'inherit'), fontSize: hSize, fontWeight: st.headline_weight === 'regular' ? 400 : 700, textTransform: st.headline_uppercase ? 'uppercase' : 'none', letterSpacing: track }}>{v}</div>;
-    if (d.k === 'name') return <div key={d.k} className="pv-name" style={{ color: hex(st.headline, 'inherit') }}>{v}</div>;
-    if (d.k === 'cta') return <div key={d.k}><span className="pv-btn" style={btn}>{v}</span></div>;
-    return <div key={d.k} className="pv-p" style={{ color: hex(st.text, '#555') }}>{v}</div>;
+    if (d.k === 'rating') return <div key={d.k} data-k={d.k} className="pv-stars" style={{ color: hex(st.accent, 'inherit') }}>{'★'.repeat(Number(v) || 0)}</div>;
+    if (d.k === 'eyebrow') return <div key={d.k} data-k={d.k} className="pv-e" style={{ color: hex(st.accent, '#666') }}>{v}</div>;
+    if (d.k === 'headline') return <div key={d.k} data-k={d.k} className="pv-h" style={{ color: hex(st.headline, 'inherit'), fontSize: hSize, fontWeight: st.headline_weight === 'regular' ? 400 : 700, textTransform: st.headline_uppercase ? 'uppercase' : 'none', letterSpacing: track }}>{v}</div>;
+    if (d.k === 'name') return <div key={d.k} data-k={d.k} className="pv-name" style={{ color: hex(st.headline, 'inherit') }}>{v}</div>;
+    if (d.k === 'cta') return <div key={d.k} data-k={d.k}><span className="pv-btn" style={btn}>{v}</span></div>;
+    return <div key={d.k} data-k={d.k} className="pv-p" style={{ color: hex(st.text, '#555') }}>{v}</div>;
   });
   return (
     <div className={'pv pv-design-live' + (side ? ' side ' + layout : '') + (mobile ? ' mobile' : '')}
       style={{ background: hex(st.background, '#ffffff'), fontFamily: font, textAlign: st.align === 'center' ? 'center' : 'left', gridTemplateColumns: side ? (layout === 'right' ? `1fr ${share * 100}%` : `${share * 100}% 1fr`) : undefined }}>
-      <div className="pv-img natural">{photo && <img src={photo} alt="" />}</div>
+      <div className="pv-img natural" data-k="image">{photo && <img src={photo} alt="" />}</div>
       <div className="pv-txt">{texts}</div>
     </div>
   );

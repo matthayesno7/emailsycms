@@ -404,3 +404,26 @@ kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border
   .ed-side{border-left:0}
   .ed-bar .btn .lbl{display:none}.ed-bar .btn .sm{display:inline}
 }
+
+/* ---------- block editor (full page) ---------- */
+.ed-pv{overflow:auto;place-items:start center;padding:32px 24px 56px;background:var(--surface-2)}
+.ed-mail{max-width:100%;flex:none}
+.ed-mail.framed{background:#fff;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);overflow:hidden}
+.ed-mail.framed.mobile{border-radius:26px;border:8px solid #1d1d1f}
+.ed-mail-top{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid #ececee;background:#fafafa}
+.ed-mail-top span{width:9px;height:9px;border-radius:50%;background:#dcdce0}
+.ed-mail.mobile .ed-mail-top{justify-content:center}
+.ed-mail.mobile .ed-mail-top span{width:60px;height:6px;border-radius:999px}
+.ed-mail.mobile .ed-mail-top span+span{display:none}
+.ed-mail-body{display:flex;background:#fff}
+.ed-mail.framed .ed-mail-body{padding:0}
+.ed-pv [data-k]{cursor:pointer;border-radius:2px;transition:box-shadow .12s}
+.ed-pv [data-k]:hover{box-shadow:0 0 0 2px var(--accent)}
+.ed-side .bf{scroll-margin:20px}
+.ed-dirty{font-size:12.5px;color:#8a5a00;background:#fff4d6;padding:3px 9px;border-radius:999px}
+.ed-leave{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500}
+.toggle.small{font-size:13.5px;color:var(--ink-2)}
+.toggle.small input{width:30px;height:18px}
+.toggle.small input::after{width:12px;height:12px}
+.toggle.small input:checked::after{transform:translateX(12px)}
+.ed-side .actions .spacer{flex:1}
