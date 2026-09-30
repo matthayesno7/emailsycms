@@ -40,6 +40,8 @@ Building from a website instead happens in Emailsy itself (Brand kit → From yo
 
 Where assets come from: each asset has an origin: uploaded (added by the team), product_feed (from the product feed, keyed by PID) or generated (made by AI), and a status: approved or draft. Generated assets start as drafts and carry provenance (prompt, model, source product). Images you create for a workspace go into the library with add_generated_asset; a person approves them in Emailsy, so never describe a draft as approved. Prefer approved assets when building emails; use drafts only when the user asks for them.
 
+Saving something you designed in Figma back into Emailsy (a banner, a social image, a finished email section): call Figma's download_assets on the finished frame, take its export URL (a temporary https link) and pass it straight to add_generated_asset as image_url, with figma_file_key and figma_node_id, the Emailsy asset ids you used in source_asset_ids, and a short description of the brief as prompt. Do it as the last step whenever you make a finished image for a workspace, without being asked, and tell the user it's waiting for approval in Emailsy. Never tell the user to export and upload by hand.
+
 What each kind of asset becomes in Figma:
 - image and logo: stay images. Place them with push_image_to_figma; never add text to them.
 - block: an image plus copy. Build it as a component with the copy as live, editable text (get_block_for_figma).
@@ -84,7 +86,7 @@ function toolError(message: string) {
 const TOOLS = [
   {
     name: 'list_workspaces',
-    description: 'List the brand workspaces this user can see, with how many images, logos, products and blocks each holds.',
+    description: 'List the brand workspaces this user can see, with their brand kit status, connected Figma file, and how many images, logos, products, blocks and drafts each holds.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -194,7 +196,7 @@ const TOOLS = [
   },
   {
     name: 'add_generated_asset',
-    description: 'Save an image you generated (e.g. a hero made from a product with an image model) into a workspace\'s library as a draft, with where it came from. Pass a public https URL of the finished image. A person approves it in Emailsy.',
+    description: 'Save a finished image you made into a workspace\'s library as a draft, with where it came from: a design you built in Figma (pass the export URL from Figma\'s download_assets), or an image from an image model. Pass an https URL of the image; the Emailsy server downloads it, so the file never passes through you. A person approves it in Emailsy.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -204,10 +206,12 @@ const TOOLS = [
         kind: { type: 'string', enum: ['image', 'logo'], default: 'image' },
         alt: { type: 'string', description: 'Alt text for email.' },
         prompt: { type: 'string', description: 'The prompt or brief used to make it.' },
-        model: { type: 'string', description: 'The model or tool that made it.' },
+        model: { type: 'string', description: 'The model or tool that made it, e.g. "Figma" for a design you built there.' },
         source_product_pid: { type: 'string', description: 'PID of the product it was made from, if any.' },
         source_asset_ids: { type: 'array', items: { type: 'string' }, description: 'Emailsy assets used as inputs (product photo, reference images).' },
         style: { type: 'string', description: 'Short style label, e.g. "studio, warm light".' },
+        figma_file_key: { type: 'string', description: 'If it was designed in Figma: the file key.' },
+        figma_node_id: { type: 'string', description: 'If it was designed in Figma: the frame\'s node id.' },
       },
       required: ['workspace_id', 'image_url', 'name'],
       additionalProperties: false,
@@ -551,6 +555,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
           brand_kit_version: kitRow?.version ?? null,
           generated_at: new Date().toISOString(),
         },
+        figma: args.figma_file_key && args.figma_node_id ? { file_key: String(args.figma_file_key).slice(0, 80), node_id: String(args.figma_node_id).slice(0, 40), component_key: null, note: 'Designed in Figma', placed_at: new Date().toISOString() } : null,
       });
       return text({ ok: true, asset: publicAsset(row, w.ws), next: 'Saved as a draft in Emailsy. A person approves it there before it counts as approved.' });
     }

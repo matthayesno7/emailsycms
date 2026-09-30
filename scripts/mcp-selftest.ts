@@ -87,6 +87,8 @@ const call = async (m: any) => handleBody(m, ctx);
   const gen = JSON.parse((await t('add_generated_asset', { workspace_id: W1, image_url: 'https://images.example.com/hero.png', name: 'Merino hero', prompt: 'Merino crew on oak table, warm light', model: 'nano-banana-2', source_product_pid: '10482', alt: 'Grey merino jumper' })).content[0].text);
   console.log('gen', gen.asset.origin, gen.asset.status, gen.asset.width + 'x' + gen.asset.height, gen.asset.provenance.source_product_pid, gen.asset.provenance.source_asset_ids.join(','), gen.asset.provenance.brand_kit_version, gen.asset.alt);
   console.log('gen http', (await t('add_generated_asset', { workspace_id: W1, image_url: 'http://images.example.com/x.png', name: 'x' })).isError, (await t('add_generated_asset', { workspace_id: W1, image_url: 'https://127.0.0.1/x.png', name: 'x' })).isError, (await t('add_generated_asset', { workspace_id: W1, image_url: 'https://x.com/not-image', name: 'x' })).isError);
+  const fig = JSON.parse((await t('add_generated_asset', { workspace_id: W1, image_url: 'https://images.example.com/export.png', name: 'LinkedIn banner', model: 'Figma', figma_file_key: 'FILEKEY', figma_node_id: '12:34', source_asset_ids: ['a1'] })).content[0].text);
+  console.log('figma save', fig.asset.origin, fig.asset.status, fig.asset.figma.node_id, fig.asset.provenance.source_asset_ids.join(','));
   console.log('drafts', JSON.parse((await t('list_assets', { status: 'draft' })).content[0].text).map((a: any) => a.name).join(','));
   console.log('ws kit', JSON.parse((await t('list_workspaces', {})).content[0].text)[0].brand_kit);
   console.log('bad origin', (await t('list_assets', { origin: 'x' })).isError);
