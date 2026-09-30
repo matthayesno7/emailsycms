@@ -43,8 +43,6 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const src = (a?: Asset) => (a ? (a.images?.email?.path && urls[a.images.email.path]) || (a.storage_path ? urls[a.storage_path] : undefined) : undefined);
   const products = useMemo(() => items.filter((i) => i.kind === 'product'), [items]);
   const photos = useMemo(() => items.filter((i) => i.kind === 'image' && i.origin !== 'generated'), [items]);
-  const made = useMemo(() => items.filter((i) => i.origin === 'generated').slice(0, 10), [items]);
-  const drafts = items.filter((i) => i.status === 'draft').length;
   // Pictures for the previews: the brand's own photos first, then product shots.
   const pool = useMemo(() => [...photos, ...products].map((a) => src(a)).filter(Boolean).slice(0, 12) as string[], [photos, products, urls]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -201,22 +199,6 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
           </div>
         )}
       </section>
-
-      {made.length > 0 && (
-        <section>
-          <div className="cr-h"><h2>Made with Claude</h2>{drafts > 0 && <button className="linkish" type="button" onClick={onReview}>{drafts} to review</button>}</div>
-          <div className="cr-made">
-            {made.map((a) => (
-              <button key={a.id} type="button" className="cr-shot" onClick={() => onOpen(a)} title={a.name}
-                style={{ aspectRatio: a.width && a.height ? `${Math.max(0.56, Math.min(2.2, a.width / a.height))}` : '4 / 3' }}>
-                {a.kind === 'video' ? <video src={src(a)} muted loop playsInline preload="metadata" onMouseEnter={(e) => e.currentTarget.play().catch(() => {})} onMouseLeave={(e) => e.currentTarget.pause()} /> : src(a) ? <img src={src(a)} alt="" /> : null}
-                {a.status === 'draft' && <span className="tag draft">To review</span>}
-                <span className="cr-cap">{a.name}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section>
         <div className="cr-h">

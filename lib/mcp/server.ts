@@ -6,6 +6,7 @@ import { mergeKit, missing, normaliseKit, warnings } from '../brandKit';
 import { fetchLimited, IMAGE_EXT } from '../net';
 import { imageSize } from '../imageSize';
 import { PROMPTS, fillPrompt, USE_LABEL } from '../prompts';
+import { IMAGE_TABS, tabOf } from '../formats';
 
 export type Workspace = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 export type AssetRow = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -111,6 +112,7 @@ const TOOLS = [
         kind: { type: 'string', enum: ['image', 'logo', 'video', 'product', 'block'] },
         origin: { type: 'string', enum: ['uploaded', 'product_feed', 'generated'], description: 'Where the asset came from.' },
         status: { type: 'string', enum: ['approved', 'draft'], description: 'Generated assets start as drafts until a person approves them.' },
+        format: { type: 'string', enum: ['photo', ...IMAGE_TABS.map((t) => t.id)], description: 'Images by what they are for, worked out from their size: photo, email-banner, linkedin-banner, linkedin-post, social-post, story, thumb, display.' },
         query: { type: 'string', description: 'Matches asset names and product IDs.' },
         limit: { type: 'number', minimum: 1, maximum: 200, default: 50 },
       },
@@ -249,6 +251,7 @@ function publicAsset(a: AssetRow, ws?: Workspace) {
   };
   if (a.origin === 'generated' && a.provenance) out.provenance = a.provenance;
   if (a.width) Object.assign(out, { width: a.width, height: a.height });
+  if (a.kind === 'image') out.format = tabOf(a);
   if (a.fields?.alt) out.alt = a.fields.alt;
   if (a.kind === 'product') Object.assign(out, { pid: a.pid, price: a.price, link: a.link, description: a.fields?.description || '', has_image: !!a.storage_path });
   if (a.kind === 'block') Object.assign(out, { block_type: a.block_type, block_type_name: BLOCK_TYPES[a.block_type]?.name });
@@ -334,7 +337,8 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const limit = Math.min(Math.max(Number(args.limit) || (name === 'search_products' ? 20 : 50), 1), 200);
       if (args.origin && !['uploaded', 'product_feed', 'generated'].includes(args.origin)) return toolError('origin must be uploaded, product_feed or generated.');
       if (args.status && !['approved', 'draft'].includes(args.status)) return toolError('status must be approved or draft.');
-      const rows = await ctx.repo.listAssets(ids, { kind, origin: args.origin, status: args.status, query: args.query ? String(args.query) : undefined, limit });
+      let rows = await ctx.repo.listAssets(ids, { kind: args.format ? 'image' : kind, origin: args.origin, status: args.status, query: args.query ? String(args.query) : undefined, limit: args.format ? 1000 : limit });
+      if (args.format) rows = rows.filter((a) => tabOf(a) === args.format).slice(0, limit);
       const byId = Object.fromEntries(ws.map((w) => [w.id, w]));
       return text(rows.map((a) => publicAsset(a, byId[a.workspace_id])));
     }

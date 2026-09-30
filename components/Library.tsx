@@ -12,6 +12,7 @@ import { Icon, Wire, ART } from './icons';
 import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
 import BrandKitView from './BrandKit';
 import Create from './Create';
+import { TABS, tabOf, tabLabel } from '@/lib/formats';
 import type { BrandKitRow } from '@/lib/brandKit';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -203,8 +204,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     }
     return m;
   }, [items]);
-  const showOrigins = view === 'all' || view === 'image' || view === 'logo' || view === 'video';
-  const inView = useCallback((it: Asset) => (view === 'all' ? true : it.kind === view), [view]);
+  const showOrigins = !['product', 'block'].includes(view);
+  const inView = useCallback((it: Asset) => view === 'all' || tabOf(it) === view, [view]);
+  const tabCounts = useMemo(() => { const m: Record<string, number> = { all: items.length }; for (const i of items) { const t = tabOf(i); m[t] = (m[t] || 0) + 1; } return m; }, [items]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -588,9 +590,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
               <div className="lib-tabs">
                 <div className="tabs-row" role="tablist" aria-label="Kind">
-                  {['all', 'image', 'logo', 'video', 'product', 'block'].filter((k) => k === 'all' || k === 'image' || k === 'block' || counts[k] > 0).map((k) => (
-                    <button key={k} type="button" role="tab" aria-pressed={view === k} onClick={() => setView(k)}>
-                      {k === 'all' ? 'All' : k === 'block' ? 'Email blocks' : KIND_LABEL[k]}<span>{k === 'all' ? counts.all + (counts.block || 0) : counts[k] || 0}</span>
+                  {TABS.filter((t) => t.id === 'all' || t.id === view || tabCounts[t.id] > 0).map((t) => (
+                    <button key={t.id} type="button" role="tab" aria-pressed={view === t.id} onClick={() => setView(t.id)}>
+                      {t.label}<span>{tabCounts[t.id] || 0}</span>
                     </button>
                   ))}
                 </div>
@@ -624,10 +626,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     </div>
                   </div>
                 ) : (
-                  <p className="nomatch">{q ? `Nothing matches “${q}”.` : showOrigins && origin === 'generated' ? 'Nothing made with Claude yet. Head to Create and make something.' : showOrigins && origin !== 'any' ? 'Nothing here with that filter.' : `No ${KIND_LABEL[view].toLowerCase()} yet. Drop some onto the page.`}</p>
+                  <p className="nomatch">{q ? `Nothing matches “${q}”.` : showOrigins && origin === 'generated' ? 'Nothing made with Claude yet. Head to Create and make something.' : showOrigins && origin !== 'any' ? 'Nothing here with that filter.' : `No ${tabLabel(view).toLowerCase()} yet. Drop some onto the page.`}</p>
                 )
               ) : (
-                <div className={'grid' + (['all', 'image', 'video'].includes(view) ? ' masonry' : '')}>
+                <div className={'grid' + (['product', 'block', 'logo'].includes(view) ? '' : ' masonry')}>
                   {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? showBlock(blockDraft(it)) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />)}
                 </div>
               )}
@@ -750,7 +752,7 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
   const right = usedLabel || (it.width ? `${it.width}×${it.height}` : '');
   return (
     <div className="tile" role="button" tabIndex={0} title="Click to open · drag into Figma" onClick={onOpen} onKeyDown={onKey}>
-      <div className={'thumb ' + it.kind} style={it.kind === 'image' && it.width && it.height ? { aspectRatio: `${Math.max(0.6, Math.min(2, it.width / it.height))}` } : undefined}>
+      <div className={'thumb ' + it.kind} style={it.kind === 'image' && it.width && it.height ? { aspectRatio: `${Math.max(0.5, Math.min(6, it.width / it.height))}` } : undefined}>
         {src ? (
           <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.name} data-png={it.mime === 'image/png' ? '1' : '0'} />
         ) : it.storage_path ? null : (
