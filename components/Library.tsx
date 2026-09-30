@@ -583,7 +583,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   <p className="nomatch">{q ? `Nothing matches “${q}”.` : showOrigins && origin === 'generated' ? 'Nothing generated yet. Ask Claude to make an image for this workspace and it arrives here as a draft.' : showOrigins && origin !== 'any' ? 'Nothing here with that filter.' : `No ${KIND_LABEL[view].toLowerCase()} in ${curWs?.name} yet. Drop some onto the page.`}</p>
                 )
               ) : (
-                <div className="grid">
+                <div className={'grid' + (['all', 'image', 'video'].includes(view) ? ' masonry' : '')}>
                   {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? showBlock(blockDraft(it)) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />)}
                 </div>
               )}
@@ -702,7 +702,7 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
     const vsrc = it.storage_path ? urls[it.storage_path] : undefined;
     return (
       <div className="tile" role="button" tabIndex={0} title="Open video" onClick={onOpen} onKeyDown={onKey}>
-        <div className="thumb video">
+        <div className="thumb video" style={{ aspectRatio: '4 / 5' }}>
           {vsrc && <video src={vsrc} muted loop playsInline preload="metadata" onMouseEnter={(e) => e.currentTarget.play().catch(() => {})} onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }} />}
           <span className="tag vid">Video</span>
           {it.origin === 'generated' && <span className={'tag ' + (it.status === 'draft' ? 'draft' : 'ai')} style={{ left: 'auto', right: 8 }}>{it.status === 'draft' ? 'Draft · AI' : 'AI'}</span>}
@@ -714,7 +714,7 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
   const right = usedLabel || (it.width ? `${it.width}×${it.height}` : '');
   return (
     <div className="tile" role="button" tabIndex={0} title="Click to open · drag into Figma" onClick={onOpen} onKeyDown={onKey}>
-      <div className={'thumb ' + it.kind}>
+      <div className={'thumb ' + it.kind} style={it.kind === 'image' && it.width && it.height ? { aspectRatio: `${Math.max(0.6, Math.min(2, it.width / it.height))}` } : undefined}>
         {src ? (
           <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.name} data-png={it.mime === 'image/png' ? '1' : '0'} />
         ) : it.storage_path ? null : (

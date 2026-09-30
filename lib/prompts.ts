@@ -111,11 +111,11 @@ export type Fill = { brand: string; product?: string | null; pid?: string | null
 export function fillPrompt(p: string, f: Fill) {
   return p
     .replace(/ \(PID \{pid\}\)/g, f.pid ? ` (PID ${f.pid})` : '')
-    .replace(/"\{image\}"/g, f.image ? `"${f.image}"` : 'our latest campaign image')
+    .replace(/"\{image\}"/g, f.image ? `"${f.image}"` : '[image]')
     .replace(/\{brand\}/g, f.brand || 'our brand')
-    .replace(/\{product\}/g, f.product ? `"${f.product}"` : 'our best-selling product')
+    .replace(/\{product\}/g, f.product ? `"${f.product}"` : '[product]')
     .replace(/\{pid\}/g, f.pid || 'from Emailsy')
-    .replace(/\{image\}/g, f.image || 'our latest campaign image')
+    .replace(/\{image\}/g, f.image || '[image]')
     .replace(/\{figma\}/g, f.figma || 'our Figma file (paste the link)');
 }
 
@@ -130,3 +130,37 @@ export const QUICK_FORMATS: [string, string][] = [
   ['Product reel, 6s video', '6-second vertical product video, 1080×1920'],
   ['Animated banner', 'animated email banner, 1200×600, under 4 seconds'],
 ];
+
+// How each prompt's card preview is drawn: the output's shape and a layout sketch.
+export type MockLayout = 'hero' | 'strip' | 'post' | 'story' | 'grid' | 'set' | 'cutout' | 'scene' | 'email' | 'footer' | 'kit' | 'check' | 'slide' | 'carousel' | 'ads' | 'thumb';
+export const MOCKS: Record<string, { size: [number, number]; layout: MockLayout; headline?: string; video?: boolean }> = {
+  'email-hero': { size: [1200, 600], layout: 'hero', headline: 'The new season is here' },
+  'email-hero-ai': { size: [1200, 600], layout: 'scene', headline: 'Made for slow mornings' },
+  'email-mobile-hero': { size: [640, 800], layout: 'story', headline: 'Just landed' },
+  'email-product-grid': { size: [600, 640], layout: 'grid' },
+  'email-sale-banner': { size: [1200, 300], layout: 'strip', headline: 'Up to 30% off · this weekend only' },
+  'email-full-campaign': { size: [600, 900], layout: 'email', headline: 'Meet the new collection' },
+  'email-countdown': { size: [1200, 600], layout: 'hero', headline: 'Last chance: ends at midnight' },
+  'email-footer': { size: [600, 260], layout: 'footer' },
+  'linkedin-banner': { size: [1128, 191], layout: 'strip', headline: 'Crafted to last, made to be worn' },
+  'linkedin-post': { size: [1200, 627], layout: 'hero', headline: 'Our autumn season starts today' },
+  'ig-post': { size: [1080, 1350], layout: 'post', headline: 'New in' },
+  'ig-story': { size: [1080, 1920], layout: 'story', headline: 'Out now' },
+  'social-set': { size: [1600, 1000], layout: 'set', headline: 'One idea' },
+  'carousel': { size: [1600, 1100], layout: 'carousel', headline: '5 ways to wear it' },
+  'youtube-thumb': { size: [1280, 720], layout: 'thumb', headline: 'How it’s made' },
+  'meta-ads': { size: [1600, 1000], layout: 'carousel', headline: 'Loved by 10,000+' },
+  'display-set': { size: [1600, 1000], layout: 'ads', headline: 'Shop the range' },
+  'retargeting': { size: [1080, 1080], layout: 'post', headline: 'Still thinking about it?' },
+  'cutout': { size: [1080, 1080], layout: 'cutout' },
+  'lifestyle': { size: [1600, 1200], layout: 'scene' },
+  'seasonal': { size: [1080, 1080], layout: 'scene' },
+  'flatlay': { size: [1080, 1080], layout: 'grid' },
+  'product-reel': { size: [1080, 1920], layout: 'story', headline: '', video: true },
+  'animated-banner': { size: [1200, 600], layout: 'hero', headline: 'Made to move', video: true },
+  'launch-teaser': { size: [1080, 1920], layout: 'story', headline: 'Something new is coming', video: true },
+  'kinetic-quote': { size: [1080, 1080], layout: 'post', headline: '“The best thing I bought this year”', video: true },
+  'kit-figma': { size: [1600, 1000], layout: 'kit' },
+  'kit-check': { size: [1600, 1000], layout: 'check' },
+  'presentation-cover': { size: [1920, 1080], layout: 'slide', headline: 'Autumn/Winter Campaign' },
+};
