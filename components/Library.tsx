@@ -536,7 +536,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
         <div className="content">
           {view === 'create' && curWs ? (
-            ready ? <Create ws={curWs} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
+            ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
               onConnect={() => nav('connect')} onBrandKit={() => nav('brand')} onReview={() => { setOrigin('draft'); nav('all'); }}
               onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
           ) : view === 'connect' ? (

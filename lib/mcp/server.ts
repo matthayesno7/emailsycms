@@ -50,6 +50,8 @@ Making things (Emailsy holds the brand and the source assets; the Figma connecto
 - Always finish by saving the result to Emailsy with add_generated_asset, then tell the user it's waiting for approval there.
 The user can pick ready-made requests from this server's prompts (the Emailsy prompt library). A request may contain a blank like [product] or [image]: find the best candidates in Emailsy (search_products, list_assets) and ask the user to pick, showing a few options, rather than guessing.
 
+Designs made in Emailsy Studio (provenance.via "studio") carry their layout in provenance.spec: layers with x, y, w, h as percentages of the canvas (provenance.size), text sizes as a percentage of the canvas width, and colours as brand kit roles. To rebuild one in Figma: make a frame at provenance.size, map each layer to a Figma layer (images via push_image_to_figma with the layer's asset id, rectangles with the role's brand kit colour, text as live text in the kit's fonts, the button in the kit's button style), then save it back with add_generated_asset if the user changed it.
+
 Saving something you designed in Figma back into Emailsy (a banner, a social image, a finished email section): call Figma's download_assets on the finished frame, take its export URL (a temporary https link) and pass it straight to add_generated_asset as image_url, with figma_file_key and figma_node_id, the Emailsy asset ids you used in source_asset_ids, and a short description of the brief as prompt. Do it as the last step whenever you make a finished image for a workspace, without being asked, and tell the user it's waiting for approval in Emailsy. Never tell the user to export and upload by hand.
 
 What each kind of asset becomes in Figma:
