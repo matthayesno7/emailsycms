@@ -12,8 +12,12 @@ type Focus = { x: number; y: number };
 
 // Full-page editor for one image, logo or product image: a big canvas on the left,
 // the settings on the right. Opens at ?asset=<id>, so it has its own link and Back works.
-export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast }: {
+export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl }: {
   it: Asset;
+  folders?: { id: string; name: string }[];
+  onShare?: () => Promise<string | null>; // a link anyone can open for a week
+  onEmailCopy?: () => void; // download the email-ready version
+  figmaUrl?: string | null;
   src: string | null;
   usedIn?: Asset[];
   onOpenBlock?: (b: Asset) => void;
@@ -212,6 +216,30 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
               </div>
               {it.provenance?.prompt && <p className="tip">“{it.provenance.prompt}”</p>}
               <p className="tip">{[it.provenance?.model, it.provenance?.style, it.provenance?.source_product_pid && `from product ${it.provenance.source_product_pid}`, it.provenance?.brand_kit_version && `brand kit v${it.provenance.brand_kit_version}`].filter(Boolean).join(' · ')}</p>
+            </div>
+          )}
+
+          <div className="ed-sec">
+            <div className="label">Send to</div>
+            <div className="sendto">
+              <button type="button" disabled title="Coming soon"><Icon.Bag /><span><b>Shopify product <em className="soon">Soon</em></b><small>Add it to a product’s images</small></span></button>
+              {!isVideo && onEmailCopy && <button type="button" onClick={onEmailCopy}><Icon.Mail /><span><b>Email</b><small>{it.images?.email ? `Email-ready, ${it.images.email.width}px, ${Math.round(it.images.email.bytes / 1024)} KB` : 'Download for Klaviyo, Mailchimp…'}</small></span></button>}
+              <button type="button" onClick={async () => {
+                const prompt = `Put my Emailsy ${isVideo ? 'video' : 'image'} "${it.name}" (asset id ${it.id}) into my Figma file${figmaUrl ? ` ${figmaUrl}` : ''}.`;
+                try { await navigator.clipboard.writeText(prompt); } catch {}
+                window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
+              }}><Icon.Send /><span><b>Figma</b><small>Claude places it full size, or drag the image in</small></span></button>
+              {onShare && <button type="button" onClick={async () => { const u = await onShare(); if (u) { try { await navigator.clipboard.writeText(u); toast('Link copied. It works for 7 days.'); } catch { toast(u); } } }}><Icon.Share /><span><b>Share link</b><small>For an agency or retailer, works for 7 days</small></span></button>}
+            </div>
+          </div>
+
+          {folders.length > 0 && (
+            <div className="ed-sec">
+              <div className="label">Folder</div>
+              <select className="in" value={it.folder_id || ''} onChange={async (e) => { if (await onPatch({ folder_id: e.target.value || null })) toast('Moved'); }}>
+                <option value="">No folder</option>
+                {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
             </div>
           )}
 

@@ -32,7 +32,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(false);
   // Three places: Create (home), Library (everything the brand has) and Brand kit; plus Settings.
-  const [page, setPage] = useState<'create' | 'library' | 'brand' | 'settings'>('create');
+  // Assets come first (the home), then Create; Brand kit and Settings support both.
+  const [page, setPage] = useState<'create' | 'library' | 'brand' | 'settings'>('library');
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+  const [folder, setFolder] = useState<string>('all'); // 'all' or a folder id
+  const [newFolder, setNewFolder] = useState<string | null>(null);
+  const [dropFolder, setDropFolder] = useState<string | null>(null);
   const [settingsTab, setSettingsTab] = useState<'workspace' | 'members' | 'claude' | 'help'>('workspace');
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
@@ -52,6 +57,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const toastT = useRef<any>(null);
   const fileImg = useRef<HTMLInputElement>(null);
   const fileCsv = useRef<HTMLInputElement>(null);
+  const fileDir = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const internalDrag = useRef(false);
   const dragN = useRef(0);
@@ -141,6 +147,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   useEffect(() => {
     supabase.from('api_keys').select('last_used_at').not('last_used_at', 'is', null).limit(1).then(({ data }) => setConnected(!!data?.length));
   }, [supabase, view]);
+  const loadFolders = useCallback(async (wsId: string) => {
+    const { data } = await supabase.from('folders').select('id, name').eq('workspace_id', wsId).order('name');
+    setFolders(data || []);
+  }, [supabase]);
+
   useEffect(() => {
     if (!ws) return;
     try { localStorage.setItem('emailsy.ws', ws); } catch {}
@@ -148,6 +159,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setKitRow(null);
     loadAssets(ws);
     loadKit(ws);
+    loadFolders(ws);
     const ch = supabase
       .channel('assets-' + ws)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assets', filter: `workspace_id=eq.${ws}` }, () => loadAssets(ws))
@@ -205,8 +217,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return m;
   }, [items]);
   const showOrigins = !['product', 'block'].includes(view);
-  const inView = useCallback((it: Asset) => view === 'all' || tabOf(it) === view, [view]);
-  const tabCounts = useMemo(() => { const m: Record<string, number> = { all: items.length }; for (const i of items) { const t = tabOf(i); m[t] = (m[t] || 0) + 1; } return m; }, [items]);
+  const inFolder = useCallback((it: Asset) => folder === 'all' || it.folder_id === folder, [folder]);
+  const inView = useCallback((it: Asset) => inFolder(it) && (view === 'all' || tabOf(it) === view), [view, inFolder]);
+  const tabCounts = useMemo(() => { const inF = items.filter(inFolder); const m: Record<string, number> = { all: inF.length }; for (const i of inF) { const t = tabOf(i); m[t] = (m[t] || 0) + 1; } return m; }, [items, inFolder]);
+  const folderCounts = useMemo(() => { const m: Record<string, number> = {}; for (const i of items) if (i.folder_id) m[i.folder_id] = (m[i.folder_id] || 0) + 1; return m; }, [items]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -239,7 +253,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   // Upload an image as an asset, with an email-ready copy (max 1200px wide, compressed).
   // A file named after a product's PID attaches to that product instead.
-  async function addImageAsset(file: File, opts: { kind?: string; attachToProduct?: boolean } = {}): Promise<{ asset: Asset; img: HTMLImageElement | null } | null> {
+  async function addImageAsset(file: File, opts: { kind?: string; attachToProduct?: boolean; folderId?: string | null } = {}): Promise<{ asset: Asset; img: HTMLImageElement | null } | null> {
     const ext = extOf(file);
     const type = file.type || (ext === 'svg' ? 'image/svg+xml' : ext === 'png' ? 'image/png' : 'image/jpeg');
     const path = `${ws}/${crypto.randomUUID()}.${ext}`;
@@ -263,6 +277,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const kind = opts.kind || (video ? 'video' : /logo|wordmark|brandmark/i.test(base) || type === 'image/svg+xml' ? 'logo' : 'image');
     const { data, error: e2 } = await supabase.from('assets').insert({
       workspace_id: ws, kind, name: base.replace(/[-_]+/g, ' ').slice(0, 120) || 'Image', storage_path: path, mime: type,
+      folder_id: opts.folderId !== undefined ? opts.folderId : folder !== 'all' ? folder : null,
       width: w, height: h, bytes: file.size, images, created_by: userId,
     }).select('*').single();
     if (e2 || !data) { toast('Couldn’t save the image.'); return null; }
@@ -337,27 +352,62 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     toast(failed ? `${done} product images added. ${failed} couldn’t be downloaded; drop PID.jpg files to add them.` : `${done} product images added`);
   }
 
-  async function ingest(files: FileList | File[]) {
-    const list = [...files];
+  // Upload files; a dropped or chosen folder becomes an Emailsy folder of the same name.
+  async function ingest(files: FileList | File[], folderName?: string) {
+    const list = [...files].filter((f) => !f.name.startsWith('.'));
     if (!list.length || !ws) return;
+    let folderId: string | null | undefined = undefined;
+    if (folderName) folderId = await ensureFolder(folderName);
     for (const f of list.filter((f) => /\.csv$/i.test(f.name) || f.type === 'text/csv')) await importFeed(f);
     const vids = list.filter((f) => /^video\/(mp4|webm|quicktime)/.test(f.type));
-    for (const f of vids) await addImageAsset(f, { kind: 'video' });
+    for (const f of vids) await addImageAsset(f, { kind: 'video', folderId });
     if (vids.length) loadAssets(ws);
     const imgs = list.filter((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name));
     // In Blocks, images become blocks: ask for the block type, then create them.
     if (view === 'block' && imgs.length) { await blocksFromImages(imgs); return; }
     if (imgs.length > 1) toast(`Adding ${imgs.length} images…`);
-    for (const f of imgs) await addImageAsset(f);
+    for (const f of imgs) await addImageAsset(f, { folderId });
     if (imgs.length) loadAssets(ws);
+    if (folderId) { setFolder(folderId); setView('all'); toast(`${imgs.length + vids.length} files added to ${folderName}`); }
     if (imgs.length || vids.length) setPage((p) => (p === 'brand' ? p : 'library'));
+  }
+
+  async function ensureFolder(name: string): Promise<string | null> {
+    const n = name.trim().slice(0, 60);
+    if (!n) return null;
+    const existing = folders.find((f) => f.name.toLowerCase() === n.toLowerCase());
+    if (existing) return existing.id;
+    const { data, error } = await supabase.from('folders').insert({ workspace_id: ws, name: n, created_by: userId }).select('id, name').single();
+    if (error || !data) { toast('Couldn’t create that folder.'); return null; }
+    setFolders((f) => [...f, data].sort((a, b) => a.name.localeCompare(b.name)));
+    return data.id;
+  }
+  async function moveToFolder(assetId: string, folderId: string | null) {
+    const ok = await patchAsset(assetId, { folder_id: folderId });
+    if (ok) toast(folderId ? `Moved to ${folders.find((f) => f.id === folderId)?.name}` : 'Moved out of the folder');
+  }
+  async function renameFolder(id: string) {
+    const cur = folders.find((f) => f.id === id);
+    const n = window.prompt('Rename folder', cur?.name || '')?.trim();
+    if (!n || n === cur?.name) return;
+    const { error } = await supabase.from('folders').update({ name: n.slice(0, 60) }).eq('id', id);
+    if (error) { toast('Couldn’t rename it.'); return; }
+    setFolders((f) => f.map((x) => (x.id === id ? { ...x, name: n } : x)));
+  }
+  async function deleteFolder(id: string) {
+    const { error } = await supabase.from('folders').delete().eq('id', id);
+    if (error) { toast('Couldn’t delete the folder.'); return; }
+    setFolders((f) => f.filter((x) => x.id !== id));
+    setItems((list) => list.map((i) => (i.folder_id === id ? { ...i, folder_id: null } : i)));
+    setFolder('all');
+    toast('Folder deleted. Its files are still in All files.');
   }
 
   async function createWorkspace(name: string) {
     const { data, error } = await supabase.rpc('create_workspace', { ws_name: name });
     if (error || !data) { toast('Couldn’t create the workspace.'); return; }
     await loadWorkspaces((data as any).id);
-    setView('all'); setPage('create');
+    setView('all'); setPage('library');
     toast(`${name} workspace created`);
   }
 
@@ -440,7 +490,15 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const enter = (e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); dragN.current++; setDropping(true); };
     const over = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); };
     const leave = (e: DragEvent) => { if (!hasFiles(e)) return; if (--dragN.current <= 0) { dragN.current = 0; setDropping(false); } };
-    const drop = (e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); dragN.current = 0; setDropping(false); ingest(e.dataTransfer!.files); };
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); dragN.current = 0; setDropping(false);
+      // A dropped folder: read everything inside it and keep its name.
+      const entries = [...(e.dataTransfer!.items || [])].map((i) => (i as any).webkitGetAsEntry?.()).filter(Boolean);
+      const dir = entries.find((en: any) => en.isDirectory);
+      if (dir) { readDir(dir).then((files) => ingest(files, dir.name)); return; }
+      ingest(e.dataTransfer!.files);
+    };
     const paste = (e: ClipboardEvent) => {
       if ((e.target as HTMLElement)?.closest?.('input,textarea')) return;
       const files = [...(e.clipboardData?.files || [])];
@@ -456,7 +514,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         const name = (img.dataset.drag || 'image').replace(/[^\w.-]+/g, '-').replace(/\.(png|jpe?g)$/i, '') + (png ? '.png' : '.jpg');
         e.dataTransfer!.setData('DownloadURL', `image/${png ? 'png' : 'jpeg'}:${name}:${url}`);
         e.dataTransfer!.setData('text/uri-list', url);
-        e.dataTransfer!.effectAllowed = 'copy';
+        if (img.dataset.id) e.dataTransfer!.setData('application/x-emailsy-asset', img.dataset.id);
+        e.dataTransfer!.effectAllowed = 'copyMove';
       } catch {}
     };
     const end = () => { internalDrag.current = false; };
@@ -505,7 +564,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           {wsOpen && (
             <div className="wsw-menu" role="menu">
               {workspaces.map((w, i) => (
-                <button key={w.id} type="button" role="menuitem" aria-current={w.id === ws} onClick={() => { setWs(w.id); go('create'); }}>
+                <button key={w.id} type="button" role="menuitem" aria-current={w.id === ws} onClick={() => { setWs(w.id); setFolder('all'); go('library'); }}>
                   <span className="dot" style={{ background: WS_COLORS[i % WS_COLORS.length] }}>{(w.name[0] || '?').toUpperCase()}</span>{w.name}{w.id === ws && <em>✓</em>}
                 </button>
               ))}
@@ -522,10 +581,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </div>
 
         <nav className="mainnav">
-          <button className="nav big" type="button" aria-current={page === 'create'} onClick={() => go('create')}><Icon.Sparkle />Create</button>
-          <button className="nav big" type="button" aria-current={page === 'library'} onClick={() => library(view === 'all' ? 'all' : view)}><Icon.Image />Library
+          <button className="nav big" type="button" aria-current={page === 'library'} onClick={() => library(view === 'all' ? 'all' : view)}><Icon.Image />Assets
             {drafts > 0 ? <span className="count pill-n" title="Waiting for approval">{drafts}</span> : null}
           </button>
+          <button className="nav big" type="button" aria-current={page === 'create'} onClick={() => go('create')}><Icon.Sparkle />Create</button>
           <button className="nav big" type="button" aria-current={page === 'brand'} onClick={() => go('brand')}><Icon.Palette />Brand kit
             {kitRow?.status === 'approved' ? null : <span className="count dotnote" title={kitRow ? 'Draft, not approved yet' : 'Not set up yet'}>•</span>}
           </button>
@@ -542,7 +601,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       <main>
         <div className="bar mobile-only">
           <button className="menu" type="button" aria-label="Open navigation" onClick={() => setSideOpen(true)}><Icon.Menu /></button>
-          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{page === 'create' ? 'Create' : page === 'library' ? 'Library' : page === 'brand' ? 'Brand kit' : 'Settings'}</b></div>
+          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{page === 'create' ? 'Create' : page === 'library' ? 'Assets' : page === 'brand' ? 'Brand kit' : 'Settings'}</b></div>
         </div>
 
         <div className="content">
@@ -572,7 +631,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           ) : (
             <>
               <div className="lib-head">
-                <h1>Library</h1>
+                <h1>{folder === 'all' ? 'Assets' : folders.find((f) => f.id === folder)?.name || 'Assets'}</h1>
+                {folder !== 'all' && <span className="lib-fact">{folderCounts[folder] || 0} files · <button type="button" className="linkish" onClick={() => renameFolder(folder)}>Rename</button> · <button type="button" className="linkish" onClick={() => deleteFolder(folder)}>Delete folder</button></span>}
                 <span className="spacer" />
                 <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search names and PIDs" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /><kbd>/</kbd></label>
                 <div className="addwrap">
@@ -580,7 +640,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   {addOpen && (
                     <div className="addmenu" role="menu" onClick={() => setAddOpen(false)}>
                       <button type="button" role="menuitem" onClick={() => fileImg.current?.click()}><Icon.Image /><span><b>Upload files</b><small>Images, logos, videos. Or drop them anywhere.</small></span></button>
+                      <button type="button" role="menuitem" onClick={() => fileDir.current?.click()}><Icon.Folder /><span><b>Upload a folder</b><small>Keeps the folder’s name, like Dropbox</small></span></button>
                       <button type="button" role="menuitem" onClick={() => fileCsv.current?.click()}><Icon.Table /><span><b>Import a product feed</b><small>CSV from Shopify, Google Merchant…</small></span></button>
+                      <button type="button" role="menuitem" disabled><Icon.Bag /><span><b>Connect Shopify <em className="soon">Soon</em></b><small>Every product image, synced both ways</small></span></button>
+                      <hr />
+                      <button type="button" role="menuitem" onClick={() => setNewFolder('')}><Icon.Plus /><span><b>New folder</b></span></button>
                       <button type="button" role="menuitem" onClick={() => setModal('blocktype')}><Icon.Blocks /><span><b>New email block</b><small>Hero, card, product, button, footer</small></span></button>
                     </div>
                   )}
@@ -588,7 +652,27 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               </div>
               {addOpen && <div className="clickaway" onClick={() => setAddOpen(false)} />}
 
-              <div className="lib-tabs">
+              {(folders.length > 0 || newFolder !== null) && (
+                <div className="folders" aria-label="Folders">
+                  {[{ id: 'all', name: 'All files' }, ...folders].map((f) => (
+                    <button key={f.id} type="button" className={'folder' + (folder === f.id ? ' on' : '') + (dropFolder === f.id ? ' drop' : '')} onClick={() => { setFolder(f.id); setView('all'); }}
+                      onDragOver={(e) => { if (e.dataTransfer.types.includes('application/x-emailsy-asset')) { e.preventDefault(); setDropFolder(f.id); } }}
+                      onDragLeave={() => setDropFolder(null)}
+                      onDrop={(e) => { const id = e.dataTransfer.getData('application/x-emailsy-asset'); setDropFolder(null); if (id) { e.preventDefault(); e.stopPropagation(); moveToFolder(id, f.id === 'all' ? null : f.id); } }}>
+                      <Icon.Folder size={16} />{f.name}<span>{f.id === 'all' ? items.length : folderCounts[f.id] || 0}</span>
+                    </button>
+                  ))}
+                  {newFolder === null ? (
+                    <button type="button" className="folder add" onClick={() => setNewFolder('')}><Icon.Plus size={15} />Folder</button>
+                  ) : (
+                    <form className="folder-new" onSubmit={async (e) => { e.preventDefault(); const id = await ensureFolder(newFolder); setNewFolder(null); if (id) { setFolder(id); setView('all'); } }}>
+                      <input className="in" autoFocus value={newFolder} maxLength={60} placeholder="Folder name" onChange={(e) => setNewFolder(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setNewFolder(null)} onBlur={() => !newFolder.trim() && setNewFolder(null)} />
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {items.length > 0 && <div className="lib-tabs">
                 <div className="tabs-row" role="tablist" aria-label="Kind">
                   {TABS.filter((t) => t.id === 'all' || t.id === view || tabCounts[t.id] > 0).map((t) => (
                     <button key={t.id} type="button" role="tab" aria-pressed={view === t.id} onClick={() => setView(t.id)}>
@@ -603,16 +687,21 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     ))}
                   </select>
                 )}
-              </div>
+              </div>}
 
               {!items.length ? (
-                <div className="empty">
-                  <div dangerouslySetInnerHTML={{ __html: ART }} />
-                  <h2>Your brand’s library</h2>
-                  <p>Drop images, logos, videos or a product feed anywhere on this page. Claude uses them to design, and everything it makes lands here too.</p>
-                  <div className="row">
-                    <button className="primary" type="button" onClick={() => fileImg.current?.click()}><Icon.Plus size={16} />Upload files</button>
-                    <button className="ghost" type="button" onClick={() => fileCsv.current?.click()}>Import a product feed</button>
+                <div className="intake">
+                  <button type="button" className="intake-drop" onClick={() => fileImg.current?.click()}>
+                    <Icon.Upload size={30} />
+                    <b>Drop everything here</b>
+                    <span>Photos, logos, videos, whole folders. We size them, write alt text and file them for you.</span>
+                  </button>
+                  <div className="intake-sources">
+                    <div className="src-h">Or bring them in from</div>
+                    <button type="button" className="src" onClick={() => fileDir.current?.click()}><Icon.Folder /><span><b>A folder on your computer</b><small>Keeps the folder’s name</small></span></button>
+                    <button type="button" className="src" onClick={() => fileCsv.current?.click()}><Icon.Table /><span><b>Product feed</b><small>CSV from Shopify or Google Merchant</small></span></button>
+                    <button type="button" className="src" disabled><Icon.Bag /><span><b>Shopify <em className="soon">Soon</em></b><small>Every product image, synced both ways</small></span></button>
+                    <button type="button" className="src" disabled><Icon.Cloud /><span><b>Google Drive or Dropbox <em className="soon">Soon</em></b><small>Import a shared folder</small></span></button>
                   </div>
                 </div>
               ) : !visible.length ? (
@@ -639,6 +728,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       </main>
 
       <input ref={fileImg} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,video/mp4,video/webm,video/quicktime,.csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
+      <input ref={fileDir} type="file" multiple hidden {...({ webkitdirectory: '', directory: '' } as any)} onChange={(e) => { const fl = e.target.files; if (fl?.length) { const name = ((fl[0] as any).webkitRelativePath || '').split('/')[0]; ingest(fl, name || undefined); } e.target.value = ''; }} />
       <input ref={fileCsv} type="file" accept=".csv,text/csv" hidden onChange={(e) => { if (e.target.files) ingest(e.target.files); e.target.value = ''; }} />
       {dropping && <div className="drop"><div><strong>{view === 'block' ? 'Drop to make blocks' : 'Drop to add'}</strong><span>{view === 'block' ? 'Each image goes into your assets and becomes a block: Hero if wide, Card otherwise.' : 'Images, logos, videos, or a product feed CSV'}</span></div></div>}
       {(modal || sideOpen) && <div className="scrim" onClick={() => { setModal(null); setSideOpen(false); }} />}
@@ -658,6 +748,21 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onNext={at >= 0 && at < walk.length - 1 ? () => openEditor(walk[at + 1].id, true) : undefined}
           position={at >= 0 ? `${at + 1} of ${walk.length}` : undefined}
           toast={toast}
+          folders={folders}
+          figmaUrl={curWs?.figma_file_url}
+          onShare={async () => {
+            const path = openAsset.storage_path;
+            if (!path) { toast('Nothing to share yet.'); return null; }
+            const { data } = await supabase.storage.from('assets').createSignedUrl(path, 7 * 24 * 3600, { download: false });
+            return data?.signedUrl || null;
+          }}
+          onEmailCopy={async () => {
+            const path = openAsset.images?.email?.path || openAsset.storage_path;
+            if (!path) return;
+            const name = openAsset.name.replace(/[^\w.-]+/g, '-').toLowerCase() + '-email.' + (path.split('.').pop() || 'jpg');
+            const { data } = await supabase.storage.from('assets').createSignedUrl(path, 600, { download: name });
+            if (data?.signedUrl) location.href = data.signedUrl;
+          }}
         />
       )}
 
@@ -697,6 +802,22 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </div>
   );
+}
+
+// All files inside a dropped folder (and its subfolders).
+async function readDir(dir: any): Promise<File[]> {
+  const out: File[] = [];
+  const walk = async (entry: any): Promise<void> => {
+    if (entry.isFile) { out.push(await new Promise<File>((res, rej) => entry.file(res, rej))); return; }
+    const reader = entry.createReader();
+    for (;;) {
+      const batch: any[] = await new Promise((res, rej) => reader.readEntries(res, rej));
+      if (!batch.length) break;
+      for (const b of batch) await walk(b);
+    }
+  };
+  await walk(dir);
+  return out;
 }
 
 // Editable copies, so the editor can change them freely until Save.
@@ -754,7 +875,7 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
     <div className="tile" role="button" tabIndex={0} title="Click to open · drag into Figma" onClick={onOpen} onKeyDown={onKey}>
       <div className={'thumb ' + it.kind} style={it.kind === 'image' && it.width && it.height ? { aspectRatio: `${Math.max(0.5, Math.min(6, it.width / it.height))}` } : undefined}>
         {src ? (
-          <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.name} data-png={it.mime === 'image/png' ? '1' : '0'} />
+          <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.name} data-id={it.id} data-png={it.mime === 'image/png' ? '1' : '0'} />
         ) : it.storage_path ? null : (
           <div className="noimg"><code>{it.pid}</code>Drop {it.pid}.jpg to add its image</div>
         )}
