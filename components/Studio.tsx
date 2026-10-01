@@ -68,7 +68,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
       const json = await res.json().catch(() => ({}));
       if (!res.ok) return { error: json.error || 'Something went wrong.' };
       return { spec: json.spec };
-    } catch { return { error: 'Couldn’t reach Emailsy.' }; }
+    } catch { return { error: 'Couldn’t reach Mise.' }; }
   }
 
   // New brief or format: three directions, designed in parallel, each shown as soon as it's ready.
@@ -144,7 +144,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
         workspace_id: ws.id, kind: 'image', name: v.spec.name, storage_path: path, mime: 'image/png', bytes: blob.size, width: v.size.w, height: v.size.h,
         images: email ? { email } : {}, origin: 'generated', status: 'approved', created_by: userId,
         fields: { alt: v.spec.layers.filter((l) => l.type === 'text').map((l: any) => l.text).join('. ').slice(0, 150) },
-        provenance: { via: 'studio', prompt: brief, model: 'Emailsy Studio (Claude)', spec: v.spec, size: v.size, source_asset_ids: assetsUsed(v.spec), generated_at: new Date().toISOString() },
+        provenance: { via: 'studio', prompt: brief, model: 'Mise Studio (Claude)', spec: v.spec, size: v.size, source_asset_ids: assetsUsed(v.spec), generated_at: new Date().toISOString() },
       }).select('id').single();
       if (error) throw error;
       patch(v.key, { savedId: data.id, busy: undefined });
@@ -175,7 +175,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
     const id = await save(v);
     patch(v.key, { busy: undefined });
     if (!id) return;
-    const prompt = `Rebuild my Emailsy design "${v.spec!.name}" (asset id ${id}) in Figma as editable layers${ws.figma_file_url ? ` in ${ws.figma_file_url}` : ''}: live text in our brand fonts, our brand kit colours, and the photos pushed from Emailsy. Its layout is in the asset's provenance.spec.`;
+    const prompt = `Rebuild my Mise design "${v.spec!.name}" (asset id ${id}) in Figma as editable layers${ws.figma_file_url ? ` in ${ws.figma_file_url}` : ''}: live text in our brand fonts, our brand kit colours, and the photos pushed from Mise. Its layout is in the asset's provenance.spec.`;
     try { await navigator.clipboard.writeText(prompt); } catch {}
     window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
   }

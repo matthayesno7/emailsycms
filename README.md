@@ -1,6 +1,8 @@
-# Emailsy CMS
+# Mise
 
-A home for a team's email-ready assets: images, logos, feed products and content blocks.
+_Formerly Emailsy. The repo, database and connector paths keep the old internal names._
+
+The brand asset library marketing teams actually want to use: images, logos, products, videos and email blocks in one place, sent where they're needed, and new on-brand work made from them with Claude.
 
 - **Library:** upload images and logos, import a product feed (CSV), rename and move assets between categories.
 - **Email-ready images:** crop to email sizes, remove white backgrounds, then drag straight into Figma.
@@ -50,7 +52,7 @@ Check the MCP handler without a database: `npx tsx scripts/mcp-selftest.ts`. Che
 ## 3. GitHub → Railway
 
 ```bash
-git init && git add -A && git commit -m "Emailsy CMS: first version"
+git init && git add -A && git commit -m "Mise: first version"
 gh repo create emailsy-cms --private --source=. --push   # or create the repo on github.com and push
 ```
 
@@ -61,9 +63,9 @@ Set `NEXT_PUBLIC_APP_URL` to that domain and redeploy (it is baked in at build t
 
 ## 4. Connect Claude
 
-1. Sign in to Emailsy CMS → **Claude connector** → **Create my connector link**.
-2. In Claude: Settings → Connectors → **Add custom connector** → name it *Emailsy CMS* → paste the link.
-3. Also connect Figma's MCP. Then try: *"Put the Autumn hero image from Emailsy onto my selected Figma frame"* or use a block's **Copy request for Claude**.
+1. Sign in to Mise → **Claude connector** → **Create my connector link**.
+2. In Claude: Settings → Connectors → **Add custom connector** → name it *Mise* → paste the link.
+3. Also connect Figma's MCP. Then try: *"Put the Autumn hero image from Mise onto my selected Figma frame"* or use a block's **Copy request for Claude**.
 
 The link contains a secret key. Anyone with it can read that user's workspaces, so treat it like a password; turn it off in the app if it leaks.
 
@@ -108,7 +110,7 @@ supabase/migrations/       schema, RLS, storage bucket
 
 `/api/brand-kit/extract` fetches the page and its first six stylesheets, reads CSS variables, body/heading/link styles, the main button, `@font-face` and Google Fonts links, theme-color, the logo (scored images and inline SVGs near "logo" in the header, falling back to the touch icon) and the share image. Claude assigns roles and describes the imagery style from the share image; the logo and share image go into the library. It's a plain fetch, so sites that render everything with JavaScript give thinner results (a headless browser on Railway would fix that).
 
-`push_image_to_figma` exists so images never pass through Claude: Claude asks Figma for an upload URL, and the Emailsy server sends the full-size file straight to Figma. Only `https://*.figma.com` upload URLs are accepted.
+`push_image_to_figma` exists so images never pass through Claude: Claude asks Figma for an upload URL, and the Mise server sends the full-size file straight to Figma. Only `https://*.figma.com` upload URLs are accepted.
 
 ## Next up
 

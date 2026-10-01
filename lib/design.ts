@@ -1,4 +1,4 @@
-// Emailsy Studio: Claude designs on the page. It answers with a small layout spec in a fixed
+// Mise Studio: Claude designs on the page. It answers with a small layout spec in a fixed
 // vocabulary; our renderer draws it with the brand kit's own colours, fonts and buttons and the
 // workspace's real images. The spec can't use off-brand colours or fonts, which keeps every
 // variant on brand, and it's small, so designs arrive in seconds.
@@ -38,7 +38,7 @@ export const DIRECTIONS = [
 export type LibraryItem = { id: string; kind: string; name: string; alt?: string; w?: number | null; h?: number | null; pid?: string | null; price?: string | null };
 
 export function systemPrompt() {
-  return `You are the design engine of Emailsy Studio. You design one marketing graphic at a time as a JSON layout spec that our renderer draws with the brand's own colours, fonts, logo and photos.
+  return `You are the design engine of Mise Studio. You design one marketing graphic at a time as a JSON layout spec that our renderer draws with the brand's own colours, fonts, logo and photos.
 
 Return ONLY a JSON object:
 {

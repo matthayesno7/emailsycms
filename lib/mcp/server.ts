@@ -1,4 +1,4 @@
-// Emailsy CMS MCP server: a stateless JSON-RPC handler for the MCP "streamable HTTP"
+// Mise MCP server: a stateless JSON-RPC handler for the MCP "streamable HTTP"
 // transport. Each POST carries one message (or a batch) and gets a JSON reply.
 import { BLOCK_TYPES, isReadDesign } from '../blockTypes';
 import { productAsBlock } from '../products';
@@ -30,30 +30,30 @@ export type Ctx = { repo: Repo; userId: string; fetchImpl?: typeof fetch };
 
 export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
-const INSTRUCTIONS = `Emailsy is the brand's creative library for Claude: its brand kit, logos, images, product feed and email blocks, plus everything made with Claude. Work from these, make things in Figma, and save what you make back here.
+const INSTRUCTIONS = `Mise is the brand's creative library for Claude: its brand kit, logos, images, product feed and email blocks, plus everything made with Claude. Work from these, make things in Figma, and save what you make back here.
 
 Brand kit: each workspace has one brand kit: colours by role, fonts with email-safe fallbacks, button style, content width, logos, imagery style and voice. Call get_brand_kit before building or generating anything for a workspace and follow it; never guess colours or fonts the kit gives you. A draft kit hasn't been approved by the team yet: use it, but mention that.
 
 Creating a brand kit from a Figma email design system (the user asks to set up, build or import their brand kit from Figma):
 1. Read the file with the Figma connector: get_variable_defs for colour and number variables, search_design_system or get_metadata for text styles and the button component, and get_screenshot of the foundations page or a finished email.
 2. Map to roles: primary (the signature brand colour), secondary, accent, text, text_muted, background, surface, border, link, button_bg, button_text. Heading and body fonts: family, weight and sizes in px at email scale (if the file is drawn at 2x, halve the sizes). Button: style (filled, outline, underline), radius, padding, weight, case. Content width (usually 600-640).
-3. Logo: if the file has a logo, export it with Figma's download_assets (SVG preferred) and pass the https URL as logo_url, or pass an Emailsy logo asset id in kit.logos.primary.
-4. Call save_brand_kit with source.figma_url. It is saved as a draft that the team reviews and approves in Emailsy (Brand kit). Tell the user what you filled in and what the tool reports as missing or worth checking.
+3. Logo: if the file has a logo, export it with Figma's download_assets (SVG preferred) and pass the https URL as logo_url, or pass a Mise logo asset id in kit.logos.primary.
+4. Call save_brand_kit with source.figma_url. It is saved as a draft that the team reviews and approves in Mise (Brand kit). Tell the user what you filled in and what the tool reports as missing or worth checking.
 Never invent values: leave a role empty rather than guess. Email Love design systems keep their foundations in variables (colour/brand/*, typography/*); treat those names as the strongest signal.
-Building from a website instead happens in Emailsy itself (Brand kit → From your website); suggest that when the user has no design system.
+Building from a website instead happens in Mise itself (Brand kit → From your website); suggest that when the user has no design system.
 
-Where assets come from: each asset has an origin: uploaded (added by the team), product_feed (from the product feed, keyed by PID) or generated (made by AI), and a status: approved or draft. Generated assets start as drafts and carry provenance (prompt, model, source product). Images you create for a workspace go into the library with add_generated_asset; a person approves them in Emailsy, so never describe a draft as approved. Prefer approved assets when building emails; use drafts only when the user asks for them.
+Where assets come from: each asset has an origin: uploaded (added by the team), product_feed (from the product feed, keyed by PID) or generated (made by AI), and a status: approved or draft. Generated assets start as drafts and carry provenance (prompt, model, source product). Images you create for a workspace go into the library with add_generated_asset; a person approves them in Mise, so never describe a draft as approved. Prefer approved assets when building emails; use drafts only when the user asks for them.
 
-Making things (Emailsy holds the brand and the source assets; the Figma connector does the making):
-- Designs (banners, social posts, ads, slides): build them in Figma from the brand kit and Emailsy assets (push_image_to_figma), headline as live text, then save the finished frame with add_generated_asset.
+Making things (Mise holds the brand and the source assets; the Figma connector does the making):
+- Designs (banners, social posts, ads, slides): build them in Figma from the brand kit and Mise assets (push_image_to_figma), headline as live text, then save the finished frame with add_generated_asset.
 - New imagery (a product in a new scene, a seasonal backdrop, a cut-out): use Figma's Weave models. weave_find_model (e.g. "nano banana 2" for images), pass the product photo's image_url from get_asset as the reference image, and describe the scene using the brand kit's imagery.style and do/don't rules. Never alter the product itself: say so in the prompt, and prefer compositing the real cut-out over a generated scene in Figma when the product must be exact. Weave runs cost the user credits: always quote the cost and get an explicit yes before running.
 - Video: either a Weave video model (e.g. "veo 3") from a product image, or animate a Figma frame and export it with export_video (MP4). Save the MP4 with add_generated_asset (kind video).
-- Always finish by saving the result to Emailsy with add_generated_asset, then tell the user it's waiting for approval there.
-The user can pick ready-made requests from this server's prompts (the Emailsy prompt library). A request may contain a blank like [product] or [image]: find the best candidates in Emailsy (search_products, list_assets) and ask the user to pick, showing a few options, rather than guessing.
+- Always finish by saving the result to Mise with add_generated_asset, then tell the user it's waiting for approval there.
+The user can pick ready-made requests from this server's prompts (the Mise prompt library). A request may contain a blank like [product] or [image]: find the best candidates in Mise (search_products, list_assets) and ask the user to pick, showing a few options, rather than guessing.
 
-Designs made in Emailsy Studio (provenance.via "studio") carry their layout in provenance.spec: layers with x, y, w, h as percentages of the canvas (provenance.size), text sizes as a percentage of the canvas width, and colours as brand kit roles. To rebuild one in Figma: make a frame at provenance.size, map each layer to a Figma layer (images via push_image_to_figma with the layer's asset id, rectangles with the role's brand kit colour, text as live text in the kit's fonts, the button in the kit's button style), then save it back with add_generated_asset if the user changed it.
+Designs made in Mise Studio (provenance.via "studio") carry their layout in provenance.spec: layers with x, y, w, h as percentages of the canvas (provenance.size), text sizes as a percentage of the canvas width, and colours as brand kit roles. To rebuild one in Figma: make a frame at provenance.size, map each layer to a Figma layer (images via push_image_to_figma with the layer's asset id, rectangles with the role's brand kit colour, text as live text in the kit's fonts, the button in the kit's button style), then save it back with add_generated_asset if the user changed it.
 
-Saving something you designed in Figma back into Emailsy (a banner, a social image, a finished email section): call Figma's download_assets on the finished frame, take its export URL (a temporary https link) and pass it straight to add_generated_asset as image_url, with figma_file_key and figma_node_id, the Emailsy asset ids you used in source_asset_ids, and a short description of the brief as prompt. Do it as the last step whenever you make a finished image for a workspace, without being asked, and tell the user it's waiting for approval in Emailsy. Never tell the user to export and upload by hand.
+Saving something you designed in Figma back into Mise (a banner, a social image, a finished email section): call Figma's download_assets on the finished frame, take its export URL (a temporary https link) and pass it straight to add_generated_asset as image_url, with figma_file_key and figma_node_id, the Mise asset ids you used in source_asset_ids, and a short description of the brief as prompt. Do it as the last step whenever you make a finished image for a workspace, without being asked, and tell the user it's waiting for approval in Mise. Never tell the user to export and upload by hand.
 
 What each kind of asset becomes in Figma:
 - image and logo: stay images. Place them with push_image_to_figma; never add text to them.
@@ -62,12 +62,12 @@ What each kind of asset becomes in Figma:
 - Assets (images, logos, products) are the source material. Blocks are email modules built from assets; a block references its assets and never replaces them.
 - product: a card built from the product feed: image, label, name, description, price and button. Build it like a Product block with live text (get_block_for_figma works on products too). Leave out any part whose value is empty (e.g. no button if cta is empty).
 
-Emailsy CMS holds a team's email-ready assets, grouped into brand workspaces: images, logos, products (from a feed, keyed by PID) and blocks (content shapes like Hero, Card, Product, Button and Footer, with copy and email-ready images, plus Design blocks: a finished design saved as one flat image).
+Mise holds a team's email-ready assets, grouped into brand workspaces: images, logos, products (from a feed, keyed by PID) and blocks (content shapes like Hero, Card, Product, Button and Footer, with copy and email-ready images, plus Design blocks: a finished design saved as one flat image).
 
-Which Figma file: each workspace can have a connected Figma file (figma_file in list_workspaces and in asset results). When the user doesn't give a Figma link, use the connected file of the asset's workspace without asking. A link the user gives always wins. If there is neither, ask for a link once and suggest connecting a file in Emailsy (Workspace settings).
+Which Figma file: each workspace can have a connected Figma file (figma_file in list_workspaces and in asset results). When the user doesn't give a Figma link, use the connected file of the asset's workspace without asking. A link the user gives always wins. If there is neither, ask for a link once and suggest connecting a file in Mise (Workspace settings).
 
 Putting an image into Figma (with the Figma MCP connected). The default is to ADD it to the canvas; only replace a layer if the user asks for that.
-- Add to the canvas (default): call Figma's upload_assets with count 1 and NO nodeIds. Figma creates a new frame holding the image on the file's current page. Pass its submitUrl to push_image_to_figma. The Emailsy server uploads the full-size image. Then, if useful, move the new frame next to existing content with use_figma so it isn't hidden under other frames, and tell the user where it is.
+- Add to the canvas (default): call Figma's upload_assets with count 1 and NO nodeIds. Figma creates a new frame holding the image on the file's current page. Pass its submitUrl to push_image_to_figma. The Mise server uploads the full-size image. Then, if useful, move the new frame next to existing content with use_figma so it isn't hidden under other frames, and tell the user where it is.
 - Replace a layer (only when the user says "replace", "swap" or "put it in/on this layer"): find the target first. Figma's get_metadata with no nodeId reports the user's current selection when the file is open in the Figma desktop app; otherwise use the layer name or link the user gave. Call upload_assets with count 1 and nodeIds [that node], then push_image_to_figma.
 - Never refuse or stall because a selection isn't visible: fall back to adding to the canvas and say so.
 - Never download images yourself or re-encode them; always use push_image_to_figma.
@@ -76,7 +76,7 @@ Turning a block into a component in the user's design system:
 1. Call get_block_for_figma to get the copy, image slots and field rules.
 2. Inspect the user's chosen Figma design-system file first (their styles, variables, components and naming). Build the component from their foundations, not from scratch styling.
 3. Build it as a COMPONENT with auto layout, named layers, text properties for each text field, and the image slots as image-filled rectangles at the given sizes (push images with push_image_to_figma).
-4. Call record_figma_placement with the file key and node id so the team can see it in Emailsy.
+4. Call record_figma_placement with the file key and node id so the team can see it in Mise.
 
 Card blocks can have layout "top", "left" or "right" (image beside the copy), a sub header (eyebrow), a star rating and a name. Cards read from a finished design keep that design as images.reference: view it with view_image slot "reference" to match the layout.
 
@@ -141,7 +141,7 @@ const TOOLS = [
   },
   {
     name: 'push_image_to_figma',
-    description: 'Upload an asset\'s full-size image straight from Emailsy to Figma. First call Figma\'s upload_assets with count 1: without nodeIds to add the image to the canvas as a new frame (the default), or with nodeIds [layer] to fill an existing layer. Pass its submitUrl here. For a block, name the image slot (e.g. "image" or "logo"). Returns Figma\'s response including the imageHash and where the image was placed.',
+    description: 'Upload an asset\'s full-size image straight from Mise to Figma. First call Figma\'s upload_assets with count 1: without nodeIds to add the image to the canvas as a new frame (the default), or with nodeIds [layer] to fill an existing layer. Pass its submitUrl here. For a block, name the image slot (e.g. "image" or "logo"). Returns Figma\'s response including the imageHash and where the image was placed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -170,7 +170,7 @@ const TOOLS = [
   },
   {
     name: 'record_figma_placement',
-    description: 'Record where an asset or block now lives in Figma, so the team can see it in Emailsy.',
+    description: 'Record where an asset or block now lives in Figma, so the team can see it in Mise.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -191,7 +191,7 @@ const TOOLS = [
   },
   {
     name: 'save_brand_kit',
-    description: 'Create or update a workspace\'s brand kit, e.g. from a Figma email design system. Saved as a draft for the team to approve in Emailsy. mode "merge" (default) fills and updates only the values you pass; "replace" starts from empty. Colours are #rrggbb. Logo: pass logo_url (an https image URL such as Figma download_assets output) to import it, or kit.logos.primary with an Emailsy logo asset id.',
+    description: 'Create or update a workspace\'s brand kit, e.g. from a Figma email design system. Saved as a draft for the team to approve in Mise. mode "merge" (default) fills and updates only the values you pass; "replace" starts from empty. Colours are #rrggbb. Logo: pass logo_url (an https image URL such as Figma download_assets output) to import it, or kit.logos.primary with a Mise logo asset id.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -210,7 +210,7 @@ const TOOLS = [
   },
   {
     name: 'add_generated_asset',
-    description: 'Save a finished image you made into a workspace\'s library as a draft, with where it came from: a design you built in Figma (pass the export URL from Figma\'s download_assets), or an image from an image model. Pass an https URL of the image; the Emailsy server downloads it, so the file never passes through you. A person approves it in Emailsy.',
+    description: 'Save a finished image you made into a workspace\'s library as a draft, with where it came from: a design you built in Figma (pass the export URL from Figma\'s download_assets), or an image from an image model. Pass an https URL of the image; the Mise server downloads it, so the file never passes through you. A person approves it in Mise.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -222,7 +222,7 @@ const TOOLS = [
         prompt: { type: 'string', description: 'The prompt or brief used to make it.' },
         model: { type: 'string', description: 'The model or tool that made it, e.g. "Figma" for a design you built there.' },
         source_product_pid: { type: 'string', description: 'PID of the product it was made from, if any.' },
-        source_asset_ids: { type: 'array', items: { type: 'string' }, description: 'Emailsy assets used as inputs (product photo, reference images).' },
+        source_asset_ids: { type: 'array', items: { type: 'string' }, description: 'Mise assets used as inputs (product photo, reference images).' },
         style: { type: 'string', description: 'Short style label, e.g. "studio, warm light".' },
         figma_file_key: { type: 'string', description: 'If it was designed in Figma: the file key.' },
         figma_node_id: { type: 'string', description: 'If it was designed in Figma: the frame\'s node id.' },
@@ -460,7 +460,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const w = await ownWorkspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
       const row = await ctx.repo.getBrandKit(w.ws.id);
-      if (!row) return text({ workspace: w.ws.name, status: 'none', kit: null, how_to: 'No brand kit yet. Build one from the brand\'s Figma email design system with save_brand_kit (see the server instructions), or ask the user to build it from their website in Emailsy → Brand kit.' });
+      if (!row) return text({ workspace: w.ws.name, status: 'none', kit: null, how_to: 'No brand kit yet. Build one from the brand\'s Figma email design system with save_brand_kit (see the server instructions), or ask the user to build it from their website in Mise → Brand kit.' });
       const kit = normaliseKit(row.kit, w.ws.name);
       const logos: Record<string, any> = {};
       for (const [role, id] of Object.entries(kit.logos)) {
@@ -532,7 +532,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
           : existing?.source || { type: 'manual', at: new Date().toISOString() },
         updated_by: ctx.userId,
       });
-      return text({ ok: true, workspace: w.ws.name, status: saved.status, version: saved.version, kit, missing: missing(kit), warnings: warnings(kit), notes, next: 'Saved as a draft. Ask the user to review and approve it in Emailsy → Brand kit.' });
+      return text({ ok: true, workspace: w.ws.name, status: saved.status, version: saved.version, kit, missing: missing(kit), warnings: warnings(kit), notes, next: 'Saved as a draft. Ask the user to review and approve it in Mise → Brand kit.' });
     }
     case 'add_generated_asset': {
       const w = await ownWorkspace(ctx, args.workspace_id);
@@ -582,7 +582,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
         },
         figma: args.figma_file_key && args.figma_node_id ? { file_key: String(args.figma_file_key).slice(0, 80), node_id: String(args.figma_node_id).slice(0, 40), component_key: null, note: 'Designed in Figma', placed_at: new Date().toISOString() } : null,
       });
-      return text({ ok: true, asset: publicAsset(row, w.ws), next: 'Saved as a draft in Emailsy. A person approves it there before it counts as approved.' });
+      return text({ ok: true, asset: publicAsset(row, w.ws), next: 'Saved as a draft in Mise. A person approves it there before it counts as approved.' });
     }
     default:
       return null;
@@ -617,7 +617,7 @@ export async function handleMessage(msg: RpcMessage, ctx: Ctx): Promise<object |
         return reply({
           protocolVersion: SUPPORTED_VERSIONS.includes(asked) ? asked : SUPPORTED_VERSIONS[0],
           capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
-          serverInfo: { name: 'emailsy-cms', title: 'Emailsy CMS', version: '0.2.0' },
+          serverInfo: { name: 'emailsy-cms', title: 'Mise', version: '0.2.0' },
           instructions: INSTRUCTIONS,
         });
       }
@@ -641,8 +641,8 @@ export async function handleMessage(msg: RpcMessage, ctx: Ctx): Promise<object |
             description: `${p.format} · ${p.uses.map((u) => USE_LABEL[u]).join(' + ')}`,
             arguments: [
               { name: 'brand', description: 'Workspace (brand) name', required: false },
-              ...(p.prompt.includes('{product}') ? [{ name: 'product', description: 'Product name or PID from Emailsy', required: false }] : []),
-              ...(p.prompt.includes('{image}') ? [{ name: 'image', description: 'Image name from Emailsy', required: false }] : []),
+              ...(p.prompt.includes('{product}') ? [{ name: 'product', description: 'Product name or PID from Mise', required: false }] : []),
+              ...(p.prompt.includes('{image}') ? [{ name: 'image', description: 'Image name from Mise', required: false }] : []),
             ],
           })),
         });
@@ -660,7 +660,7 @@ export async function handleMessage(msg: RpcMessage, ctx: Ctx): Promise<object |
           image: a.image ? String(a.image) : null,
           figma: w?.figma_file_url || null,
         });
-        return reply({ description: p.title, messages: [{ role: 'user', content: { type: 'text', text: `${text}\n\n(Use the Emailsy CMS connector for the brand kit and assets.)` } }] });
+        return reply({ description: p.title, messages: [{ role: 'user', content: { type: 'text', text: `${text}\n\n(Use the Mise connector for the brand kit and assets.)` } }] });
       }
       default:
         return fail(-32601, `Method not found: ${msg.method}`);

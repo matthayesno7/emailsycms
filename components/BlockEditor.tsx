@@ -168,12 +168,12 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const prompt = !saved
     ? ''
     : product
-    ? `Using Emailsy CMS, turn my product "${product.name}" (id ${product.id}) into a product card component in my design system${where}.`
+    ? `Using Mise, turn my product "${product.name}" (id ${product.id}) into a product card component in my design system${where}.`
     : isReadDesign(b)
-    ? `Using Emailsy CMS, build my design block "${b.name}" (id ${b.id}) as an editable component${where}. Match the original design's layout, colours, typeface and button style (they're in the block), keep the photo as an image and make all the copy live text.`
+    ? `Using Mise, build my design block "${b.name}" (id ${b.id}) as an editable component${where}. Match the original design's layout, colours, typeface and button style (they're in the block), keep the photo as an image and make all the copy live text.`
     : b.block_type === 'design'
-    ? `Using Emailsy CMS, rebuild my design block "${b.name}" (id ${b.id}) as an editable component in my design system${where}. Look at the design first, keep the photo as an image, and turn all the text into live text laid out exactly as in the design.`
-    : `Using Emailsy CMS, turn my block "${b.name}" (id ${b.id}) into a ${bt.name.toLowerCase()} component and add it to my design system${where}.`;
+    ? `Using Mise, rebuild my design block "${b.name}" (id ${b.id}) as an editable component in my design system${where}. Look at the design first, keep the photo as an image, and turn all the text into live text laid out exactly as in the design.`
+    : `Using Mise, turn my block "${b.name}" (id ${b.id}) into a ${bt.name.toLowerCase()} component and add it to my design system${where}.`;
 
   // Esc goes back (asking first if there are unsaved changes); ⌘S saves; arrows move between blocks.
   useEffect(() => {
@@ -348,8 +348,8 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
             <div className="figma">
               <div className="label">Make it a Figma component</div>
               <p className="tip">{b.block_type === 'design'
-                ? 'Ask Claude with the Emailsy CMS and Figma connectors on. It looks at this design, keeps the photo as an image and rebuilds the text as live, editable text in your design system.'
-                : 'Ask Claude with the Emailsy CMS and Figma connectors on. It builds a component from this block in the design system you choose, using your styles.'}</p>
+                ? 'Ask Claude with the Mise and Figma connectors on. It looks at this design, keeps the photo as an image and rebuilds the text as live, editable text in your design system.'
+                : 'Ask Claude with the Mise and Figma connectors on. It builds a component from this block in the design system you choose, using your styles.'}</p>
               <div className="promptbox">{prompt}</div>
               <button className="btn" type="button" onClick={async () => { try { await navigator.clipboard.writeText(prompt); toast('Copied. Paste it to Claude.'); } catch { toast(prompt); } }}>Copy request for Claude</button>
               {b.figma?.node_id && <p className="tip">In Figma: file {b.figma.file_key}, node {b.figma.node_id}.</p>}

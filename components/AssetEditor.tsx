@@ -225,7 +225,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
               <button type="button" disabled title="Coming soon"><Icon.Bag /><span><b>Shopify product <em className="soon">Soon</em></b><small>Add it to a product’s images</small></span></button>
               {!isVideo && onEmailCopy && <button type="button" onClick={onEmailCopy}><Icon.Mail /><span><b>Email</b><small>{it.images?.email ? `Email-ready, ${it.images.email.width}px, ${Math.round(it.images.email.bytes / 1024)} KB` : 'Download for Klaviyo, Mailchimp…'}</small></span></button>}
               <button type="button" onClick={async () => {
-                const prompt = `Put my Emailsy ${isVideo ? 'video' : 'image'} "${it.name}" (asset id ${it.id}) into my Figma file${figmaUrl ? ` ${figmaUrl}` : ''}.`;
+                const prompt = `Put my Mise ${isVideo ? 'video' : 'image'} "${it.name}" (asset id ${it.id}) into my Figma file${figmaUrl ? ` ${figmaUrl}` : ''}.`;
                 try { await navigator.clipboard.writeText(prompt); } catch {}
                 window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
               }}><Icon.Send /><span><b>Figma</b><small>Claude places it full size, or drag the image in</small></span></button>

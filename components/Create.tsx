@@ -77,7 +77,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     if (picked) return t;
     if (!t && fmt === null) return '';
     const f = fmt !== null ? FORMATS[fmt] : null;
-    return `For ${ws.name}: ${t || `make ${f?.ask}`}${t && f ? `. Make it ${f.ask}` : ''}. Use our Emailsy brand kit and assets, make it in Figma${ws.figma_file_url ? ` (${ws.figma_file_url})` : ''}, and save the result to Emailsy.`;
+    return `For ${ws.name}: ${t || `make ${f?.ask}`}${t && f ? `. Make it ${f.ask}` : ''}. Use our Mise brand kit and assets, make it in Figma${ws.figma_file_url ? ` (${ws.figma_file_url})` : ''}, and save the result to Mise.`;
   })();
   const blanks = { product: text.includes('[product]'), image: text.includes('[image]') };
   const chosen = fmt !== null ? FORMATS[fmt] : null;
@@ -111,7 +111,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const openInClaude = (t: string) => window.open(`https://claude.ai/new?q=${encodeURIComponent(t)}`, '_blank', 'noopener');
 
   const steps = [
-    { done: connected, label: 'Connect Claude', note: 'Emailsy + Figma', go: onConnect },
+    { done: connected, label: 'Connect Claude', note: 'Mise + Figma', go: onConnect },
     { done: kit?.status === 'approved', label: kit ? 'Approve your brand kit' : 'Brand kit', note: kit ? 'It’s a draft' : 'From your site or Figma', go: onBrandKit },
     { done: pool.length > 0, label: 'Add images', note: 'Photos, products, logos', go: undefined },
   ];
@@ -242,7 +242,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
 
 // Studio briefs don't need the Claude-chat housekeeping (saving, Figma, costs).
 function clean(t: string) {
-  return t.split(/(?<=\.)\s+/).filter((x) => !/save (it|the|all|each)|to emailsy|figma|show me the cost/i.test(x)).join(' ').trim() || t;
+  return t.split(/(?<=\.)\s+/).filter((x) => !/save (it|the|all|each)|to (emailsy|mise)|figma|show me the cost/i.test(x)).join(' ').trim() || t;
 }
 
 // A different starting image per idea, so the gallery doesn't repeat one photo.

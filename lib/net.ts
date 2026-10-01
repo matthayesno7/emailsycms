@@ -25,7 +25,7 @@ export async function fetchLimited(raw: string | URL, opts: { accept?: string; m
       signal: ctl.signal,
       redirect: 'follow',
       headers: {
-        'user-agent': opts.ua || 'Mozilla/5.0 (compatible; EmailsyCMS/1.0; +https://emailsy.app)',
+        'user-agent': opts.ua || 'Mozilla/5.0 (compatible; MiseCMS/1.0; +https://emailsy.app)',
         accept: opts.accept || '*/*',
         'accept-language': 'en-GB,en;q=0.9',
       },

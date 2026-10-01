@@ -45,7 +45,7 @@ export function HelpFigma() {
         <li><b>Drag any image</b> from the library straight onto your Figma canvas.</li>
         <li><b>Want it email-ready?</b> Open it, pick an email size or remove the background, then drag the preview into Figma.</li>
         <li><b>Replacing an image in a design?</b> Copy it, select the layer in Figma and press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>R</kbd>.</li>
-        <li><b>Need a component?</b> Open a block and copy the request for Claude. With the Emailsy CMS and Figma connectors on, Claude builds it in the design system you choose.</li>
+        <li><b>Need a component?</b> Open a block and copy the request for Claude. With the Mise and Figma connectors on, Claude builds it in the design system you choose.</li>
       </ol>
     </>
   );
@@ -94,7 +94,7 @@ export function Members({ supabase, ws, userId, toast }: { supabase: SupabaseCli
     const json = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { toast(json.error || 'Couldn’t send the invite.'); return; }
-    toast(json.existing ? `${email} already has an account. They'll see ${ws.name} next time they open Emailsy.` : `Invite sent to ${email}`);
+    toast(json.existing ? `${email} already has an account. They'll see ${ws.name} next time they open Mise.` : `Invite sent to ${email}`);
     setEmail('');
     load();
   }
@@ -169,8 +169,8 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
 
   const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast(t); } };
   const when = (d?: string) => (d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never');
-  const link = fresh || '<your Emailsy link>';
-  const cmdEmailsy = `claude mcp add --transport http emailsy "${link}"`;
+  const link = fresh || '<your Mise link>';
+  const cmdMise = `claude mcp add --transport http mise "${link}"`;
   const cmdFigma = 'claude mcp add --transport http figma https://mcp.figma.com/mcp';
   const Cmd = ({ text }: { text: string }) => (
     <div className="cmd"><code>{text}</code><button className="btn quiet" type="button" onClick={() => copy(text)}>Copy</button></div>
@@ -179,7 +179,7 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
   return (
     <div className={full ? 'connect' : ''}>
       {full ? <div className="head"><h1>Connect Claude</h1></div> : <h2>Claude connector</h2>}
-      <p className="tip cn-lede">Emailsy gives Claude your brand kit and assets, and a place to save what it makes. Figma is where Claude designs, animates and runs image and video models. Connect both once, then everything happens in a chat.</p>
+      <p className="tip cn-lede">Mise gives Claude your brand kit and assets, and a place to save what it makes. Figma is where Claude designs, animates and runs image and video models. Connect both once, then everything happens in a chat.</p>
 
       <div className="seg" role="group" aria-label="App">
         <button type="button" aria-pressed={app === 'claude'} onClick={() => setApp('claude')}>Claude (web and desktop)</button>
@@ -188,7 +188,7 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
 
       <ol className="cn-steps">
         <li>
-          <b>Create your Emailsy link</b>
+          <b>Create your Mise link</b>
           {fresh ? (
             <>
               <div className="label">Your link (shown once, keep it private)</div>
@@ -201,15 +201,15 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
         </li>
         {app === 'claude' ? (
           <>
-            <li><b>Add it to Claude</b><span>In Claude, open <a href="https://claude.ai/settings/connectors" target="_blank" rel="noreferrer">Settings → Connectors</a> → <em>Add custom connector</em>. Name it <em>Emailsy</em> and paste your link.</span></li>
+            <li><b>Add it to Claude</b><span>In Claude, open <a href="https://claude.ai/settings/connectors" target="_blank" rel="noreferrer">Settings → Connectors</a> → <em>Add custom connector</em>. Name it <em>Mise</em> and paste your link.</span></li>
             <li><b>Add Figma</b><span>In the same place, add the <em>Figma</em> connector from the directory and sign in. Claude designs, animates and generates images and video there.</span></li>
             <li><b>Start a new chat</b><span>Connectors load when a chat starts. Then pick anything from the prompt library on the Create page.</span></li>
           </>
         ) : (
           <>
-            <li><b>Add Emailsy</b><span>Run this in your terminal{fresh ? '' : ' (create a link first, it fills in here)'}:</span><Cmd text={cmdEmailsy} /></li>
+            <li><b>Add Mise</b><span>Run this in your terminal{fresh ? '' : ' (create a link first, it fills in here)'}:</span><Cmd text={cmdMise} /></li>
             <li><b>Add Figma</b><span>Then sign in when Claude Code asks (<code>/mcp</code>):</span><Cmd text={cmdFigma} /></li>
-            <li><b>Ask for something</b><span>Start <code>claude</code> and paste a prompt from the Create page. The prompts also show up in Claude Code’s <code>/</code> menu under Emailsy.</span></li>
+            <li><b>Ask for something</b><span>Start <code>claude</code> and paste a prompt from the Create page. The prompts also show up in Claude Code’s <code>/</code> menu under Mise.</span></li>
           </>
         )}
       </ol>

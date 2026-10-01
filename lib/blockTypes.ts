@@ -81,7 +81,7 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   design: {
     legacy: true,
     name: 'Design',
-    note: 'A finished design (photo and copy in one image). Emailsy reads it: the photo stays an image and the copy becomes editable, keeping the design’s own look.',
+    note: 'A finished design (photo and copy in one image). Mise reads it: the photo stays an image and the copy becomes editable, keeping the design’s own look.',
     fields: [
       { k: 'image', type: 'image', label: 'Photo', w: 600, fit: 'cover', natural: true },
       { k: 'layout', type: 'choice', label: 'Layout', options: [['top', 'Photo on top'], ['left', 'Photo left'], ['right', 'Photo right']] },

@@ -352,7 +352,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     toast(failed ? `${done} product images added. ${failed} couldn’t be downloaded; drop PID.jpg files to add them.` : `${done} product images added`);
   }
 
-  // Upload files; a dropped or chosen folder becomes an Emailsy folder of the same name.
+  // Upload files; a dropped or chosen folder becomes a Mise folder of the same name.
   async function ingest(files: FileList | File[], folderName?: string) {
     const list = [...files].filter((f) => !f.name.startsWith('.'));
     if (!list.length || !ws) return;
@@ -558,7 +558,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <div className="wsw">
           <button className="wsw-btn" type="button" aria-expanded={wsOpen} onClick={() => setWsOpen((o) => !o)}>
             <span className="dot" style={{ background: WS_COLORS[Math.max(0, wsIndex) % WS_COLORS.length] }}>{(curWs?.name[0] || 'E').toUpperCase()}</span>
-            <span className="wsw-name"><b>{curWs?.name || 'Emailsy'}</b><small>Emailsy</small></span>
+            <span className="wsw-name"><b>{curWs?.name || 'Mise'}</b><small>Mise</small></span>
             <Icon.Chevron />
           </button>
           {wsOpen && (

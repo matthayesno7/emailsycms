@@ -13,7 +13,7 @@ const BATCH = 12;
 const MAX_BYTES = 25 * 1024 * 1024;
 
 async function fetchImage(url: URL) {
-  const r = await fetchLimited(url, { accept: 'image/*', maxBytes: MAX_BYTES, ua: 'EmailsyCMS/1.0 (+product feed import)' });
+  const r = await fetchLimited(url, { accept: 'image/*', maxBytes: MAX_BYTES, ua: 'MiseCMS/1.0 (+product feed import)' });
   if ('error' in r) return { error: r.error === 'Too large' ? 'Over 25 MB' : r.error };
   if (!r.type.startsWith('image/')) return { error: `Not an image (${r.type || 'unknown'})` };
   return { buf: r.buf, type: r.type };

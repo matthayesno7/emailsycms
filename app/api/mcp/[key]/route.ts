@@ -14,7 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ key
   const { data: apiKey } = await db.from('api_keys').select('id, user_id').eq('key_hash', hashKey(key || '')).maybeSingle();
   if (!apiKey) {
     return Response.json(
-      { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'This connector link is not valid. Create a new one in Emailsy CMS → Claude connector.' } },
+      { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'This connector link is not valid. Create a new one in Mise → Claude connector.' } },
       { status: 401 },
     );
   }

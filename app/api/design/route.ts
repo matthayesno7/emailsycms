@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { askClaude, hasClaude, jsonFrom, MODEL } from '@/lib/anthropic';
 import { cleanSpec, DIRECTIONS, FORMATS, systemPrompt, userPrompt, type LibraryItem } from '@/lib/design';
 
-// Emailsy Studio: one design per call (the page asks for several in parallel, so they
+// Mise Studio: one design per call (the page asks for several in parallel, so they
 // arrive one by one). Also refines a design ("make the headline bigger") and resizes it.
 
 export const runtime = 'nodejs';

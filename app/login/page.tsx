@@ -38,7 +38,7 @@ export default function LoginPage() {
     <main className="auth">
       <div className="auth-card">
         <div className="org">
-          <span className="logo"><Mark /></span>Emailsy <span className="plan">CMS</span>
+          <span className="logo"><Mark /></span>Mise
         </div>
         {state === 'sent' ? (
           <>

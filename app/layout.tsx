@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Emailsy CMS',
+  title: 'Mise',
   description: 'Email-ready images, logos, products and content blocks for your Figma email design system.',
   icons: { icon: '/icon.svg' },
 };

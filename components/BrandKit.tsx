@@ -32,7 +32,7 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
   const src = (id?: string | null) => { const a = id ? items.find((i) => i.id === id) : null; return a?.storage_path ? urls[a.storage_path] : undefined; };
   const set = (fn: (k: BrandKit) => void) => { setKit((k) => { const n = structuredClone(k); fn(n); return n; }); setDirty(true); };
   const gaps = missing(kit), warns = warnings(kit);
-  const figmaPrompt = `Build the Emailsy brand kit for the "${ws.name}" workspace from our Figma email design system${ws.figma_file_url ? `: ${ws.figma_file_url}` : ' (paste the Figma link here)'}.`;
+  const figmaPrompt = `Build the Mise brand kit for the "${ws.name}" workspace from our Figma email design system${ws.figma_file_url ? `: ${ws.figma_file_url}` : ' (paste the Figma link here)'}.`;
 
   async function buildFromSite(e?: React.FormEvent) {
     e?.preventDefault();
@@ -81,7 +81,7 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
           </form>
           <div className="bk-start">
             <b>From your Figma design system</b>
-            <span>With the Emailsy CMS and Figma connectors on, ask Claude. It reads your foundations and saves the kit here as a draft.</span>
+            <span>With the Mise and Figma connectors on, ask Claude. It reads your foundations and saves the kit here as a draft.</span>
             <div className="promptbox">{figmaPrompt}</div>
             <button className="btn" type="button" onClick={() => copy(figmaPrompt)}>Copy request for Claude</button>
           </div>
