@@ -12,6 +12,7 @@ import { Icon, Wire, ART } from './icons';
 import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
 import BrandKitView from './BrandKit';
 import Create from './Create';
+import ImportSources from './ImportSources';
 import { TABS, tabOf, tabLabel } from '@/lib/formats';
 import type { BrandKitRow } from '@/lib/brandKit';
 
@@ -38,6 +39,17 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [folder, setFolder] = useState<string>('all'); // 'all' or a folder id
   const [newFolder, setNewFolder] = useState<string | null>(null);
   const [dropFolder, setDropFolder] = useState<string | null>(null);
+  const [boxReturn, setBoxReturn] = useState(false);
+  // Coming back from connecting Box: open the import window on the Box browser.
+  useEffect(() => {
+    const u = new URL(location.href);
+    if (u.searchParams.get('import') !== 'box') return;
+    const r = u.searchParams.get('result');
+    u.searchParams.delete('import'); u.searchParams.delete('result');
+    history.replaceState({}, '', u);
+    if (r === 'connected') { setBoxReturn(true); setModal('import'); }
+    else setTimeout(() => toast(r === 'cancelled' ? 'Box wasn’t connected.' : 'Couldn’t connect Box. Try again.'), 300);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [settingsTab, setSettingsTab] = useState<'workspace' | 'members' | 'claude' | 'help'>('workspace');
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
@@ -642,6 +654,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                       <button type="button" role="menuitem" onClick={() => fileImg.current?.click()}><Icon.Image /><span><b>Upload files</b><small>Images, logos, videos. Or drop them anywhere.</small></span></button>
                       <button type="button" role="menuitem" onClick={() => fileDir.current?.click()}><Icon.Folder /><span><b>Upload a folder</b><small>Keeps the folder’s name, like Dropbox</small></span></button>
                       <button type="button" role="menuitem" onClick={() => fileCsv.current?.click()}><Icon.Table /><span><b>Import a product feed</b><small>CSV from Shopify, Google Merchant…</small></span></button>
+                      <button type="button" role="menuitem" onClick={() => setModal('import')}><Icon.Cloud /><span><b>Import from Drive, Dropbox or Box</b><small>Copy images and videos in, or a whole Box folder</small></span></button>
                       <button type="button" role="menuitem" disabled><Icon.Bag /><span><b>Connect Shopify <em className="soon">Soon</em></b><small>Every product image, synced both ways</small></span></button>
                       <hr />
                       <button type="button" role="menuitem" onClick={() => setNewFolder('')}><Icon.Plus /><span><b>New folder</b></span></button>
@@ -701,7 +714,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     <button type="button" className="src" onClick={() => fileDir.current?.click()}><Icon.Folder /><span><b>A folder on your computer</b><small>Keeps the folder’s name</small></span></button>
                     <button type="button" className="src" onClick={() => fileCsv.current?.click()}><Icon.Table /><span><b>Product feed</b><small>CSV from Shopify or Google Merchant</small></span></button>
                     <button type="button" className="src" disabled><Icon.Bag /><span><b>Shopify <em className="soon">Soon</em></b><small>Every product image, synced both ways</small></span></button>
-                    <button type="button" className="src" disabled><Icon.Cloud /><span><b>Google Drive or Dropbox <em className="soon">Soon</em></b><small>Import a shared folder</small></span></button>
+                    <button type="button" className="src" onClick={() => setModal('import')}><Icon.Cloud /><span><b>Google Drive, Dropbox or Box</b><small>Pick files, or import a whole Box folder</small></span></button>
                   </div>
                 </div>
               ) : !visible.length ? (
@@ -793,6 +806,14 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         />
       )}
 
+      {modal === 'import' && curWs && (
+        <Modal onClose={() => { setModal(null); setBoxReturn(false); }}>
+          <h2>Import from where your images live</h2>
+          <ImportSources ws={ws} folderId={folder !== 'all' ? folder : null} folderName={folder !== 'all' ? folders.find((f) => f.id === folder)?.name : null}
+            startBox={boxReturn} toast={toast}
+            onDone={(landed) => { loadAssets(ws); loadFolders(ws); setPage('library'); setView('all'); if (landed) setFolder(landed); }} />
+        </Modal>
+      )}
       {modal === 'blocktype' && (
         <Modal wide onClose={() => { setModal(null); setConvertFrom(null); }}>
           <BlockTypePicker from={convertFrom ? itemById(convertFrom) : null}

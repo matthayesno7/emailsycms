@@ -15,7 +15,7 @@ export function allowedUrl(raw: string) {
 
 type Fetched = { buf: Buffer; type: string; url: string } | { error: string };
 
-export async function fetchLimited(raw: string | URL, opts: { accept?: string; maxBytes?: number; timeoutMs?: number; ua?: string; fetchImpl?: typeof fetch } = {}): Promise<Fetched> {
+export async function fetchLimited(raw: string | URL, opts: { accept?: string; maxBytes?: number; timeoutMs?: number; ua?: string; fetchImpl?: typeof fetch; headers?: Record<string, string> } = {}): Promise<Fetched> {
   const url = allowedUrl(String(raw));
   if (!url) return { error: 'Not a public web address' };
   const ctl = new AbortController();
@@ -28,6 +28,7 @@ export async function fetchLimited(raw: string | URL, opts: { accept?: string; m
         'user-agent': opts.ua || 'Mozilla/5.0 (compatible; MiseCMS/1.0; +https://emailsy.app)',
         accept: opts.accept || '*/*',
         'accept-language': 'en-GB,en;q=0.9',
+        ...(opts.headers || {}),
       },
     });
     if (res.url && !allowedUrl(res.url)) return { error: 'Redirected to a private address' };

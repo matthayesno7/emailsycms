@@ -69,6 +69,29 @@ Set `NEXT_PUBLIC_APP_URL` to that domain and redeploy (it is baked in at build t
 
 The link contains a secret key. Anyone with it can read that user's workspaces, so treat it like a password; turn it off in the app if it leaks.
 
+
+## 5. Import from Google Drive, Dropbox and Box (optional)
+
+Each source appears in **Add → Import from Drive, Dropbox or Box** once its keys are set as Railway variables (no rebuild needed for these; they're read at runtime). Files are copied into Mise; re-importing the same file is skipped.
+
+Run `supabase/migrations/20261001120000_connections.sql` first (Box keeps its sign-in there, readable only by the server).
+
+**Dropbox** (pick files with the Dropbox Chooser):
+1. dropbox.com/developers → Create app → Scoped access → Full Dropbox (the Chooser itself needs no scopes).
+2. Settings → *Chooser / Saver / Embedder domains*: add your app's domain (e.g. `misedam-production.up.railway.app`).
+3. Set `DROPBOX_APP_KEY`.
+
+**Google Drive** (pick files with the Google Picker; access is limited to the files picked):
+1. console.cloud.google.com → new project → enable **Google Drive API** and **Google Picker API**.
+2. OAuth consent screen: External, add the scope `.../auth/drive.file` (non-sensitive, so no Google review needed).
+3. Credentials → OAuth client ID (Web application), Authorised JavaScript origin = your app URL. Then Credentials → API key (restrict it to the Picker API and your domain).
+4. Set `GOOGLE_CLIENT_ID`, `GOOGLE_API_KEY`, and `GOOGLE_APP_ID` (the project *number* from the project dashboard).
+
+**Box** (connect once, then browse and import files or whole folders; folder names are kept):
+1. developer.box.com → My Apps → Create new app → Custom App → **User Authentication (OAuth 2.0)**.
+2. Redirect URI: `https://<your-app>/api/connect/box/callback`. Scope: *Read all files and folders stored in Box*.
+3. Set `BOX_CLIENT_ID` and `BOX_CLIENT_SECRET`.
+
 ## How the pieces fit
 
 ```
