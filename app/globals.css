@@ -1163,3 +1163,9 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .lib-tabs .tabs-row button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:500}
 .lib-tabs .tabs-row button[aria-pressed="true"] span{color:#fff;opacity:.7}
 .lib-tabs .source{margin-bottom:0}
+/* asset page: the picture fits the panel (the focal-point wrapper had let it run off the bottom) */
+.ed-stage>.ed-view{flex:none;max-width:100%;max-height:100%;line-height:0}
+.ed-stage:not(.actual) .ed-view .ed-out{max-width:100%;max-height:calc(100vh - 210px);width:auto;height:auto;object-fit:contain}
+.ed-stage.actual>.ed-view{max-width:none;max-height:none}
+.ed-stage.actual .ed-view .ed-out{max-width:none;max-height:none}
+@media (max-width:900px){.ed-stage:not(.actual) .ed-view .ed-out{max-height:calc(58vh - 48px)}}
