@@ -7,6 +7,7 @@ import { cookies } from 'next/headers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from './supabase/admin';
 import { matchesRules, type Rules } from './collections';
+import { collectionHits } from './search';
 import type { BrandKit } from './brandKit';
 
 export const FORMATS = ['original', 'web', 'email'] as const;
@@ -136,7 +137,7 @@ export async function shareAssets(db: SupabaseClient, s: ShareRow): Promise<any[
     rows = data || [];
   } else if (s.kind === 'collection' && s.collection_id) {
     const { data: c } = await db.from('collections').select('rules').eq('id', s.collection_id).eq('workspace_id', s.workspace_id).maybeSingle();
-    if (c) rows = (await allWorkspaceAssets(db, s.workspace_id)).filter((a) => matchesRules(a, c.rules as Rules));
+    if (c) { const hits = await collectionHits(db, s.workspace_id, c.rules as Rules); rows = (await allWorkspaceAssets(db, s.workspace_id)).filter((a) => matchesRules(a, c.rules as Rules, hits)); }
   }
   // A link to hand-picked files may include drafts the sender chose; folders and collections never do.
   return rows.filter((a) => a.kind !== 'block' && a.storage_path && (s.kind === 'assets' || a.status !== 'draft'));
@@ -162,7 +163,8 @@ export async function portalContents(db: SupabaseClient, p: PortalRow): Promise<
     if (ids.length) sections.push({ id: `f:${f.id}`, name: f.name, asset_ids: ids });
   }
   for (const c of (colls || []).filter((c: any) => p.collection_ids.includes(c.id))) {
-    const ids = all.filter((a: any) => matchesRules(a, c.rules as Rules)).map((a: any) => a.id);
+    const hits = await collectionHits(db, p.workspace_id, c.rules as Rules);
+    const ids = all.filter((a: any) => matchesRules(a, c.rules as Rules, hits)).map((a: any) => a.id);
     if (ids.length) sections.push({ id: `c:${c.id}`, name: c.name, asset_ids: ids });
   }
   const inSections = new Set(sections.flatMap((s) => s.asset_ids));

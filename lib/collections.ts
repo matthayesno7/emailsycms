@@ -1,9 +1,10 @@
 // Smart collections (saved searches that fill themselves) and the plain search over what
 // auto-organise found. Shared by the library and, later, portals.
 
-export type Rules = { tags?: string[]; match?: 'any' | 'all'; kinds?: string[]; text?: string; on_brand?: boolean | null; colours?: string[] };
+// text is matched by meaning (AI search), not just the exact words. ai holds how Claude read it, so it's read once, when saved.
+export type Rules = { tags?: string[]; match?: 'any' | 'all'; kinds?: string[]; text?: string; on_brand?: boolean | null; colours?: string[]; ai?: { text: string; filters: Record<string, any> } | null };
 export type Collection = { id: string; workspace_id: string; name: string; rules: Rules; position?: number };
-type A = { kind: string; name: string; pid?: string | null; description?: string | null; tags?: string[] | null; text_in_image?: string | null; colour_names?: string[] | null; on_brand?: boolean | null; fields?: any };
+type A = { id?: string; kind: string; name: string; pid?: string | null; description?: string | null; tags?: string[] | null; text_in_image?: string | null; colour_names?: string[] | null; on_brand?: boolean | null; fields?: any };
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 
@@ -18,17 +19,26 @@ export function matchesQuery(a: A, q: string, hay = haystack(a)) {
   return ws.every((w) => hay.includes(w) && new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(hay));
 }
 
-export function matchesRules(a: A, r: Rules) {
+// The words to search for a collection's text rule, and the filters Claude read from it.
+export function collectionQuery(r: Rules): { q: string; filters: Record<string, any> } | null {
+  if (!r.text?.trim()) return null;
+  return { q: r.ai?.text ?? r.text.trim(), filters: { ...(r.ai?.filters || {}), ...(r.kinds?.length ? { kinds: r.kinds } : {}) } };
+}
+
+// hits: ids the AI search found for the text rule (by meaning). Without them, the words are matched as typed.
+export function matchesRules(a: A, r: Rules, hits?: Set<string> | null) {
   if (a.kind === 'block') return false;
   if (r.kinds?.length && !r.kinds.includes(a.kind)) return false;
   if (typeof r.on_brand === 'boolean' && a.on_brand !== r.on_brand) return false;
   const tags = (a.tags || []).map(norm);
   if (r.tags?.length) {
-    const has = (t: string) => tags.some((x) => x === norm(t) || x.split(' ').includes(norm(t)));
+    // A tag matches loosely: the same tag, one containing it, or (for "email marketing") every word somewhere in its tags or description.
+    const tagHay = norm([(a.tags || []).join(' '), a.description].filter(Boolean).join(' '));
+    const has = (t: string) => { const n = norm(t); return tags.some((x) => x === n || x.includes(n) || n.includes(x) && x.length > 3) || n.split(/\s+/).every((w) => new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(tagHay)); };
     if (r.match === 'all' ? !r.tags.every(has) : !r.tags.some(has)) return false;
   }
   if (r.colours?.length && !r.colours.some((c) => (a.colour_names || []).includes(c))) return false;
-  if (r.text && !matchesQuery(a, r.text)) return false;
+  if (r.text && !(a.id && hits?.has(a.id)) && !matchesQuery(a, r.text)) return false;
   return true;
 }
 

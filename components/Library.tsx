@@ -19,7 +19,7 @@ import { TABS, tabOf, tabLabel } from '@/lib/formats';
 import { normaliseKit, type BrandKitRow } from '@/lib/brandKit';
 import { studioKit } from '@/lib/studioBrand';
 import { dhash, findDuplicate } from '@/lib/phash';
-import { describeRules, haystack, matchesQuery, matchesRules, suggestCollections, type Collection, type Rules } from '@/lib/collections';
+import { collectionQuery, describeRules, haystack, matchesQuery, matchesRules, suggestCollections, type Collection, type Rules } from '@/lib/collections';
 import AutoOrganise from './AutoOrganise';
 import { chipsOf, removeChip, searchKey, type SearchFilters } from '@/lib/searchChips';
 import CollectionForm from './CollectionForm';
@@ -291,9 +291,30 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   }, [items]);
   const showOrigins = !['product', 'block'].includes(view);
   const curColl = collection ? collections.find((c) => c.id === collection) || null : null;
-  const inFolder = useCallback((it: Asset) => (curColl ? matchesRules(it, curColl.rules) : folder === 'all' || it.folder_id === folder), [folder, curColl]);
+  // Smart collections with words match by meaning: ask the AI search which files they find, and again as files arrive.
+  const [collHits, setCollHits] = useState<Record<string, Set<string>>>({});
+  const collSig = collections.map((c) => c.id + JSON.stringify(collectionQuery(c.rules))).join('|');
+  const itemSig = items.length + ':' + items.filter((i) => i.ai_status === 'done').length;
+  useEffect(() => {
+    if (!ws || searchOff.current) return;
+    const want = collections.filter((c) => collectionQuery(c.rules));
+    if (!want.length) return;
+    let gone = false;
+    const timer = setTimeout(async () => {
+      const got: Record<string, Set<string>> = {};
+      await Promise.all(want.map(async (c) => {
+        const cq = collectionQuery(c.rules)!;
+        const r = await fetch('/api/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws, q: cq.q, filters: cq.filters }) }).catch(() => null);
+        const j = r?.ok ? await r.json().catch(() => null) : null;
+        if (j?.hits) got[c.id] = new Set(j.hits.map((h: any) => h.id));
+      }));
+      if (!gone) setCollHits((cur) => ({ ...cur, ...got }));
+    }, 400);
+    return () => { gone = true; clearTimeout(timer); };
+  }, [ws, collSig, itemSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const inFolder = useCallback((it: Asset) => (curColl ? matchesRules(it, curColl.rules, collHits[curColl.id]) : folder === 'all' || it.folder_id === folder), [folder, curColl, collHits]);
   const dupes = useMemo(() => items.filter((i) => i.duplicate_of && !i.duplicate_ok).length, [items]);
-  const collCounts = useMemo(() => Object.fromEntries(collections.map((c) => [c.id, items.filter((i) => matchesRules(i, c.rules)).length])), [collections, items]);
+  const collCounts = useMemo(() => Object.fromEntries(collections.map((c) => [c.id, items.filter((i) => matchesRules(i, c.rules, collHits[c.id])).length])), [collections, items, collHits]);
   const suggestions = useMemo(() => suggestCollections(items, collections), [items, collections]);
   const hay = useMemo(() => new Map(items.map((i) => [i.id, haystack(i)])), [items]);
   const inView = useCallback((it: Asset) => inFolder(it) && (view === 'all' || tabOf(it) === view), [view, inFolder]);
@@ -1072,7 +1093,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       )}
       {collForm && (
         <Modal onClose={() => setCollForm(null)}>
-          <CollectionForm initial={collForm} items={items}
+          <CollectionForm initial={collForm} items={items} ws={ws}
             onSave={(c) => saveCollection(c, collForm.id)}
             onDelete={collForm.id ? () => deleteCollection(collForm.id!) : undefined}
             onCancel={() => setCollForm(null)} />

@@ -166,3 +166,12 @@ export async function searchAssets(db: SupabaseClient, o: { ws: string[]; q: str
   if (error) throw new Error(error.message);
   return { hits: keepRelevant((data || []) as any[]), text, filters, vector: !!vec, understood: didUnderstand };
 }
+
+// The ids a smart collection's text rule finds by meaning (share links and portals use this too).
+export async function collectionHits(db: SupabaseClient, ws: string, rules: { text?: string; kinds?: string[]; ai?: { text: string; filters: Record<string, any> } | null }): Promise<Set<string> | null> {
+  if (!rules?.text?.trim()) return null;
+  try {
+    const r = await searchAssets(db, { ws: [ws], q: rules.ai?.text ?? rules.text.trim(), filters: { ...(rules.ai?.filters || {}), ...(rules.kinds?.length ? { kinds: rules.kinds } : {}) } as Filters, limit: 200 });
+    return new Set(r.hits.map((h) => h.id));
+  } catch { return null; }
+}
