@@ -743,10 +743,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   return (
     <div className="app">
       <aside className={'side' + (sideOpen ? ' open' : '')} aria-label="Navigation">
+        <div className="mise-logo" aria-label="Mise"><span className="mise-mark"><Icon.Mark /></span><b>Mise</b></div>
         <div className="wsw">
           <button className="wsw-btn" type="button" aria-expanded={wsOpen} onClick={() => setWsOpen((o) => !o)}>
             <span className="dot" style={{ background: WS_COLORS[Math.max(0, wsIndex) % WS_COLORS.length] }}>{(curWs?.name[0] || 'E').toUpperCase()}</span>
-            <span className="wsw-name"><b>{curWs?.name || 'Mise'}</b><small>Mise</small></span>
+            <span className="wsw-name"><small>Brand</small><b>{curWs?.name || '…'}</b></span>
             <Icon.Chevron />
           </button>
           {wsOpen && (
@@ -807,7 +808,13 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 ))}
               </div>
               <div className="settings-body">
-                {settingsTab === 'workspace' && <WorkspaceSettings supabase={supabase} ws={curWs} toast={toast} onSaved={() => loadWorkspaces(curWs.id)} />}
+                {settingsTab === 'workspace' && <WorkspaceSettings supabase={supabase} ws={curWs} toast={toast} onSaved={() => loadWorkspaces(curWs.id)}
+                  onDeleted={async () => {
+                    const next = workspaces.find((w) => w.id !== curWs.id);
+                    try { localStorage.removeItem('emailsy.ws'); } catch {}
+                    if (next) { setWs(next.id); await loadWorkspaces(next.id); setPage('library'); setView('all'); setFolder('all'); }
+                    else location.href = '/'; // no brands left: start fresh
+                  }} />}
                 {settingsTab === 'organise' && <AutoOrganise ws={curWs.id} toast={toast} />}
                 {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}

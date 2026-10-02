@@ -248,7 +248,7 @@ export function parseFigmaUrl(raw: string) {
   }
 }
 
-export function WorkspaceSettings({ supabase, ws, toast, onSaved }: { supabase: SupabaseClient; ws: Ws; toast: (m: string) => void; onSaved: () => void }) {
+export function WorkspaceSettings({ supabase, ws, toast, onSaved, onDeleted }: { supabase: SupabaseClient; ws: Ws; toast: (m: string) => void; onSaved: () => void; onDeleted?: () => void }) {
   const owner = ws.role === 'owner';
   const [name, setName] = useState(ws.name);
   const [link, setLink] = useState(ws.figma_file_url || '');
@@ -291,6 +291,61 @@ export function WorkspaceSettings({ supabase, ws, toast, onSaved }: { supabase: 
       ) : (
         <p className="tip">Only owners can change workspace settings.</p>
       )}
+      {owner && onDeleted && <DeleteBrand supabase={supabase} ws={ws} toast={toast} onDeleted={onDeleted} />}
     </form>
+  );
+}
+
+// Delete a brand: everything in it (assets and their versions, files, folders, collections,
+// brand kit, portals and share links, team access) goes. Owners only; type the name to confirm.
+function DeleteBrand({ supabase, ws, toast, onDeleted }: { supabase: SupabaseClient; ws: Ws; toast: (m: string) => void; onDeleted: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    supabase.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', ws.id).then(({ count: n }) => setCount(n ?? 0));
+  }, [open, supabase, ws.id]);
+
+  async function remove() {
+    setBusy(true);
+    // Files first (the database rows go with the brand): every file of every asset and version.
+    const paths = new Set<string>();
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase.from('assets').select('storage_path, images').eq('workspace_id', ws.id).range(from, from + 999);
+      for (const a of (data || []) as any[]) { if (a.storage_path) paths.add(a.storage_path); for (const s of Object.values(a.images || {}) as any[]) { if (s?.path) paths.add(s.path); if (s?.original_path) paths.add(s.original_path); } }
+      if (!data || data.length < 1000) break;
+    }
+    const { data: vers } = await supabase.from('asset_versions').select('storage_path, images').eq('workspace_id', ws.id).limit(10000);
+    for (const v of (vers || []) as any[]) { if (v.storage_path) paths.add(v.storage_path); if (v.images?.email?.path) paths.add(v.images.email.path); }
+    const list = [...paths].filter((p) => p.startsWith(ws.id + '/'));
+    for (let i = 0; i < list.length; i += 500) await supabase.storage.from('assets').remove(list.slice(i, i + 500));
+    const { error } = await supabase.from('workspaces').delete().eq('id', ws.id);
+    setBusy(false);
+    if (error) { toast('Couldn’t delete the brand. Only owners can.'); return; }
+    toast(`${ws.name} deleted`);
+    onDeleted();
+  }
+
+  return (
+    <div className="danger">
+      <h3>Delete this brand</h3>
+      {!open ? (
+        <>
+          <p className="tip">Removes {ws.name} for everyone: its assets and their versions, files, folders, collections, brand kit, portals, share links and team access. This can’t be undone.</p>
+          <button className="btn danger-btn" type="button" onClick={() => setOpen(true)}>Delete {ws.name}…</button>
+        </>
+      ) : (
+        <>
+          <p className="tip">{count === null ? 'Counting…' : `${count.toLocaleString()} asset${count === 1 ? '' : 's'} will be deleted, with every version.`} Portals and share links stop working straight away. Type <b>{ws.name}</b> to confirm.</p>
+          <input className="in" value={typed} autoFocus onChange={(e) => setTyped(e.target.value)} placeholder={ws.name} aria-label="Type the brand name to confirm" />
+          <div className="actions">
+            <button className="btn quiet" type="button" onClick={() => { setOpen(false); setTyped(''); }} disabled={busy}>Keep it</button>
+            <button className="btn danger-btn solid" type="button" disabled={busy || typed.trim() !== ws.name.trim()} onClick={remove}>{busy ? 'Deleting…' : 'Delete forever'}</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
