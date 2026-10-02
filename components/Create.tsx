@@ -120,13 +120,14 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
 
   // Editing a saved design: the same Studio, opened on that design with its layout live.
   if (editDesign?.provenance?.spec) {
+    const current = items.find((i) => i.id === editDesign.id) || editDesign; // stays up to date after each save
     const size = editDesign.provenance.size || { w: editDesign.width || 1200, h: editDesign.height || 600 };
     const initial: Variant[] = [{ key: 'edit', size, status: 'ready', spec: editDesign.provenance.spec, history: [], label: 'Current version' }];
     return (
       <div className="create">
         {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
-        <Studio key={`edit-${editDesign.id}-${editDesign.version || 1}`} ws={ws} userId={userId} supabase={supabase} brand={studioBrand} fonts={fonts} srcOf={srcOf}
-          brief={editDesign.provenance.prompt || editDesign.name} size={size} initial={initial} editOf={editDesign}
+        <Studio key={`edit-${editDesign.id}`} ws={ws} userId={userId} supabase={supabase} brand={studioBrand} fonts={fonts} srcOf={srcOf}
+          brief={editDesign.provenance.prompt || editDesign.name} size={size} initial={initial} editOf={current}
           onBrief={() => {}} onClose={() => onEditDone?.()} onSaved={onSaved}
           onOpenAsset={() => onEditDone?.()} toast={toast} />
       </div>
