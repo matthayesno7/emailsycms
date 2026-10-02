@@ -57,6 +57,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
 }) {
   const [editing, setEditing] = useState<false | 'image' | 'design' | 'product' | 'figma'>(false);
   const [zoom, setZoom] = useState<'fit' | '1x'>('fit');
+  const [picking, setPicking] = useState(false); // choosing the focal point: only then is the picture clickable and the marker shown
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [focus, setFocus] = useState<Focus>(it.focus || { x: 0.5, y: 0.5 });
   const [dlOpen, setDlOpen] = useState(false);
@@ -66,7 +67,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
 
   useEffect(() => setName(it.name), [it.name]);
   useEffect(() => setFocus(it.focus || { x: 0.5, y: 0.5 }), [it.focus]);
-  useEffect(() => setEditing(false), [it.id, it.version]);
+  useEffect(() => { setEditing(false); setPicking(false); }, [it.id, it.version]);
   // Esc while editing leaves edit mode (and doesn't close the page underneath).
   useEffect(() => {
     if (!editing) return;
@@ -212,7 +213,9 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         <div className="ed-body">
           <section className="ed-canvas" aria-label="Canvas">
             <div className="ed-tools">
-              {it.kind === 'image' && src && !isVideo && <span className="tip">Click the picture to set its focal point: Mise keeps it in view whenever it crops this image.</span>}
+              {it.kind === 'image' && src && !isVideo && (picking
+                ? <><span className="tip">Click the part of the picture that must stay in view when it’s cropped.</span><button type="button" className="btn quiet sm-btn" onClick={() => setPicking(false)}>Done</button></>
+                : <button type="button" className="btn quiet sm-btn" onClick={() => { setZoom('fit'); setPicking(true); }} title="The part Mise keeps in view whenever it crops this image">Focal point</button>)}
               <span className="spacer" />
               {!isVideo && src && (
                 <div className="seg" role="group" aria-label="Zoom">
@@ -227,11 +230,11 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
               ) : !src ? (
                 <p className="tip">No image yet.{it.pid ? <> Drop <code>{it.pid}.jpg</code> (or .png) onto the library and it attaches to this product.</> : null}</p>
               ) : (
-                <div className="ed-view">
+                <div className={'ed-view' + (picking ? ' picking' : '')}>
                   <img className="ed-out" src={src} alt={it.fields?.alt || it.name} draggable data-drag={base()} data-png={/png/.test(it.mime || '') ? '1' : '0'}
                     onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                    onPointerUp={(e) => { if (it.kind === 'image') setFocal(pointAt(e)); }} />
-                  {it.kind === 'image' && it.focus && <i className="ed-focus" style={{ left: `${focus.x * 100}%`, top: `${focus.y * 100}%` }} />}
+                    onPointerUp={(e) => { if (picking && it.kind === 'image') setFocal(pointAt(e)); }} />
+                  {picking && <i className="ed-focus" style={{ left: `${focus.x * 100}%`, top: `${focus.y * 100}%` }} />}
                 </div>
               )}
               {src && !isVideo && <span className="hint">Drag into Figma, or copy and press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>R</kbd> on a selected layer to replace its image</span>}

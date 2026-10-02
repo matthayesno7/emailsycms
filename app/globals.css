@@ -1169,3 +1169,10 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .ed-stage.actual>.ed-view{max-width:none;max-height:none}
 .ed-stage.actual .ed-view .ed-out{max-width:none;max-height:none}
 @media (max-width:900px){.ed-stage:not(.actual) .ed-view .ed-out{max-height:calc(58vh - 48px)}}
+
+/* focal point: only while choosing it */
+.ed-view .ed-out{cursor:grab}
+.ed-view.picking .ed-out{cursor:crosshair}
+.ed-view.picking::after{content:"";position:absolute;inset:0;border-radius:3px;box-shadow:inset 0 0 0 2px var(--accent);pointer-events:none}
+.ed-view .ed-focus{width:22px;height:22px;margin:-11px 0 0 -11px;border:2px solid #fff;background:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.3)}
+.sm-btn{padding:5px 12px;font-size:13.5px}
