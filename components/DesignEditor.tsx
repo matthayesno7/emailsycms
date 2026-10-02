@@ -14,7 +14,7 @@ const ROLE: Record<string, string> = { headline: 'Headline', subhead: 'Subhead',
 // Edit mode for designs made in the Studio, right on the asset page: the design big, its
 // layout live. Change the words, swap a photo or the logo, or say what to change. Saves as a
 // new version of this asset (the current one is kept) or as a copy.
-export default function DesignEditor({ it, supabase, wsId, brand, fonts, srcOf, library, thumbOf, onCancel, onSaved, toast }: {
+export default function DesignEditor({ it, supabase, wsId, brand, fonts, srcOf, library, thumbOf, onCancel, onSaved, toast, rebuiltFrom }: {
   it: Asset;
   supabase: SupabaseClient;
   wsId: string;
@@ -26,6 +26,7 @@ export default function DesignEditor({ it, supabase, wsId, brand, fonts, srcOf, 
   onCancel: () => void;
   onSaved: (newId?: string) => void;
   toast: (m: string) => void;
+  rebuiltFrom?: string | null; // the original picture, when this layout was rebuilt from it
 }) {
   const size: { w: number; h: number } = it.provenance?.size || { w: it.width || 1200, h: it.height || 600 };
   const [spec, setSpec] = useState<Spec>(it.provenance.spec);
@@ -34,7 +35,8 @@ export default function DesignEditor({ it, supabase, wsId, brand, fonts, srcOf, 
   const [busy, setBusy] = useState<'' | 'refine' | 'version' | 'copy' | 'png'>('');
   const [swap, setSwap] = useState<number | null>(null); // which image layer is being swapped
   const [q, setQ] = useState('');
-  const changed = history.length > 0;
+  const changed = history.length > 0 || !!rebuiltFrom;
+  const [compare, setCompare] = useState(false);
 
   const update = (next: Spec) => { setHistory((h) => [...h, spec]); setSpec(next); };
   const setLayer = (i: number, patch: Partial<Layer>) => update({ ...spec, layers: spec.layers.map((l, j) => (j === i ? ({ ...l, ...patch } as Layer) : l)) });
@@ -72,7 +74,7 @@ export default function DesignEditor({ it, supabase, wsId, brand, fonts, srcOf, 
     setBusy('version');
     try {
       const f = await file();
-      const { error } = await supabase.rpc('asset_new_version', { p_asset: it.id, p_file: f, p_note: 'Edited the design', p_provenance: provenance() });
+      const { error } = await supabase.rpc('asset_new_version', { p_asset: it.id, p_file: f, p_note: rebuiltFrom ? 'Made editable and edited' : 'Edited the design', p_provenance: provenance() });
       if (error) throw error;
       await supabase.from('assets').update({ fields: { ...(it.fields || {}), alt: alt() } }).eq('id', it.id);
       toast(`Saved as version ${(it.version || 1) + 1}. The previous version is kept.`);
@@ -115,13 +117,15 @@ export default function DesignEditor({ it, supabase, wsId, brand, fonts, srcOf, 
       <section className="ed-canvas" aria-label="Design">
         {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
         <div className="ed-tools">
-          <button type="button" className="btn quiet" onClick={undo} disabled={!changed || !!busy}>↶ Undo</button>
+          <button type="button" className="btn quiet" onClick={undo} disabled={!history.length || !!busy}>↶ Undo</button>
+          {rebuiltFrom && <button type="button" className="btn quiet" aria-pressed={compare} onPointerDown={() => setCompare(true)} onPointerUp={() => setCompare(false)} onPointerLeave={() => setCompare(false)} title="Hold to see the original">Hold to compare with the original</button>}
           <span className="spacer" />
           <span className="ie-out">{size.w}×{size.h} · PNG</span>
         </div>
         <div className="ed-stage de-stage">
           <div className="de-fit" style={wide >= 1 ? { width: `min(100%, calc((100vh - 220px) * ${wide}))` } : { height: 'calc(100vh - 220px)', aspectRatio: `${wide}` }}>
-            <div className={'de-canvas' + (busy === 'refine' ? ' busy' : '')}>
+            <div className={'de-canvas' + (busy === 'refine' ? ' busy' : '')} style={{ position: 'relative' }}>
+              {compare && rebuiltFrom && <img src={rebuiltFrom} alt="The original" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 5 }} />}
               <DesignCanvas spec={spec} size={size} brand={brand} srcOf={srcOf} editable={!busy} onText={(i, t) => { const l = spec.layers[i]; if (l && (l.type === 'text' || l.type === 'button') && t && t !== l.text) setLayer(i, { text: t } as any); }} />
             </div>
           </div>
@@ -183,7 +187,7 @@ export default function DesignEditor({ it, supabase, wsId, brand, fonts, srcOf, 
           </form>
         </div>
         <div className="ie-save">
-          <p className="tip">{changed ? 'The current version is kept in the history.' : 'Make a change to save it.'}</p>
+          <p className="tip">{rebuiltFrom && !history.length ? 'Rebuilt from the picture. Change the words or anything else, then save; the original stays in the history.' : changed ? 'The current version is kept in the history.' : 'Make a change to save it.'}</p>
           <div className="ie-row">
             <button className="btn" type="button" disabled={!!busy || !changed} onClick={saveCopy}>{busy === 'copy' ? 'Saving…' : 'Save as copy'}</button>
             <button className="primary grow" type="button" disabled={!!busy || !changed} onClick={saveVersion}>{busy === 'version' ? 'Saving…' : `Save as version ${(it.version || 1) + 1}`}</button>

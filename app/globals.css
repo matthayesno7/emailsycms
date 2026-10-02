@@ -1091,3 +1091,7 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .danger-btn{color:#b23b3b;border-color:color-mix(in srgb,#b23b3b 40%,var(--line));align-self:flex-start}
 .danger-btn.solid{background:#b23b3b;color:#fff;border-color:#b23b3b}
 .danger-btn:disabled{opacity:.5}
+
+.alt-route{font-size:13px;color:var(--ink-2)}
+.alt-route summary{cursor:pointer;color:var(--ink-2);margin-bottom:8px}
+.alt-route[open]{display:flex;flex-direction:column;gap:8px}

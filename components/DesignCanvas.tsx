@@ -40,7 +40,11 @@ export default function DesignCanvas({ spec, size, brand, srcOf, px, editable, o
         );
       }
       case 'rect':
-        return <div key={i} style={{ position: 'absolute', left: `${l.x}%`, top: `${l.y}%`, width: `${l.w}%`, height: `${l.h}%`, background: c(l.fill), opacity: l.opacity, borderRadius: u(l.radius / 4) }} />;
+        return (
+          <div key={i} style={{ position: 'absolute', left: `${l.x}%`, top: `${l.y}%`, width: `${l.w}%`, height: `${l.h}%`, borderRadius: u(l.radius / 4), boxSizing: 'border-box', ...(l.stroke ? { border: `${u(l.stroke_w || 0.15)} solid ${c(l.stroke)}` } : {}) }}>
+            <div style={{ position: 'absolute', inset: 0, background: c(l.fill), opacity: l.opacity, borderRadius: 'inherit' }} />
+          </div>
+        );
       case 'text': {
         const head = l.role === 'headline' || l.role === 'subhead';
         return (

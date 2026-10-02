@@ -9,7 +9,7 @@ export type TextRole = 'headline' | 'subhead' | 'body' | 'eyebrow' | 'price';
 
 export type Layer =
   | { type: 'image'; asset: string; x: number; y: number; w: number; h: number; fit: 'cover' | 'contain'; radius: number; shade: number; focus?: { x: number; y: number } }
-  | { type: 'rect'; x: number; y: number; w: number; h: number; fill: Role; radius: number; opacity: number }
+  | { type: 'rect'; x: number; y: number; w: number; h: number; fill: Role; radius: number; opacity: number; stroke?: Role; stroke_w?: number }
   | { type: 'text'; role: TextRole; text: string; x: number; y: number; w: number; size: number; color: Role; align: 'left' | 'center' | 'right'; weight: number; upper: boolean }
   | { type: 'button'; text: string; x: number; y: number; size: number; align: 'left' | 'center' | 'right'; tone: 'brand' | 'light' }
   | { type: 'logo'; variant: 'primary' | 'reversed'; x: number; y: number; h: number; align: 'left' | 'center' | 'right' };
@@ -52,7 +52,7 @@ Coordinates: x, y, w, h are percentages of the canvas width (x, w) and height (y
 
 Layer types:
 - {"type":"image","asset":"<id from the library>","x","y","w","h","fit":"cover"|"contain","radius":0-40,"shade":0-0.7}  shade darkens towards the bottom so white text reads over it. Use "contain" for product cut-outs and logos-in-context, "cover" for photos.
-- {"type":"rect","x","y","w","h","fill":role,"radius":0-40,"opacity":0-1}
+- {"type":"rect","x","y","w","h","fill":role,"radius":0-40,"opacity":0-1,"stroke":role (optional outline),"stroke_w":0.05-1 (outline width, % of canvas width)}  for an outlined box with no fill, use opacity 0 and a stroke.
 - {"type":"text","role":"headline"|"subhead"|"body"|"eyebrow"|"price","text","x","y","w","size","color":role,"align":"left"|"center"|"right","weight":400-900,"upper":bool}  y is the top of the text box; it wraps within w.
 - {"type":"button","text","x","y","size","align","tone":"brand"|"light"}  drawn in the brand's button style; x,y is its left (or centre/right, per align) and top. tone "light" is a white button for dark photos or panels in the button colour; "brand" everywhere else. The button must stand out from what's behind it.
 - {"type":"logo","variant":"primary"|"reversed","x","y","h","align"}  reversed is for dark backgrounds or photos.
@@ -96,12 +96,12 @@ const str = (v: any, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, 
 export function cleanSpec(input: any, allowed: Set<string>): Spec | null {
   if (!input || typeof input !== 'object' || !Array.isArray(input.layers)) return null;
   const layers: Layer[] = [];
-  for (const l of input.layers.slice(0, 16)) {
+  for (const l of input.layers.slice(0, 40)) {
     if (!l || typeof l !== 'object') continue;
     if (l.type === 'image' && allowed.has(String(l.asset))) {
       layers.push({ type: 'image', asset: String(l.asset), x: n(l.x, -10, 100, 0), y: n(l.y, -10, 100, 0), w: n(l.w, 1, 120, 100), h: n(l.h, 1, 120, 100), fit: l.fit === 'contain' ? 'contain' : 'cover', radius: n(l.radius, 0, 40, 0), shade: n(l.shade, 0, 0.8, 0), ...(l.focus ? { focus: { x: n(l.focus.x, 0, 1, .5), y: n(l.focus.y, 0, 1, .5) } } : {}) });
     } else if (l.type === 'rect') {
-      layers.push({ type: 'rect', x: n(l.x, -10, 100, 0), y: n(l.y, -10, 100, 0), w: n(l.w, 0, 120, 10), h: n(l.h, 0, 120, 10), fill: role(l.fill, 'primary'), radius: n(l.radius, 0, 40, 0), opacity: n(l.opacity, 0, 1, 1) });
+      layers.push({ type: 'rect', x: n(l.x, -10, 100, 0), y: n(l.y, -10, 100, 0), w: n(l.w, 0, 120, 10), h: n(l.h, 0, 120, 10), fill: role(l.fill, 'primary'), radius: n(l.radius, 0, 40, 0), opacity: n(l.opacity, 0, 1, 1), ...(COLOR_ROLES.includes(l.stroke) ? { stroke: l.stroke as Role, stroke_w: n(l.stroke_w, 0.05, 1, 0.15) } : {}) });
     } else if (l.type === 'text' && str(l.text, 220)) {
       const r: TextRole = ['headline', 'subhead', 'body', 'eyebrow', 'price'].includes(l.role) ? l.role : 'body';
       layers.push({ type: 'text', role: r, text: str(l.text, 220), x: n(l.x, 0, 100, 6), y: n(l.y, 0, 100, 6), w: n(l.w, 5, 100, 60), size: n(l.size, 0.8, 20, r === 'headline' ? 6 : 2.4), color: role(l.color, 'text'), align: al(l.align), weight: n(l.weight, 300, 900, r === 'headline' ? 700 : 400), upper: !!l.upper });
@@ -113,6 +113,19 @@ export function cleanSpec(input: any, allowed: Set<string>): Spec | null {
   }
   if (!layers.length) return null;
   return { name: str(input.name, 60) || 'Untitled design', background: role(input.background, 'background'), layers, ...(str(input.note, 200) ? { note: str(input.note, 200) } : {}) };
+}
+
+// Turning a finished picture (made in Figma, or uploaded) into an editable layout: Claude looks at
+// it and rebuilds it in the Studio's vocabulary, using the library's real photos and logo.
+export function rebuildBrief(sourceIds: string[]) {
+  return [
+    'Rebuild the attached image as an editable layout, as faithfully as you can. This is not a redesign.',
+    '- Every piece of text word for word, with the same case, position, size, weight and alignment. Separate lines or blocks of text become separate text layers.',
+    '- Colours: the nearest brand colour role.',
+    `- Photos and backgrounds: use the matching library asset${sourceIds.length ? ` (it was made from ${sourceIds.join(', ')}; use those)` : ''}. Never use a picture that already contains this design's text. If no library photo matches, use a rect in the closest colour.`,
+    '- Panels, cards, pills and bars: rect layers (outlined boxes: opacity 0 with a stroke). Logo: a logo layer.',
+    '- Up to 40 layers. Name it after its headline.',
+  ].join('\n');
 }
 
 export function assetsUsed(s: Spec) {

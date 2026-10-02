@@ -55,6 +55,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   toast: (m: string) => void;
 }) {
   const [editing, setEditing] = useState<false | 'image' | 'design' | 'product'>(false);
+  const [rebuilt, setRebuilt] = useState<{ spec: any; size: { w: number; h: number } } | null>(null); // a picture rebuilt as an editable layout
   const [zoom, setZoom] = useState<'fit' | '1x'>('fit');
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [focus, setFocus] = useState<Focus>(it.focus || { x: 0.5, y: 0.5 });
@@ -65,7 +66,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
 
   useEffect(() => setName(it.name), [it.name]);
   useEffect(() => setFocus(it.focus || { x: 0.5, y: 0.5 }), [it.focus]);
-  useEffect(() => setEditing(false), [it.id, it.version]);
+  useEffect(() => { setEditing(false); setRebuilt(null); }, [it.id, it.version]);
   // Esc while editing leaves edit mode (and doesn't close the page underneath).
   useEffect(() => {
     if (!editing) return;
@@ -192,14 +193,22 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
       </header>
 
       {editing === 'design' && design && supabase ? (
-        <DesignEditor it={it} supabase={supabase} {...design} toast={toast}
-          onCancel={() => setEditing(false)}
+        <DesignEditor key={rebuilt ? 'rebuilt' : 'design'} it={rebuilt ? { ...it, provenance: { ...(it.provenance || {}), via: 'studio', spec: rebuilt.spec, size: rebuilt.size, prompt: it.provenance?.prompt || `Rebuilt from “${it.name}”` } } : it}
+          rebuiltFrom={rebuilt ? src : null} supabase={supabase} {...design} toast={toast}
+          onCancel={() => { setEditing(false); setRebuilt(null); }}
           onSaved={(newId) => { setEditing(false); onDesignSaved?.(newId); }} />
       ) : editing === 'product' ? (
         <ProductEditor it={it} src={src} toast={toast} onCancel={() => setEditing(false)} onSave={onPatch}
           onPhoto={src && onSaveEdit && !isSvg ? () => setEditing('image') : undefined} />
       ) : editing === 'image' && src && onSaveEdit ? (
         <ImageEditor it={it} src={src} kit={kit || null} toast={toast} onAddPreset={onAddPreset}
+          onMakeEditable={design && supabase && it.kind === 'image' && it.text_in_image ? async () => {
+            const r = await fetch('/api/design', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rebuild_asset_id: it.id }) }).catch(() => null);
+            const j = r ? await r.json().catch(() => null) : null;
+            if (!r?.ok || !j?.spec) { toast(j?.error || 'Couldn’t rebuild the layout. Try again.'); return; }
+            setRebuilt({ spec: j.spec, size: j.size });
+            setEditing('design');
+          } : undefined}
           onFigmaWords={figmaUrl2 ? (words) => {
             const prompt = `Update my Mise asset "${it.name}" (asset id ${it.id}), which was designed in Figma: ${figmaUrl2}\n\nChange its words to:\n${words}\n\nKeep the layout, fonts, colours and size exactly as they are. Then export the frame with download_assets and save it back to Mise with add_generated_asset, passing replaces_asset_id "${it.id}" so it becomes a new version of the same asset.`;
             try { navigator.clipboard.writeText(prompt); } catch {}
