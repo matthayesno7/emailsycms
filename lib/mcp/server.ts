@@ -16,6 +16,8 @@ export type AssetRow = Record<string, any> & { id: string; workspace_id: string;
 export interface Repo {
   workspacesForUser(userId: string): Promise<Workspace[]>;
   listAssets(workspaceIds: string[], opts: { kind?: string; origin?: string; status?: string; query?: string; limit: number }): Promise<AssetRow[]>;
+  // AI search (same as the library): best matches first. Optional; falls back to listAssets.
+  search?(workspaceIds: string[], query: string, opts: { kind?: string; origin?: string; status?: string; limit: number }): Promise<AssetRow[] | null>;
   getAsset(id: string): Promise<AssetRow | null>;
   signedUrl(path: string): Promise<string | null>;
   download(path: string): Promise<{ blob: Blob; mime: string } | null>;
@@ -113,7 +115,7 @@ const TOOLS = [
         origin: { type: 'string', enum: ['uploaded', 'product_feed', 'generated'], description: 'Where the asset came from.' },
         status: { type: 'string', enum: ['approved', 'draft'], description: 'Generated assets start as drafts until a person approves them.' },
         format: { type: 'string', enum: ['photo', ...IMAGE_TABS.map((t) => t.id)], description: 'Images by what they are for, worked out from their size: photo, email-banner, linkedin-banner, linkedin-post, social-post, story, thumb, display.' },
-        query: { type: 'string', description: 'Plain words; every word must match the name, PID, description, tags, colours or text in the image.' },
+        query: { type: 'string', description: 'Plain words, searched by meaning: "woman outdoors with a blue bag", "summer lifestyle", "logo on dark background". Best matches first.' },
         limit: { type: 'number', minimum: 1, maximum: 200, default: 50 },
       },
       additionalProperties: false,
@@ -126,7 +128,7 @@ const TOOLS = [
   },
   {
     name: 'search_products',
-    description: 'Find products by name or PID across the user\'s workspaces.',
+    description: 'Find products across the user\'s workspaces by name, PID or a plain description of what they look like ("blue canvas tote"). Best matches first.',
     inputSchema: {
       type: 'object',
       properties: { query: { type: 'string' }, workspace_id: { type: 'string' }, limit: { type: 'number', default: 20 } },
@@ -345,7 +347,9 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const limit = Math.min(Math.max(Number(args.limit) || (name === 'search_products' ? 20 : 50), 1), 200);
       if (args.origin && !['uploaded', 'product_feed', 'generated'].includes(args.origin)) return toolError('origin must be uploaded, product_feed or generated.');
       if (args.status && !['approved', 'draft'].includes(args.status)) return toolError('status must be approved or draft.');
-      let rows = await ctx.repo.listAssets(ids, { kind: args.format ? 'image' : kind, origin: args.origin, status: args.status, query: args.query ? String(args.query) : undefined, limit: args.format ? 1000 : limit });
+      const opts = { kind: args.format ? 'image' : kind, origin: args.origin, status: args.status, limit: args.format ? 1000 : limit };
+      let rows = (args.query && ctx.repo.search ? await ctx.repo.search(ids, String(args.query), opts).catch(() => null) : null)
+        ?? await ctx.repo.listAssets(ids, { ...opts, query: args.query ? String(args.query) : undefined });
       if (args.format) rows = rows.filter((a) => tabOf(a) === args.format).slice(0, limit);
       const byId = Object.fromEntries(ws.map((w) => [w.id, w]));
       return text(rows.map((a) => publicAsset(a, byId[a.workspace_id])));

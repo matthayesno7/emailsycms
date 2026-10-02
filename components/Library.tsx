@@ -18,6 +18,7 @@ import type { BrandKitRow } from '@/lib/brandKit';
 import { dhash, findDuplicate } from '@/lib/phash';
 import { describeRules, haystack, matchesQuery, matchesRules, suggestCollections, type Collection, type Rules } from '@/lib/collections';
 import AutoOrganise from './AutoOrganise';
+import { chipsOf, removeChip, searchKey, type SearchFilters } from '@/lib/searchChips';
 import CollectionForm from './CollectionForm';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -63,6 +64,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [wsOpen, setWsOpen] = useState(false);
   const [connected, setConnected] = useState(true);
   const [q, setQ] = useState('');
+  // AI search: what's being searched (words + filters, which can come from Claude reading the query)
+  // and the ranked results for it. Keyword matching shows instantly while these load.
+  const [sq, setSq] = useState<{ q: string; text: string; filters: SearchFilters }>({ q: '', text: '', filters: {} });
+  const [hits, setHits] = useState<{ key: string; ids: string[]; ms?: number; vector?: boolean } | null>(null);
+  const [understanding, setUnderstanding] = useState(false);
+  const searchOff = useRef(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [block, setBlock] = useState<any>(null);
   const [modal, setModal] = useState<string | null>(null);
@@ -285,13 +292,55 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const tabCounts = useMemo(() => { const inF = items.filter(inFolder); const m: Record<string, number> = { all: inF.length }; for (const i of inF) { const t = tabOf(i); m[t] = (m[t] || 0) + 1; } return m; }, [items, inFolder]);
   const folderCounts = useMemo(() => { const m: Record<string, number> = {}; for (const i of items) if (i.folder_id) m[i.folder_id] = (m[i.folder_id] || 0) + 1; return m; }, [items]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
+  // ---------- AI search ----------
+  // Typing: reset to the plain words. 3+ words: also ask Claude to read the query into filters.
+  useEffect(() => {
+    const t = q.trim();
+    setSq((cur) => (cur.q === t ? cur : { q: t, text: t, filters: {} }));
+    setUnderstanding(false);
+    if (!t || !ws || searchOff.current || t.split(/\s+/).length < 3) return;
+    const timer = setTimeout(async () => {
+      setUnderstanding(true);
+      const r = await fetch('/api/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws, q: t, understand: true }) }).catch(() => null);
+      const j = r?.ok ? await r.json().catch(() => null) : null;
+      setUnderstanding(false);
+      if (!j || !j.understood) return;
+      setSq((cur) => (cur.q === t ? { q: t, text: j.text, filters: j.filters || {} } : cur));
+      setHits({ key: searchKey(j.text, j.filters || {}), ids: (j.hits || []).map((h: any) => h.id), ms: j.ms, vector: j.vector });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [q, ws]);
+  // The ranked search for the current words and filters (fast: no Claude step).
+  const curKey = searchKey(sq.text, sq.filters);
+  const wantKey = useRef('');
+  useEffect(() => {
+    wantKey.current = curKey;
+    if (!sq.q || !ws || searchOff.current) return;
+    const key = curKey;
+    const timer = setTimeout(async () => {
+      const r = await fetch('/api/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws, q: sq.text, filters: sq.filters }) }).catch(() => null);
+      if (r && (r.status === 500 || r.status === 404)) { searchOff.current = true; return; } // not set up yet: keyword matching only
+      const j = r?.ok ? await r.json().catch(() => null) : null;
+      if (j && wantKey.current === key) setHits({ key, ids: (j.hits || []).map((h: any) => h.id), ms: j.ms, vector: j.vector });
+    }, 160);
+    return () => clearTimeout(timer);
+  }, [curKey, ws]); // eslint-disable-line react-hooks/exhaustive-deps
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const chips = useMemo(() => chipsOf(sq.filters), [sq.filters]);
+
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
     const o = showOrigins ? origin : 'any';
-    return items.filter((it) => inView(it)
-      && (o === 'any' || (o === 'draft' ? it.status === 'draft' : o === 'dupes' ? !!it.duplicate_of && !it.duplicate_ok : originOf(it) === o))
-      && (!s || matchesQuery(it, s, hay.get(it.id))));
-  }, [items, inView, q, origin, showOrigins, hay]);
+    const keep = (it: Asset) => inView(it) && (o === 'any' || (o === 'draft' ? it.status === 'draft' : o === 'dupes' ? !!it.duplicate_of && !it.duplicate_ok : originOf(it) === o));
+    if (s && hits && hits.key === curKey) {
+      // Best matches first, then anything else whose words match (e.g. not made searchable yet).
+      const ranked = hits.ids.map((id) => byId.get(id)).filter((it): it is Asset => !!it && keep(it));
+      if (chips.length) return ranked;
+      const seen = new Set(ranked.map((i) => i.id));
+      return [...ranked, ...items.filter((it) => !seen.has(it.id) && keep(it) && matchesQuery(it, s, hay.get(it.id)))];
+    }
+    return items.filter((it) => keep(it) && (!s || matchesQuery(it, s, hay.get(it.id))));
+  }, [items, inView, q, origin, showOrigins, hay, hits, curKey, byId, chips.length]);
 
   // ---------- writes ----------
   async function patchAsset(id: string, patch: Record<string, any>) {
@@ -799,6 +848,16 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   </select>
                 )}
               </div>}
+
+              {q.trim() && (chips.length > 0 || understanding || sq.text !== sq.q) && (
+                <div className="qchips" aria-label="Search filters">
+                  {understanding && <span className="qthinking">Reading your search…</span>}
+                  {chips.map((c) => (
+                    <button key={c.id} type="button" className="qchip" title="Remove this filter" onClick={() => setSq((cur) => ({ ...cur, filters: removeChip(cur.filters, c.id) }))}>{c.label}<span aria-hidden>×</span></button>
+                  ))}
+                  {!understanding && sq.text && sq.text !== sq.q && <span className="qtext">matching “{sq.text}”</span>}
+                </div>
+              )}
 
               {!items.length ? (
                 <div className="intake">

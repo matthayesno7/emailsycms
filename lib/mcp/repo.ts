@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AssetRow, Repo, Workspace } from './server';
+import { searchAssets } from '../search';
 
 // Supabase-backed data access for the MCP server. Uses the service-role client,
 // so every read is scoped by the caller (server.ts checks workspace membership).
@@ -28,6 +29,14 @@ export function supabaseRepo(db: SupabaseClient): Repo {
       const { data, error } = await q;
       if (error) throw error;
       return (data || []) as AssetRow[];
+    },
+    async search(workspaceIds, query, { kind, origin, status, limit }) {
+      const r = await searchAssets(db, { ws: workspaceIds, q: query, filters: { kinds: kind ? [kind] : undefined, origin: origin as any, status: status as any }, limit });
+      if (!r.hits.length) return [];
+      const { data, error } = await db.from('assets').select('*').in('id', r.hits.map((h) => h.id));
+      if (error) throw error;
+      const rank = new Map(r.hits.map((h, i) => [h.id, i]));
+      return ((data || []) as AssetRow[]).sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
     },
     async getAsset(id) {
       if (!/^[0-9a-f-]{36}$/i.test(id)) return null;

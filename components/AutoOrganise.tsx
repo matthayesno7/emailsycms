@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 
-type P = { enabled: boolean; organised: number; waiting: number; failed: number; not_yet: number; total: number; cost_per_file_gbp: number; errors?: { id: string; name: string; ai_error: string }[] };
+type P = { search_enabled?: boolean; searchable?: number; search_waiting?: number; enabled: boolean; organised: number; waiting: number; failed: number; not_yet: number; total: number; cost_per_file_gbp: number; errors?: { id: string; name: string; ai_error: string }[] };
 
 const gbp = (n: number) => (n < 1 ? `${Math.max(1, Math.round(n * 100))}p` : `£${n < 10 ? n.toFixed(2) : Math.round(n)}`);
 
@@ -16,7 +16,7 @@ export default function AutoOrganise({ ws, toast }: { ws: string; toast: (m: str
   useEffect(() => { load(); }, [load]);
   // Live progress while anything is waiting.
   useEffect(() => {
-    if (!p?.waiting) return;
+    if (!p?.waiting && !p?.search_waiting) return;
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
   }, [p?.waiting, load]);
@@ -62,6 +62,12 @@ export default function AutoOrganise({ ws, toast }: { ws: string; toast: (m: str
           {p.errors.map((e) => <div key={e.id} className="tip"><b>{e.name}</b>: {e.ai_error}</div>)}
         </div>
       )}
+      <div className="ao-search">
+        <div className="label">AI search</div>
+        {p.search_enabled
+          ? <p className="tip"><b>{(p.searchable || 0).toLocaleString()}</b> files searchable by meaning{p.search_waiting ? `, ${p.search_waiting.toLocaleString()} being added…` : ''}. Try “woman outdoors with a blue bag” or “red product shots, landscape”.</p>
+          : <p className="tip">Searching by meaning is off: add VOYAGE_API_KEY on the server. Search still matches names, tags and descriptions.</p>}
+      </div>
       <p className="tip">Not used: face recognition. Mise never identifies people from their faces.</p>
     </div>
   );

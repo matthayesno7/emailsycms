@@ -7,6 +7,7 @@ import { createAdminClient } from './supabase/admin';
 import { jsonFrom } from './anthropic';
 import { TAG_MODEL, VISION_TYPES, MAX_VISION_BYTES, cleanResult, nameTags, patchFrom, shortlist, tagPrompt, type Candidate } from './autotag';
 import type { BrandKit } from './brandKit';
+import { assetText, embed, hasVoyage, toPgVector, VOYAGE_MODEL } from './search';
 
 const CONCURRENCY = 3;
 const MAX_ATTEMPTS = 3;
@@ -141,11 +142,54 @@ async function fail(ctx: Ctx, a: any, message: string, final = false): Promise<'
   return 'failed';
 }
 
-// Background loop for the server process.
+// ---------- search embeddings ----------
+// Assets whose searchable words changed (embed_pending) get a fresh Voyage embedding.
+// Waits for auto-organise to finish with a file, so it's embedded once with its tags.
+let embedding = false;
+export async function runEmbeds(opts: { ws?: string | null; budgetMs?: number } = {}) {
+  if (!hasVoyage() || !process.env.SUPABASE_SERVICE_ROLE_KEY || embedding) return { embedded: 0 };
+  embedding = true;
+  const db = createAdminClient();
+  const stop = Date.now() + (opts.budgetMs ?? 40_000);
+  let embedded = 0;
+  try {
+    while (Date.now() < stop) {
+      let q = db.from('assets').select('id, workspace_id, kind, name, description, tags, colour_names, text_in_image, pid, fields, ai_status, updated_at')
+        .eq('embed_pending', true).neq('kind', 'block')
+        .or('ai_status.is.null,ai_status.in.(done,skipped,failed)')
+        .order('updated_at', { ascending: true }).limit(64);
+      if (opts.ws) q = q.eq('workspace_id', opts.ws);
+      const { data, error } = await q;
+      if (error) { console.error('[search] embed queue', error.message); break; }
+      if (!data?.length) break;
+      let vecs: number[][] | null = null;
+      try { vecs = await embed(data.map((a: any) => assetText(a)), 'document'); }
+      catch (e: any) { if (e?.limited) break; throw e; }
+      if (!vecs) break;
+      const { error: e2 } = await db.from('asset_embeddings').upsert(data.map((a: any, i: number) => ({ asset_id: a.id, workspace_id: a.workspace_id, embedding: toPgVector(vecs![i]), model: VOYAGE_MODEL, updated_at: new Date().toISOString() })), { onConflict: 'asset_id' });
+      if (e2) { console.error('[search] save embeddings', e2.message); break; }
+      // Only if nothing changed meanwhile (an edit while embedding stays pending and is redone).
+      const done = await Promise.all(data.map((a: any) => db.from('assets').update({ embed_pending: false }).eq('id', a.id).eq('updated_at', a.updated_at).select('id')));
+      embedded += data.length;
+      // Safety: if none could be marked done, stop rather than embed the same files again.
+      if (!done.some((r) => r.data?.length)) { console.warn('[search] embed: nothing marked done, stopping this run'); break; }
+    }
+  } catch (e: any) {
+    console.error('[search] embed', e?.message || e);
+  } finally {
+    embedding = false;
+  }
+  return { embedded };
+}
+
+// Background loop for the server process: organise first, then make searchable.
 let timer: ReturnType<typeof setInterval> | null = null;
 export function startTagWorker(everyMs = 20_000) {
-  if (timer || !canTag()) return;
-  timer = setInterval(() => { runQueue({ budgetMs: 45_000 }).catch((e) => console.error('[autotag]', e)); }, everyMs);
+  if (timer || (!canTag() && !hasVoyage())) return;
+  timer = setInterval(() => {
+    runQueue({ budgetMs: 40_000 }).catch((e) => console.error('[autotag]', e))
+      .then(() => runEmbeds({ budgetMs: 15_000 })).catch((e) => console.error('[search]', e));
+  }, everyMs);
   (timer as any).unref?.();
   console.log('[autotag] worker started');
 }

@@ -103,6 +103,16 @@ Run `supabase/migrations/20261002000000_auto_organise.sql` in the SQL editor. Ne
 - Optional: `ANTHROPIC_TAG_MODEL` (default Haiku 4.5), `DISABLE_AUTO_TAG=1` to switch it off.
 - Logic test: `npx tsc scripts/organise-selftest.ts --outDir /tmp/st --module commonjs --target es2022 --esModuleInterop --skipLibCheck && node /tmp/st/scripts/organise-selftest.js`
 
+## 7. AI search
+
+Run `supabase/migrations/20261002120000_search.sql` (turns on pgvector, adds full-text search and `search_assets`). Needs `VOYAGE_API_KEY` on Railway; without it search still works on keywords.
+
+- Each asset's name, description, tags, colours and text in the image are embedded with Voyage (`asset_embeddings` table) by the same background worker, after auto-organise. Edits re-embed automatically.
+- `/api/search` blends vector similarity with full-text ranking (reciprocal rank fusion) and applies filters. Searches of 3+ words also go to Claude Haiku, which turns them into filters (type, colour, orientation, folder, on-brand, drafts) shown as removable chips.
+- The library shows keyword matches instantly, then swaps in the ranked results. The Claude connector (`list_assets`, `search_products`) uses the same search.
+- Tuning (optional): `VOYAGE_MODEL` (default voyage-3.5), `SEARCH_MIN_SIMILARITY` (0.25), `SEARCH_SIMILARITY_WINDOW` (0.12).
+- Logic test: `scripts/search-selftest.ts` (same command as the organise test).
+
 ## How the pieces fit
 
 ```

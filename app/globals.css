@@ -795,3 +795,13 @@ video.ed-out{background:#000;max-height:100%}
 .collform .bl{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .collform .actions{display:flex;align-items:center;gap:8px;margin-top:14px}
 .seg.mini button{padding:2px 8px;font-size:12px}
+
+/* ---------- AI search ---------- */
+.qchips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-2px 0 12px}
+.qchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:4px 6px 4px 11px;font-size:13px;font-weight:500}
+.qchip span{font-size:14px;line-height:1;opacity:.7;padding:0 3px}
+.qchip:hover span{opacity:1}
+.qthinking{font-size:13px;color:var(--ink-3);animation:qpulse 1.2s ease-in-out infinite}
+.qtext{font-size:13px;color:var(--ink-3)}
+@keyframes qpulse{50%{opacity:.45}}
+.autoorg .ao-search{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
