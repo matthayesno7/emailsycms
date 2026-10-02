@@ -27,6 +27,7 @@ export const Icon = {
   Upload: (p: P) => <S {...p}><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></S>,
   Bag: (p: P) => <S {...p}><path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2" /></S>,
   Cloud: (p: P) => <S {...p}><path d="M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 7.9z" /></S>,
+  Check: (p: P) => <S {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></S>,
   Share: (p: P) => <S {...p}><path d="M10 14 21 3M15 3h6v6M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6" /></S>,
   Mail: (p: P) => <S {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></S>,
   Drive: (p: P) => <S {...p}><path d="M8 3h8l6 10-4 7H6l-4-7z" /><path d="M8 3l6 10h8M2 13h12l-4 7" /></S>,

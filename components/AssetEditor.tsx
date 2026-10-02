@@ -240,7 +240,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 try { await navigator.clipboard.writeText(prompt); } catch {}
                 window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
               }}><Icon.Send /><span><b>Figma</b><small>Claude places it full size, or drag the image in</small></span></button>
-              {onShare && <button type="button" onClick={async () => { const u = await onShare(); if (u) { try { await navigator.clipboard.writeText(u); toast('Link copied. It works for 7 days.'); } catch { toast(u); } } }}><Icon.Share /><span><b>Share link</b><small>For an agency or retailer, works for 7 days</small></span></button>}
+              {onShare && <button type="button" onClick={async () => { const u = await onShare(); if (u) { try { await navigator.clipboard.writeText(u); toast('Link copied. It works for 7 days.'); } catch { toast(u); } } }}><Icon.Share /><span><b>Share link</b><small>Expiry, passcode, download counts</small></span></button>}
             </div>
           </div>
 

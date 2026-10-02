@@ -113,6 +113,15 @@ Run `supabase/migrations/20261002120000_search.sql` (turns on pgvector, adds ful
 - Tuning (optional): `VOYAGE_MODEL` (default voyage-3.5), `SEARCH_MIN_SIMILARITY` (0.25), `SEARCH_SIMILARITY_WINDOW` (0.12).
 - Logic test: `scripts/search-selftest.ts` (same command as the organise test).
 
+## 8. Share links and brand portals
+
+Run `supabase/migrations/20261002180000_sharing.sql`. No new keys needed (passcode cookies are signed with `SHARE_SECRET` if set, else the service-role key).
+
+- **Share links** (`/s/<token>`): one file, several (select tiles in Assets), a folder or a smart collection. Expiry, optional passcode, downloads on or off and which formats (original, web 2000px, email-ready). Turn off any time; views and downloads are counted. Sharing → Links lists them all.
+- **Brand portals** (`/p/<brand>/<portal>`): Sharing → Create brand portal makes one in a click: every approved file grouped by folder, styled from the brand kit (logo, colours, fonts), with a brand guidelines page generated from the kit. Several per workspace (Press, Retail partners…). Access: public, passcode, or an invite list (emails or @domain) with magic-link sign-in. Search uses the same AI search, limited to the portal. Visits, top downloads and who downloaded (invite list) for the last 30 days.
+- Drafts and email blocks are never public. The brand's own team always sees a preview and isn't counted.
+- Invite-list portals send sign-in emails through Supabase Auth, so they need Resend (or other SMTP) set up in Supabase to avoid its email rate limit. Add `https://<your domain>/auth/callback` to Supabase's redirect URLs (a `/**` wildcard covers it).
+
 ## How the pieces fit
 
 ```

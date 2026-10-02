@@ -20,6 +20,8 @@ import { describeRules, haystack, matchesQuery, matchesRules, suggestCollections
 import AutoOrganise from './AutoOrganise';
 import { chipsOf, removeChip, searchKey, type SearchFilters } from '@/lib/searchChips';
 import CollectionForm from './CollectionForm';
+import Sharing from './Sharing';
+import ShareDialog, { type ShareTarget } from './ShareDialog';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
 export type Ws = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
@@ -39,12 +41,15 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [ready, setReady] = useState(false);
   // Three places: Create (home), Library (everything the brand has) and Brand kit; plus Settings.
   // Assets come first (the home), then Create; Brand kit and Settings support both.
-  const [page, setPage] = useState<'create' | 'library' | 'brand' | 'settings'>('library');
+  const [page, setPage] = useState<'create' | 'library' | 'brand' | 'sharing' | 'settings'>('library');
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [folder, setFolder] = useState<string>('all'); // 'all' or a folder id
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collection, setCollection] = useState<string | null>(null); // a smart collection instead of a folder
   const [collForm, setCollForm] = useState<Partial<Collection> | null>(null);
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const toggleSel = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const [newFolder, setNewFolder] = useState<string | null>(null);
   const [dropFolder, setDropFolder] = useState<string | null>(null);
   const [boxReturn, setBoxReturn] = useState(false);
@@ -664,7 +669,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       if (e.key === 'Escape') {
         // Esc closes the top-most thing: a modal or block first, then the editor.
         // The block editor handles its own Esc (it checks for unsaved changes).
-        if (addOpen || wsOpen) { setAddOpen(false); setWsOpen(false); } else if (modal || sideOpen) { setModal(null); setSideOpen(false); } else if (!block && openId) openEditor(null);
+        if (shareTarget) setShareTarget(null); else if (addOpen || wsOpen) { setAddOpen(false); setWsOpen(false); } else if (selected.length && !openId && !block) setSelected([]); else if (modal || sideOpen) { setModal(null); setSideOpen(false); } else if (!block && openId) openEditor(null);
       }
       if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName) && !(e.target as HTMLElement)?.isContentEditable) { e.preventDefault(); setPage('library'); setTimeout(() => searchRef.current?.focus(), 0); }
     };
@@ -726,6 +731,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             {drafts > 0 ? <span className="count pill-n" title="Waiting for approval">{drafts}</span> : null}
           </button>
           <button className="nav big" type="button" aria-current={page === 'create'} onClick={() => go('create')}><Icon.Sparkle />Create</button>
+          <button className="nav big" type="button" aria-current={page === 'sharing'} onClick={() => go('sharing')}><Icon.Share />Sharing</button>
           <button className="nav big" type="button" aria-current={page === 'brand'} onClick={() => go('brand')}><Icon.Palette />Brand kit
             {kitRow?.status === 'approved' ? null : <span className="count dotnote" title={kitRow ? 'Draft, not approved yet' : 'Not set up yet'}>•</span>}
           </button>
@@ -742,7 +748,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       <main>
         <div className="bar mobile-only">
           <button className="menu" type="button" aria-label="Open navigation" onClick={() => setSideOpen(true)}><Icon.Menu /></button>
-          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{page === 'create' ? 'Create' : page === 'library' ? 'Assets' : page === 'brand' ? 'Brand kit' : 'Settings'}</b></div>
+          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{page === 'create' ? 'Create' : page === 'library' ? 'Assets' : page === 'brand' ? 'Brand kit' : page === 'sharing' ? 'Sharing' : 'Settings'}</b></div>
         </div>
 
         <div className="content">
@@ -766,6 +772,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
               </div>
             </div>
+          ) : page === 'sharing' && curWs ? (
+            <Sharing key={curWs.id} supabase={supabase} ws={curWs} items={items} folders={folders} collections={collections.map((c) => ({ id: c.id, name: c.name }))} toast={toast} />
           ) : page === 'brand' && curWs ? (
             ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); }} /> : <p className="loading">Loading your brand kit…</p>
           ) : !ready ? (
@@ -774,8 +782,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             <>
               <div className="lib-head">
                 <h1>{curColl ? curColl.name : folder === 'all' ? 'Assets' : folders.find((f) => f.id === folder)?.name || 'Assets'}</h1>
-                {curColl && <span className="lib-fact">Smart collection · {describeRules(curColl.rules)} · <button type="button" className="linkish" onClick={() => setCollForm(curColl)}>Edit</button></span>}
-                {!curColl && folder !== 'all' && <span className="lib-fact">{folderCounts[folder] || 0} files · <button type="button" className="linkish" onClick={() => renameFolder(folder)}>Rename</button> · <button type="button" className="linkish" onClick={() => deleteFolder(folder)}>Delete folder</button></span>}
+                {curColl && <span className="lib-fact">Smart collection · {describeRules(curColl.rules)} · <button type="button" className="linkish" onClick={() => setCollForm(curColl)}>Edit</button> · <button type="button" className="linkish" onClick={() => setShareTarget({ kind: 'collection', collection_id: curColl.id, title: curColl.name })}>Share</button></span>}
+                {!curColl && folder !== 'all' && <span className="lib-fact">{folderCounts[folder] || 0} files · <button type="button" className="linkish" onClick={() => setShareTarget({ kind: 'folder', folder_id: folder, title: folders.find((f) => f.id === folder)?.name || 'Shared folder' })}>Share</button> · <button type="button" className="linkish" onClick={() => renameFolder(folder)}>Rename</button> · <button type="button" className="linkish" onClick={() => deleteFolder(folder)}>Delete folder</button></span>}
                 <span className="spacer" />
                 <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search: beach, blue bag, logo…" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /><kbd>/</kbd></label>
                 {q.trim() && <button className="btn quiet savesearch" type="button" title="Save this search as a smart collection" onClick={() => setCollForm({ name: q.trim().replace(/^./, (c) => c.toUpperCase()), rules: { text: q.trim(), ...(['image', 'logo', 'product', 'video'].includes(view) ? { kinds: [view] } : {}) } })}>Save search</button>}
@@ -889,7 +897,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 )
               ) : (
                 <div className={'grid' + (['product', 'block', 'logo'].includes(view) ? '' : ' masonry')}>
-                  {visible.map((it) => <Tile key={it.id} it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (it.kind === 'block' ? showBlock(blockDraft(it)) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />)}
+                  {visible.map((it) => (
+                    <div key={it.id} className={'selwrap' + (selected.includes(it.id) ? ' sel' : '') + (selected.length ? ' selecting' : '')}>
+                      {it.kind !== 'block' && <button type="button" className="selbox" aria-label={selected.includes(it.id) ? `Deselect ${it.name}` : `Select ${it.name}`} aria-pressed={selected.includes(it.id)} onClick={(e) => { e.stopPropagation(); toggleSel(it.id); }}><Icon.Check size={13} /></button>}
+                      <Tile it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (selected.length && it.kind !== 'block' ? toggleSel(it.id) : it.kind === 'block' ? showBlock(blockDraft(it)) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />
+                    </div>
+                  ))}
                 </div>
               )}
             </>
@@ -926,10 +939,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onOpenAsset={(id) => { const a = itemById(id); if (!a) return; if (a.kind === 'product') openProduct(a); else openEditor(id); }}
           onRetag={async () => { if (await patchAsset(openAsset.id, { ai_status: 'pending', ai_attempts: 0, ai_error: null })) { kickTag(); toast('Organising…'); } }}
           onShare={async () => {
-            const path = openAsset.storage_path;
-            if (!path) { toast('Nothing to share yet.'); return null; }
-            const { data } = await supabase.storage.from('assets').createSignedUrl(path, 7 * 24 * 3600, { download: false });
-            return data?.signedUrl || null;
+            if (!openAsset.storage_path) { toast('Nothing to share yet.'); return null; }
+            setShareTarget({ kind: 'assets', asset_ids: [openAsset.id], title: openAsset.name });
+            return null;
           }}
           onEmailCopy={async () => {
             const path = openAsset.images?.email?.path || openAsset.storage_path;
@@ -989,6 +1001,37 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           <BlockTypePicker from={convertFrom ? itemById(convertFrom) : null}
             onPick={(t) => startBlock(t, convertFrom)} />
         </Modal>
+      )}
+      {selected.length > 0 && page === 'library' && !openId && !block && (
+        <div className="selbar" role="toolbar" aria-label="Selected files">
+          <b>{selected.length} selected</b>
+          <button className="primary" type="button" onClick={() => setShareTarget({ kind: 'assets', asset_ids: selected, title: `${selected.length} file${selected.length === 1 ? '' : 's'} from ${curWs?.name || 'us'}` })}><Icon.Share size={15} />Share</button>
+          {folders.length > 0 && (
+            <select className="in" value="" aria-label="Move to folder" onChange={async (e) => {
+              const v = e.target.value; if (!v) return;
+              const fid = v === 'none' ? null : v;
+              const { error } = await supabase.from('assets').update({ folder_id: fid }).in('id', selected);
+              if (error) { toast('Couldn’t move them.'); return; }
+              setItems((list) => list.map((i) => (selected.includes(i.id) ? { ...i, folder_id: fid } : i)));
+              toast(`Moved ${selected.length} file${selected.length === 1 ? '' : 's'}`); setSelected([]);
+            }}>
+              <option value="">Move to…</option>
+              {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              <option value="none">No folder</option>
+            </select>
+          )}
+          <button className="btn quiet" type="button" onClick={() => setSelected(visible.filter((i) => i.kind !== 'block').map((i) => i.id))}>Select all {visible.filter((i) => i.kind !== 'block').length}</button>
+          <button className="btn quiet" type="button" onClick={() => setSelected([])}>Clear</button>
+        </div>
+      )}
+      {shareTarget && curWs && (
+        <>
+          <div className="scrim top" onClick={() => setShareTarget(null)} />
+          <div className="modal top" role="dialog" aria-modal="true">
+            <button className="x" type="button" aria-label="Close" onClick={() => setShareTarget(null)}><Icon.Close /></button>
+            <ShareDialog ws={curWs.id} target={shareTarget} toast={toast} onClose={() => setShareTarget(null)} onCreated={() => setSelected([])} />
+          </div>
+        </>
       )}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </div>
