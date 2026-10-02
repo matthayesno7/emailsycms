@@ -14,7 +14,9 @@ export async function GET(request: Request) {
   const a = ctx.assets.find((x) => x.id === u.searchParams.get('a'));
   if (!a) return new NextResponse('Not found.', { status: 404 });
   const dl = u.searchParams.get('dl') === '1';
-  const f = (FORMATS as readonly string[]).includes(u.searchParams.get('f') || '') ? (u.searchParams.get('f') as Format) : 'original';
+  let f = (FORMATS as readonly string[]).includes(u.searchParams.get('f') || '') ? (u.searchParams.get('f') as Format) : 'original';
+  // Viewing (not downloading) never hands out the full original.
+  if (!dl && f === 'original') f = 'web';
   if (dl && !ctx.member && (!ctx.allow_download || !ctx.formats.includes(f))) return new NextResponse('Downloads are off for this link.', { status: 403 });
   const url = await fileUrl(ctx.db, a, f, dl);
   if (!url) return new NextResponse('Couldn’t open the file.', { status: 500 });
