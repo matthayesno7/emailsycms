@@ -54,9 +54,7 @@ export default function LoginPage() {
   return (
     <main className="auth">
       <div className="auth-card">
-        <div className="org">
-          <span className="logo"><Mark /></span>Mise
-        </div>
+        <div className="org"><span className="wordmark">Mise<i aria-hidden /></span></div>
         {state === 'sent' ? (
           <>
             <h1>Check your inbox</h1>
@@ -82,13 +80,5 @@ export default function LoginPage() {
         )}
       </div>
     </main>
-  );
-}
-
-function Mark() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7.5" height="7.5" rx="1.6" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6" />
-    </svg>
   );
 }

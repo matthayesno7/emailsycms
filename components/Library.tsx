@@ -747,7 +747,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   return (
     <div className="app">
       <aside className={'side' + (sideOpen ? ' open' : '')} aria-label="Navigation">
-        <div className="mise-logo" aria-label="Mise"><span className="mise-mark"><Icon.Mark /></span><b>Mise</b></div>
+        <div className="mise-logo" aria-label="Mise"><span className="wordmark">Mise<i aria-hidden /></span></div>
         <div className="wsw">
           <button className="wsw-btn" type="button" aria-expanded={wsOpen} onClick={() => setWsOpen((o) => !o)}>
             <span className="dot" style={{ background: WS_COLORS[Math.max(0, wsIndex) % WS_COLORS.length] }}>{(curWs?.name[0] || 'E').toUpperCase()}</span>
