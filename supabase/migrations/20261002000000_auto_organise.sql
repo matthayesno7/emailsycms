@@ -60,6 +60,7 @@ returns setof public.assets language sql security definer set search_path = publ
   returning a.*;
 $$;
 revoke all on function public.claim_ai_jobs(int, uuid) from public, anon, authenticated;
+grant execute on function public.claim_ai_jobs(int, uuid) to service_role;
 
 -- ---------- smart collections: saved searches that fill themselves ----------
 create table if not exists public.collections (
