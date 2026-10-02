@@ -11,6 +11,7 @@ import AssetVersions from './AssetVersions';
 import ImageEditor, { type EditResult } from './ImageEditor';
 import DesignEditor from './DesignEditor';
 import ProductEditor from './ProductEditor';
+import FigmaEdit from './FigmaEdit';
 import type { StudioBrand } from './DesignCanvas';
 import type { Asset } from './Library';
 
@@ -54,8 +55,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   position?: string;
   toast: (m: string) => void;
 }) {
-  const [editing, setEditing] = useState<false | 'image' | 'design' | 'product'>(false);
-  const [rebuilt, setRebuilt] = useState<{ spec: any; size: { w: number; h: number } } | null>(null); // a picture rebuilt as an editable layout
+  const [editing, setEditing] = useState<false | 'image' | 'design' | 'product' | 'figma'>(false);
   const [zoom, setZoom] = useState<'fit' | '1x'>('fit');
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [focus, setFocus] = useState<Focus>(it.focus || { x: 0.5, y: 0.5 });
@@ -66,7 +66,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
 
   useEffect(() => setName(it.name), [it.name]);
   useEffect(() => setFocus(it.focus || { x: 0.5, y: 0.5 }), [it.focus]);
-  useEffect(() => { setEditing(false); setRebuilt(null); }, [it.id, it.version]);
+  useEffect(() => setEditing(false), [it.id, it.version]);
   // Esc while editing leaves edit mode (and doesn't close the page underneath).
   useEffect(() => {
     if (!editing) return;
@@ -79,8 +79,10 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   const isSvg = /svg/.test(it.mime || '');
   const isDesign = it.provenance?.via === 'studio' && !!it.provenance?.spec;
   const isProduct = it.kind === 'product';
-  const canEdit = isProduct || (!!src && !isVideo && !isSvg && (isDesign ? !!design && !!supabase : !!onSaveEdit));
-  const figmaUrl2 = it.figma?.file_key ? `https://www.figma.com/design/${it.figma.file_key}?node-id=${String(it.figma.node_id || '').replace(':', '-')}` : null;
+  // Where it was made decides where it's edited: made in Create → edited here with its layout;
+  // made in Figma (by Claude, or sent there) → edited in Figma; uploaded photos → photo tools here.
+  const madeIn: 'create' | 'figma' | 'upload' = isDesign ? 'create' : (it.figma?.file_key || /figma/i.test(it.provenance?.model || '')) ? 'figma' : 'upload';
+  const canEdit = isProduct || (!isVideo && !isSvg && (madeIn === 'figma' ? true : !!src && (isDesign ? !!design && !!supabase : !!onSaveEdit)));
 
   // Keyboard: arrows move between assets (outside text fields and edit mode).
   useEffect(() => {
@@ -147,7 +149,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   const copyText = async (v?: string) => { if (!v) return; try { await navigator.clipboard.writeText(v); toast('Copied'); } catch { toast(v); } };
 
   const w = natural?.w || it.width, h = natural?.h || it.height;
-  const info = [w && `${w}×${h}`, it.bytes && `${Math.round(it.bytes / 1024)} KB`, it.mime?.split('/')[1]?.toUpperCase().replace('SVG+XML', 'SVG'), (it.version || 1) > 1 && `version ${it.version}`].filter(Boolean).join(' · ');
+  const made = isProduct ? (it.origin === 'product_feed' ? 'From the feed' : null) : madeIn === 'create' ? 'Made in Create' : madeIn === 'figma' ? 'Made in Figma' : it.origin === 'generated' ? 'Generated' : 'Uploaded';
+  const info = [made, w && `${w}×${h}`, it.bytes && `${Math.round(it.bytes / 1024)} KB`, it.mime?.split('/')[1]?.toUpperCase().replace('SVG+XML', 'SVG'), (it.version || 1) > 1 && `version ${it.version}`].filter(Boolean).join(' · ');
 
   return (
     <div className="editor" role="dialog" aria-modal="true" aria-label={`${editing ? 'Editing' : 'Asset'} ${it.name}`}>
@@ -168,7 +171,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         )}
         {!editing && (src || isProduct) && (
           <div className="modes" role="group" aria-label="Change this asset">
-            {canEdit && <button className="btn" type="button" onClick={() => setEditing(isDesign ? 'design' : isProduct ? 'product' : 'image')} title={isDesign ? 'Change the words, swap photos or the logo, or change it with words, with the layout live' : isProduct ? 'Name, label, description, price, button, link and photo' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />Edit</button>}
+            {canEdit && <button className="btn" type="button" onClick={() => setEditing(isProduct ? 'product' : madeIn === 'create' ? 'design' : madeIn === 'figma' ? 'figma' : 'image')} title={isProduct ? 'Name, label, description, price, button, link and photo' : madeIn === 'create' ? 'Made in Create: change the words, photos and logo here, with the layout live' : madeIn === 'figma' ? 'Made in Figma: say what to change and Claude edits it there' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />{madeIn === 'figma' && !isProduct ? 'Edit in Figma' : 'Edit'}</button>}
             {!isVideo && src && <button className="btn" type="button" disabled title="Remove backgrounds, extend, upscale and change it with words. Coming next."><Icon.Sparkle size={15} />AI edit <em className="soon">Soon</em></button>}
           </div>
         )}
@@ -193,28 +196,16 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
       </header>
 
       {editing === 'design' && design && supabase ? (
-        <DesignEditor key={rebuilt ? 'rebuilt' : 'design'} it={rebuilt ? { ...it, provenance: { ...(it.provenance || {}), via: 'studio', spec: rebuilt.spec, size: rebuilt.size, prompt: it.provenance?.prompt || `Rebuilt from “${it.name}”` } } : it}
-          rebuiltFrom={rebuilt ? src : null} supabase={supabase} {...design} toast={toast}
-          onCancel={() => { setEditing(false); setRebuilt(null); }}
+        <DesignEditor it={it} supabase={supabase} {...design} toast={toast}
+          onCancel={() => setEditing(false)}
           onSaved={(newId) => { setEditing(false); onDesignSaved?.(newId); }} />
+      ) : editing === 'figma' ? (
+        <FigmaEdit it={it} src={src} toast={toast} onCancel={() => setEditing(false)} />
       ) : editing === 'product' ? (
         <ProductEditor it={it} src={src} toast={toast} onCancel={() => setEditing(false)} onSave={onPatch}
           onPhoto={src && onSaveEdit && !isSvg ? () => setEditing('image') : undefined} />
       ) : editing === 'image' && src && onSaveEdit ? (
         <ImageEditor it={it} src={src} kit={kit || null} toast={toast} onAddPreset={onAddPreset}
-          onMakeEditable={design && supabase && it.kind === 'image' && it.text_in_image ? async () => {
-            const r = await fetch('/api/design', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rebuild_asset_id: it.id }) }).catch(() => null);
-            const j = r ? await r.json().catch(() => null) : null;
-            if (!r?.ok || !j?.spec) { toast(j?.error || 'Couldn’t rebuild the layout. Try again.'); return; }
-            setRebuilt({ spec: j.spec, size: j.size });
-            setEditing('design');
-          } : undefined}
-          onFigmaWords={figmaUrl2 ? (words) => {
-            const prompt = `Update my Mise asset "${it.name}" (asset id ${it.id}), which was designed in Figma: ${figmaUrl2}\n\nChange its words to:\n${words}\n\nKeep the layout, fonts, colours and size exactly as they are. Then export the frame with download_assets and save it back to Mise with add_generated_asset, passing replaces_asset_id "${it.id}" so it becomes a new version of the same asset.`;
-            try { navigator.clipboard.writeText(prompt); } catch {}
-            window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
-            toast('Opened Claude. The new version appears here when it’s done.');
-          } : undefined}
           onCancel={() => setEditing(false)}
           onSave={async (r, asCopy) => { const ok = await onSaveEdit(r, asCopy); if (ok) setEditing(false); return ok; }} />
       ) : (
@@ -255,7 +246,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 </div>
                 {it.provenance?.prompt && <p className="tip">“{it.provenance.prompt}”</p>}
                 <p className="tip">{[it.provenance?.model, it.provenance?.style, it.provenance?.source_product_pid && `from product ${it.provenance.source_product_pid}`, it.provenance?.brand_kit_version && `brand kit v${it.provenance.brand_kit_version}`].filter(Boolean).join(' · ')}</p>
-                {isDesign && canEdit && <p className="tip">Made in the Studio: <button type="button" className="linkish" onClick={() => setEditing('design')}>edit it with the layout live</button>.</p>}
+                {madeIn === 'create' && canEdit && <p className="tip">Made in Create, so it’s edited here: <button type="button" className="linkish" onClick={() => setEditing('design')}>change the words, photos or logo</button>.</p>}
+                {madeIn === 'figma' && <p className="tip">Made in Figma, so it’s edited in Figma: <button type="button" className="linkish" onClick={() => setEditing('figma')}>say what to change</button> and Claude does it there.</p>}
               </div>
             )}
 

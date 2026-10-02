@@ -115,19 +115,6 @@ export function cleanSpec(input: any, allowed: Set<string>): Spec | null {
   return { name: str(input.name, 60) || 'Untitled design', background: role(input.background, 'background'), layers, ...(str(input.note, 200) ? { note: str(input.note, 200) } : {}) };
 }
 
-// Turning a finished picture (made in Figma, or uploaded) into an editable layout: Claude looks at
-// it and rebuilds it in the Studio's vocabulary, using the library's real photos and logo.
-export function rebuildBrief(sourceIds: string[]) {
-  return [
-    'Rebuild the attached image as an editable layout, as faithfully as you can. This is not a redesign.',
-    '- Every piece of text word for word, with the same case, position, size, weight and alignment. Separate lines or blocks of text become separate text layers.',
-    '- Colours: the nearest brand colour role.',
-    `- Photos and backgrounds: use the matching library asset${sourceIds.length ? ` (it was made from ${sourceIds.join(', ')}; use those)` : ''}. Never use a picture that already contains this design's text. If no library photo matches, use a rect in the closest colour.`,
-    '- Panels, cards, pills and bars: rect layers (outlined boxes: opacity 0 with a stroke). Logo: a logo layer.',
-    '- Up to 40 layers. Name it after its headline.',
-  ].join('\n');
-}
-
 export function assetsUsed(s: Spec) {
   return [...new Set(s.layers.filter((l) => l.type === 'image').map((l: any) => l.asset as string))];
 }

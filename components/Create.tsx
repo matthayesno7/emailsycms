@@ -175,12 +175,11 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
             </div>
           )}
           <div className="cr-row">
-            <span className="tip">{canDesign ? 'Three designs in seconds, in your brand, with your photos.'
-              : chosen?.video || (picked && !pickedLive) ? 'Video and new photography are made in Claude with Figma, then saved here.'
-              : live === false ? 'Designs are made in Claude with Figma. Add ANTHROPIC_API_KEY on the server to design right here.' : ''}</span>
+            <span className="tip">{canDesign ? 'Three designs in seconds, in your brand, with your photos. Made here, so you can edit them here any time.'
+              : chosen?.video || (picked && !pickedLive) ? 'Video and new photography are made by Claude in Figma, then saved here. They’re edited in Figma too.'
+              : live === false ? 'Designs are made by Claude in Figma. Add ANTHROPIC_API_KEY on the server to design right here.' : ''}</span>
             <span className="spacer" />
             {canDesign ? <>
-              <button className="btn" type="button" disabled={!text} onClick={() => openInClaude(text)} title="Make it in Claude with Figma instead">In Claude</button>
               <button className="primary" type="button" disabled={!text} onClick={design}><Icon.Sparkle size={16} />Design it</button>
             </> : <>
               <button className="btn" type="button" disabled={!text} onClick={() => copy(text)}>Copy</button>
@@ -228,13 +227,13 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
                 <div className="cr-mini">
                   <button type="button" onClick={() => usePrompt(p.id)}>{live && LIVE.has(m.layout) && !p.uses.some((x) => x === 'ai-image' || x === 'ai-video' || x === 'motion') ? 'Design it' : 'Use'}</button>
                   <button type="button" onClick={() => copy(t)}>Copy</button>
-                  <button type="button" onClick={() => openInClaude(t)}>Open in Claude</button>
+                  {!(live && LIVE.has(m.layout) && !p.uses.some((x) => x === 'ai-image' || x === 'ai-video' || x === 'motion')) && <button type="button" onClick={() => openInClaude(t)}>Open in Claude</button>}
                 </div>
               </article>
             );
           })}
         </div>
-        <p className="tip cr-foot">AI image and video runs use your Figma Weave credits; Claude shows the cost and asks first. Everything Claude makes lands here as a draft.</p>
+        <p className="tip cr-foot">Designs made here are edited here. AI photos and video are made by Claude in Figma (using your Figma Weave credits; Claude shows the cost and asks first), land here as drafts, and are edited in Figma.</p>
       </section>
     </div>
   );

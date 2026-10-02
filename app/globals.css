@@ -1095,3 +1095,5 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .alt-route{font-size:13px;color:var(--ink-2)}
 .alt-route summary{cursor:pointer;color:var(--ink-2);margin-bottom:8px}
 .alt-route[open]{display:flex;flex-direction:column;gap:8px}
+
+.words-now{white-space:pre-wrap;font-size:12.5px;max-height:160px;overflow:auto}

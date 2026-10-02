@@ -10,15 +10,13 @@ export type EditResult = { blob: Blob; mime: string; width: number; height: numb
 // Edit mode on the asset page: hands-on, instant and free. Crop (free or locked), sizes from the
 // brand kit, rotate, flip, brightness, contrast, saturation. Saves as a new version of this asset
 // (the original is kept) or as a copy. Designs made in Mise open in the Studio instead.
-export default function ImageEditor({ it, src, kit, onCancel, onSave, onAddPreset, onFigmaWords, onMakeEditable, toast }: {
+export default function ImageEditor({ it, src, kit, onCancel, onSave, onAddPreset, toast }: {
   it: Asset;
   src: string;
   kit: BrandKit | null;
   onCancel: () => void;
   onSave: (r: EditResult, asCopy: boolean) => Promise<boolean>;
   onAddPreset?: (p: TeamPreset) => Promise<boolean>;
-  onFigmaWords?: (words: string) => void; // designed in Figma: Claude changes the words there and saves a new version here
-  onMakeEditable?: () => Promise<void>; // rebuild the picture as a layout so its words can be edited on the canvas
   toast: (m: string) => void;
 }) {
   const [img, setImg] = useState<HTMLImageElement | null>(null);
@@ -26,8 +24,6 @@ export default function ImageEditor({ it, src, kit, onCancel, onSave, onAddPrese
   const [preset, setPreset] = useState('free');
   const [busy, setBusy] = useState<'' | 'version' | 'copy'>('');
   const [adding, setAdding] = useState<{ name: string; w: string; h: string } | null>(null);
-  const [words, setWords] = useState<string>(it.text_in_image || '');
-  const [rebuilding, setRebuilding] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const cut = useRef<{ cut?: HTMLCanvasElement }>({});
@@ -149,24 +145,10 @@ export default function ImageEditor({ it, src, kit, onCancel, onSave, onAddPrese
 
       <aside className="ed-side ie-side" aria-label="Edit">
         <div className="ie-scroll">
-        {(onFigmaWords || it.text_in_image) && (
+        {it.text_in_image && (
           <div className="ed-sec">
             <div className="label">Words</div>
-            {onMakeEditable && (
-              <>
-                <button type="button" className="primary" disabled={rebuilding} onClick={async () => { setRebuilding(true); try { await onMakeEditable(); } finally { setRebuilding(false); } }}>{rebuilding ? 'Rebuilding the layout…' : 'Edit the words on the canvas'}</button>
-                <p className="tip">Claude rebuilds this layout with your brand kit and the photos it was made from, so you can change the words, swap photos and edit it on the canvas, the same as designs made in Create. Check it against the original before saving; the original stays in the history.</p>
-              </>
-            )}
-            {onFigmaWords && (
-              <details className="alt-route">
-                <summary>Or change it in Figma, where it was designed</summary>
-                <textarea className="in" rows={3} value={words} onChange={(ev) => setWords(ev.target.value)} placeholder="Write the new words, or say what to change" />
-                <button type="button" className="btn" disabled={!words.trim() || words.trim() === (it.text_in_image || '').trim()} onClick={() => onFigmaWords(words.trim())}>Change the words in Figma</button>
-                <p className="tip">Claude updates the Figma frame and saves it back here as version {(it.version || 1) + 1}.</p>
-              </details>
-            )}
-            {!onMakeEditable && !onFigmaWords && <p className="tip">The words are part of the picture.</p>}
+            <p className="tip">The words are part of this picture. Changing them comes with AI edit, next. Designs made in Create keep their words editable.</p>
           </div>
         )}
         <div className="ed-sec">

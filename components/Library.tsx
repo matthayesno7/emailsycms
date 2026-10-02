@@ -992,7 +992,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onSaveEdit={(r, asCopy) => saveEdit(openAsset, r, asCopy)}
           onRevert={(v) => revertAsset(openAsset, v)}
           onAddPreset={addPreset}
-          design={(openAsset.provenance?.via === 'studio' && openAsset.provenance?.spec) || (openAsset.text_in_image && /^image\/(png|jpeg|webp)/.test(openAsset.mime || '')) ? (() => {
+          design={openAsset.provenance?.via === 'studio' && openAsset.provenance?.spec ? (() => {
             const sk = studioKit(curWs?.name || '', kitRow, items, urls);
             return { wsId: ws, brand: sk.brand, fonts: sk.fonts, srcOf: sk.srcOf, thumbOf: (a: Asset) => emailSrcOf(a) || undefined,
               library: items.filter((i) => (i.kind === 'image' || i.kind === 'product') && i.storage_path && i.status !== 'draft' && i.provenance?.via !== 'studio') };
