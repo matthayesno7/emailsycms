@@ -1,5 +1,29 @@
 'use client';
+import { useState } from 'react';
 import type { Layer, Role, Spec } from '@/lib/design';
+import { contrast } from '@/lib/brandKit';
+
+// Does this logo file have a transparent background? Opaque logos (a white wordmark on a black
+// box, a JPEG) turn into a solid white block when recoloured for dark photos, so they're left as they are.
+const alphaCache = new Map<string, boolean>();
+function hasTransparency(img: HTMLImageElement) {
+  try {
+    const w = Math.min(64, img.naturalWidth || 1), h = Math.min(64, img.naturalHeight || 1);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d'); if (!ctx) return true;
+    ctx.drawImage(img, 0, 0, w, h);
+    const d = ctx.getImageData(0, 0, w, h).data;
+    for (const [x, y] of [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1], [0, h >> 1], [w - 1, h >> 1]]) if (d[(y * w + x) * 4 + 3] < 200) return true;
+    return false;
+  } catch { return true; } // can't read it (cross-origin): keep the old behaviour
+}
+function LogoImg({ src, invert, style }: { src: string; invert: boolean; style: React.CSSProperties }) {
+  const [clear, setClear] = useState<boolean | undefined>(() => alphaCache.get(src));
+  const recolour = invert && clear !== false;
+  return <img src={src} alt="" crossOrigin="anonymous" style={{ ...style, filter: recolour ? 'brightness(0) invert(1)' : undefined }}
+    onLoad={(e) => { if (!invert || alphaCache.has(src)) return; const t = hasTransparency(e.currentTarget); alphaCache.set(src, t); setClear(t); }} />;
+}
+const readable = (fg: string, bg: string, fallback: string) => { try { const r = contrast(fg, bg); return Number.isNaN(r) || r >= 3 ? fg : fallback; } catch { return fg; } };
 
 // Draws a Studio design spec with the brand's colours, fonts, button and logo.
 // On screen it scales with its box (cqw units); for export it renders at exact pixels.
@@ -65,7 +89,9 @@ export default function DesignCanvas({ spec, size, brand, srcOf, px, editable, o
         const b = brand.button;
         const filled = b.style === 'filled', under = b.style === 'underline';
         // "light" buttons sit on dark photos or panels: white, with the button colour as text.
-        const fg = l.tone === 'light' ? (filled ? c('button_bg') : '#ffffff') : filled ? c('button_text') : c('button_bg');
+        // A pale button colour as text on white is unreadable: fall back to the text colour, then near-black.
+        const onWhite = readable(c('button_bg'), '#ffffff', readable(c('text'), '#ffffff', '#1d1d1f'));
+        const fg = l.tone === 'light' ? (filled ? onWhite : '#ffffff') : filled ? readable(c('button_text'), c('button_bg'), readable('#ffffff', c('button_bg'), '#1d1d1f')) : c('button_bg');
         const bgc = l.tone === 'light' ? '#ffffff' : c('button_bg');
         const line = l.tone === 'light' ? '#ffffff' : c('button_bg');
         return (
@@ -83,7 +109,7 @@ export default function DesignCanvas({ spec, size, brand, srcOf, px, editable, o
         const s = l.variant === 'reversed' ? brand.logoReversed || brand.logo : brand.logo;
         const invert = l.variant === 'reversed' && !brand.logoReversed;
         return s
-          ? <img key={i} src={s} alt="" style={{ position: 'absolute', top: `${l.y}%`, ...anchor(l.x, l.align), height: `${l.h}%`, width: 'auto', maxWidth: '45%', objectFit: 'contain', filter: invert ? 'brightness(0) invert(1)' : undefined }} />
+          ? <LogoImg key={i} src={s} invert={invert} style={{ position: 'absolute', top: `${l.y}%`, ...anchor(l.x, l.align), height: `${l.h}%`, width: 'auto', maxWidth: '45%', objectFit: 'contain' }} />
           : <div key={i} style={{ position: 'absolute', top: `${l.y}%`, ...anchor(l.x, l.align), fontFamily: brand.head, fontWeight: 700, whiteSpace: 'nowrap', color: l.variant === 'reversed' ? '#fff' : c('text'),
               fontSize: px ? `${(l.h / 100) * (px * size.h / size.w) * 0.7}px` : `${(l.h * size.h / size.w) * 0.7}cqw`, lineHeight: 1 }}>{brand.name}</div>;
       }

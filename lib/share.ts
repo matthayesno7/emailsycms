@@ -170,7 +170,7 @@ export async function portalContents(db: SupabaseClient, p: PortalRow): Promise<
     const logos = all.filter((a: any) => a.kind === 'logo').map((a: any) => a.id);
     if (logos.length && !sections.some((s) => s.name.toLowerCase().includes('logo'))) sections.unshift({ id: 'logos', name: 'Logos', asset_ids: logos });
     const rest = all.filter((a: any) => !inSections.has(a.id) && a.kind !== 'logo').map((a: any) => a.id);
-    if (rest.length) sections.push({ id: 'more', name: sections.length ? 'More' : 'Everything', asset_ids: rest });
+    if (rest.length) sections.push({ id: 'more', name: sections.some((s) => s.id !== 'logos') ? 'More' : sections.length ? 'Images' : 'Everything', asset_ids: rest });
   }
   const shown = new Set(sections.flatMap((s) => s.asset_ids));
   return { assets: all.filter((a: any) => shown.has(a.id)), sections };

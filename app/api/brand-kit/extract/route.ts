@@ -5,6 +5,7 @@ import { imageSize } from '@/lib/imageSize';
 import { askClaude, hasClaude, jsonFrom } from '@/lib/anthropic';
 import { KIT_PROMPT, combine, heuristicKit, parseCss, parseHtml, type Signals } from '@/lib/brandExtract';
 import { mergeKit, missing, normaliseKit, warnings, type BrandKit } from '@/lib/brandKit';
+import { takeUsage } from '@/lib/usage';
 
 // Builds a draft brand kit from a website: reads the page and its stylesheets, finds the logo,
 // then Claude assigns colours and fonts to roles (a heuristic does it when no API key is set).
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
   const base = heuristicKit(signals, name);
   let kit: BrandKit = base;
   let usedClaude = false;
-  if (hasClaude()) {
+  if (hasClaude() && (await takeUsage(ws, 'kit')).ok) {
     const forClaude = { ...signals, logos: signals.logos.map((l) => ({ url: l.url, alt: l.alt, where: l.where, inline_svg: !!l.svg })) };
     const content: any[] = [{ type: 'text', text: `${KIT_PROMPT}\n\nSignals from ${page.url}:\n${JSON.stringify(forClaude).slice(0, 60000)}` }];
     if (photo) content.push({ type: 'image', source: { type: 'base64', media_type: photo.type, data: photo.buf.toString('base64') } });
@@ -131,8 +132,16 @@ export async function POST(request: Request) {
   const { data: saved, error } = await supabase.from('brand_kits').upsert(row, { onConflict: 'workspace_id' }).select('*').single();
   if (error) return Response.json({ error: `Couldn’t save the brand kit: ${error.message}` }, { status: 400 });
 
+  // A brand still called the default "My brand" takes its name from the site (and a matching portal address).
+  let renamed: string | null = null;
+  if (workspace.name === 'My brand' && name && name !== 'My brand') {
+    const { error: e2 } = await supabase.from('workspaces').update({ name: name.slice(0, 60), slug: null }).eq('id', ws);
+    if (!e2) renamed = name.slice(0, 60);
+  }
+
   return Response.json({
     kit: saved,
+    renamed,
     found: { stylesheets: sheets.filter(Boolean).length, logo: !!merged.logos.primary, photo: !!merged.imagery.references.length, used_claude: usedClaude },
     missing: missing(merged),
     warnings: warnings(merged),

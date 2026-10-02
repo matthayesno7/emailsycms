@@ -9,6 +9,8 @@ import { cleanText, productAsBlock, shortDescription } from '@/lib/products';
 import AssetEditor from './AssetEditor';
 import BlockEditor, { FitPreview, Preview, previewWidth } from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
+import Feedback from './Feedback';
+import GettingStarted from './GettingStarted';
 import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
 import BrandKitView from './BrandKit';
 import Create from './Create';
@@ -725,6 +727,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     };
   });
 
+  // Files the team added themselves (not the logo and photo the brand kit pulled from their site).
+  const ownFiles = items.some((a) => a.kind !== 'block' && a.provenance?.via !== 'brand_kit');
   const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); };
   const library = (k: string, o = 'any') => { setView(k); setOrigin(o); go('library'); };
   const openSettings = (t: typeof settingsTab) => { setSettingsTab(t); go('settings'); };
@@ -781,6 +785,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </nav>
 
         <div className="fill" />
+        <button className="nav" type="button" onClick={() => setModal('feedback')}><Icon.Chat />Feedback</button>
         <button className="nav" type="button" aria-current={page === 'settings'} onClick={() => openSettings(!connected ? 'claude' : 'workspace')}><Icon.Settings />Settings
           {needsSetup && <span className="count dotnote" title={!connected ? 'Claude isn’t connected yet' : 'No Figma file connected'}>•</span>}
         </button>
@@ -824,7 +829,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           ) : page === 'sharing' && curWs ? (
             <Sharing key={curWs.id} supabase={supabase} ws={curWs} items={items} folders={folders} collections={collections.map((c) => ({ id: c.id, name: c.name }))} toast={toast} />
           ) : page === 'brand' && curWs ? (
-            ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); }} /> : <p className="loading">Loading your brand kit…</p>
+            ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); loadWorkspaces(ws); }} /> : <p className="loading">Loading your brand kit…</p>
           ) : !ready ? (
             <p className="loading">Loading your library…</p>
           ) : (
@@ -853,6 +858,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 </div>
               </div>
               {addOpen && <div className="clickaway" onClick={() => setAddOpen(false)} />}
+              {curWs && !q.trim() && folder === 'all' && !curColl && (
+                <GettingStarted supabase={supabase} ws={curWs.id} items={items} kitStatus={kitRow?.status || null}
+                  onBrandKit={() => go('brand')} onImport={() => setModal('import')} onUpload={() => fileImg.current?.click()} onCreate={() => go('create')} onSharing={() => go('sharing')} />
+              )}
 
               {suggestions.length > 0 && collections.length === 0 && (
                 <div className="suggest" aria-label="Suggested collections">
@@ -916,7 +925,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 </div>
               )}
 
-              {!items.length ? (
+              {(!items.length || (!ownFiles && !q.trim() && view === 'all' && folder === 'all' && !curColl && origin === 'any')) ? (
+                <>
                 <div className="intake">
                   <button type="button" className="intake-drop" onClick={() => fileImg.current?.click()}>
                     <Icon.Upload size={30} />
@@ -931,6 +941,17 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     <button type="button" className="src" onClick={() => setModal('import')}><Icon.Cloud /><span><b>Google Drive, Dropbox or Box</b><small>Pick files, or import a whole Box folder</small></span></button>
                   </div>
                 </div>
+                {visible.length > 0 && (
+                  <>
+                    <div className="src-h kitfiles">From your brand kit</div>
+                    <div className="grid masonry">
+                      {visible.map((it) => (
+                        <div key={it.id} className="selwrap"><Tile it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => openEditor(it.id)} /></div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                </>
               ) : !visible.length ? (
                 view === 'block' && !q ? (
                   <div className="empty small">
@@ -1040,6 +1061,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         />
       )}
 
+      {modal === 'feedback' && <Feedback ws={curWs?.id} page={page === 'settings' ? `settings/${settingsTab}` : page} onClose={() => setModal(null)} toast={toast} />}
       {modal === 'import' && curWs && (
         <Modal onClose={() => { setModal(null); setBoxReturn(false); }}>
           <h2>Import from where your images live</h2>

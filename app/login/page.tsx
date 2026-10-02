@@ -10,6 +10,15 @@ export default function LoginPage() {
   // Invite emails land here with tokens in the URL hash; turn them into a session.
   useEffect(() => {
     const h = new URLSearchParams(window.location.hash.slice(1));
+    // A used or expired link comes back here with an error: say so, rather than a silent sign-in page.
+    if (new URLSearchParams(window.location.search).get('error') === 'link' || h.get('error')) {
+      setError(h.get('error_code') === 'otp_expired'
+        ? 'That sign-in link has expired or was already used. Links work once, for an hour. Send yourself a new one.'
+        : 'That sign-in link didn’t work. Send yourself a new one, or continue with Google.');
+      setState('error');
+      window.history.replaceState(null, '', '/login');
+      return;
+    }
     const access_token = h.get('access_token'), refresh_token = h.get('refresh_token');
     if (!access_token || !refresh_token) return;
     setState('sending');

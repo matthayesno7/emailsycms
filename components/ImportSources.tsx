@@ -120,7 +120,7 @@ export default function ImportSources({ ws, folderId, folderName, onDone, toast,
       <div className="imp-list">
         {sources.map((s) => (
           <button key={s.id} type="button" className="src" disabled={!cfg || !s.on || !!progress} onClick={s.act}>
-            {s.icon}<span><b>{s.name}{cfg && !s.on && <em className="soon">Not set up</em>}</b><small>{s.on ? s.note : 'Add its keys on the server to switch it on'}</small></span>
+            {s.icon}<span><b>{s.name}{cfg && !s.on && <em className="soon">Soon</em>}</b><small>{s.on ? s.note : 'Not switched on yet. Upload a folder from your computer for now.'}</small></span>
           </button>
         ))}
       </div>

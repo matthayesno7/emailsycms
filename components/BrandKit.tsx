@@ -46,7 +46,7 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
     setKit(normaliseKit(json.kit.kit, ws.name));
     onChanged();
     const f = json.found || {};
-    toast(`Brand kit drafted from ${new URL(json.kit.source.url).hostname}${f.logo ? ' with its logo' : ''}. Check it, then approve.`);
+    toast(`Brand kit drafted from ${new URL(json.kit.source.url).hostname}${f.logo ? ' with its logo' : ''}${json.renamed ? `, and your brand is now called ${json.renamed}` : ''}. Check it, then approve.`);
   }
 
   async function save(status?: 'approved') {

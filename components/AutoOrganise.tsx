@@ -9,6 +9,10 @@ const gbp = (n: number) => (n < 1 ? `${Math.max(1, Math.round(n * 100))}p` : `£
 export default function AutoOrganise({ ws, toast }: { ws: string; toast: (m: string) => void }) {
   const [p, setP] = useState<P | null>(null);
   const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState<{ kind: string; label: string; used: number; cap: number }[] | null>(null);
+  useEffect(() => {
+    fetch(`/api/usage?workspace_id=${ws}`).then((r) => (r.ok ? r.json() : null)).then((j) => setUsage(j?.usage || null)).catch(() => {});
+  }, [ws, p?.organised]);
   const load = useCallback(async () => {
     const r = await fetch(`/api/jobs/tag?workspace_id=${ws}`).catch(() => null);
     if (r?.ok) setP(await r.json());
@@ -68,6 +72,22 @@ export default function AutoOrganise({ ws, toast }: { ws: string; toast: (m: str
           ? <p className="tip"><b>{(p.searchable || 0).toLocaleString()}</b> files searchable by meaning{p.search_waiting ? `, ${p.search_waiting.toLocaleString()} being added…` : ''}. Try “woman outdoors with a blue bag” or “red product shots, landscape”.</p>
           : <p className="tip">Searching by meaning is off: add VOYAGE_API_KEY on the server. Search still matches names, tags and descriptions.</p>}
       </div>
+      {usage && (
+        <div className="ao-usage">
+          <div className="label">This month</div>
+          {usage.map((u) => {
+            const pc = u.cap ? Math.min(100, Math.round((u.used / u.cap) * 100)) : 100;
+            return (
+              <div key={u.kind} className={'ao-urow' + (pc >= 100 ? ' full' : pc >= 80 ? ' near' : '')}>
+                <span>{u.label[0].toUpperCase() + u.label.slice(1)}</span>
+                <div className="ao-meter small" aria-label={`${pc}% used`}><i style={{ width: `${pc}%` }} /></div>
+                <span className="muted">{u.used.toLocaleString()} of {u.cap.toLocaleString()}</span>
+              </div>
+            );
+          })}
+          <p className="tip">Monthly allowances reset on the 1st. Need more? Send us a note through Feedback.</p>
+        </div>
+      )}
       <p className="tip">Not used: face recognition. Mise never identifies people from their faces.</p>
     </div>
   );

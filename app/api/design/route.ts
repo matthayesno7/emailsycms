@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { askClaude, hasClaude, jsonFrom, MODEL } from '@/lib/anthropic';
+import { limitMessage, takeUsage } from '@/lib/usage';
 import { cleanSpec, DIRECTIONS, FORMATS, systemPrompt, userPrompt, type LibraryItem } from '@/lib/design';
 
 // Mise Studio: one design per call (the page asks for several in parallel, so they
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       .order('updated_at', { ascending: false }).limit(80),
   ]);
   if (!workspace) return Response.json({ error: 'Workspace not found.' }, { status: 404 });
+  if (!(await takeUsage(ws, 'design')).ok) return Response.json({ error: limitMessage('design'), code: 'limit' }, { status: 429 });
 
   const library: LibraryItem[] = (rows || []).filter((r: any) => r.status !== 'draft').map((r: any) => ({
     id: r.id, kind: r.kind, name: r.name, alt: r.fields?.alt || r.fields?.description || undefined, w: r.width, h: r.height, pid: r.pid, price: r.price,

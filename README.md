@@ -184,3 +184,10 @@ supabase/migrations/       schema, RLS, storage bucket
 - OAuth sign-in for the Claude connector, replacing link keys.
 - Server-side email renditions, so Claude can push any preset size.
 - Email Love integration (Email Love customers only): components that come out ready for the Email Love plugin.
+
+
+## Testing readiness (3 Oct 2026)
+- **Monthly AI allowances (cost guards):** every workspace gets a monthly allowance for auto-organise (3,000 files), plain-English searches (2,000), Studio designs (300) and brand kits from a website (20). Change the defaults with `AI_CAP_TAG`, `AI_CAP_SEARCH`, `AI_CAP_DESIGN`, `AI_CAP_KIT`, or raise one brand in Supabase (`workspaces.ai_caps`, e.g. `{"tag": 20000}`). Over the limit: files wait with a clear note, search still works on words and meaning, the Studio says so. Usage shows in Settings → Auto-organise. Crossing 80% and 100% emails `ALERT_EMAIL` once a month.
+- **Feedback:** a Feedback button in the sidebar. Messages are saved in the `feedback` table and emailed to `FEEDBACK_EMAIL` (or `ALERT_EMAIL`), with reply-to set to the sender.
+- **Emails** use Resend's API: set `RESEND_API_KEY`, `ALERT_EMAIL` and `MAIL_FROM` (a sender on your verified domain) on Railway.
+- **Migration:** `supabase/migrations/20261003000000_usage_and_feedback.sql`.

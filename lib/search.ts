@@ -148,7 +148,8 @@ export async function searchAssets(db: SupabaseClient, o: { ws: string[]; q: str
   let text = (o.q || '').trim();
   let filters: Filters = { ...(o.filters || {}) };
   let didUnderstand = false;
-  if (o.understand && wordCount(text) >= 3) {
+  // Plain-English understanding counts against the monthly allowance; over it, search still works on words and meaning.
+  if (o.understand && wordCount(text) >= 3 && (o.ws.length !== 1 || (await (await import('./usage')).takeUsage(o.ws[0], 'search')).ok)) {
     const { data: folders } = await db.from('folders').select('id, name').in('workspace_id', o.ws).limit(500);
     // Embed the raw query at the same time, in case understanding leaves the words unchanged.
     const [u] = await Promise.all([understand(text, folders || []), queryVector(text)]);

@@ -8,6 +8,7 @@ import { jsonFrom } from './anthropic';
 import { TAG_MODEL, VISION_TYPES, MAX_VISION_BYTES, cleanResult, nameTags, patchFrom, shortlist, tagPrompt, type Candidate } from './autotag';
 import type { BrandKit } from './brandKit';
 import { assetText, embed, hasVoyage, toPgVector, VOYAGE_MODEL } from './search';
+import { limitMessage, takeUsage } from './usage';
 
 const CONCURRENCY = 3;
 const MAX_ATTEMPTS = 3;
@@ -106,6 +107,9 @@ async function tagOne(ctx: Ctx, a: any): Promise<'done' | 'failed' | 'limited'> 
     }
     const src = await imageUrl(ctx, a);
     if (src.error) return fail(ctx, a, src.error, true);
+    // Monthly allowance: over it, the file waits as failed with a clear note (Retry works next month or once raised).
+    const take = await takeUsage(a.workspace_id, 'tag');
+    if (!take.ok) return fail(ctx, a, limitMessage('tag'), true);
     const products = a.kind === 'product' ? [] : shortlist(await productsFor(ctx, a.workspace_id), a.name, folder);
     const input = { name: a.name, kind: a.kind, folder, kit, products };
     const res = await fetch('https://api.anthropic.com/v1/messages', {
