@@ -1161,15 +1161,15 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
       </div>
     );
   }
+  // Products show as their photo, like the portal; the email card lives in the product editor.
   if (it.kind === 'product') {
-    const pb = productAsBlock(it);
     return (
       <div className="tile" role="button" tabIndex={0} title="Click to open · drag the image into Figma" onClick={onOpen} onKeyDown={onKey}>
-        <div className="thumb block live product">
-          <FitPreview width={300}><Preview b={pb} bt={BLOCK_TYPES.product.fields} slotSrc={(s: any) => (s?.path ? urls[s.path] : undefined)} drag={{ name: it.pid || it.name, png: it.mime === 'image/png' }} /></FitPreview>
-          {!it.storage_path && <span className="tag noimgtag">No image</span>}
+        <div className="thumb product photo">
+          {src ? <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.pid || it.name} data-id={it.id} data-png={it.mime === 'image/png' ? '1' : '0'} />
+            : <div className="noimg"><code>{it.pid}</code>Drop {it.pid}.jpg to add its image</div>}
         </div>
-        <div className="meta"><span className="t">{it.name}</span><span className="s">{usedLabel || it.pid || ''}</span></div>
+        <div className="meta"><span className="t">{it.name}</span><span className="s">{it.price || ''}</span></div>
       </div>
     );
   }
@@ -1196,9 +1196,13 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
           <div className="noimg"><code>{it.pid}</code>Drop {it.pid}.jpg to add its image</div>
         )}
         {src && <span className="drag">Drag to Figma</span>}
-        {it.origin === 'generated' && <span className={'tag ' + (it.status === 'draft' ? 'draft' : 'ai')}>{it.status === 'draft' ? 'Draft · AI' : 'AI'}</span>}
-        {it.duplicate_of && !it.duplicate_ok && <span className="tag dup" title="Looks like a copy of another file">Duplicate?</span>}
-        {it.on_brand === false && <span className="tag offbrand" title={it.on_brand_reason || 'Doesn’t match the brand’s imagery rules'}>Off-brand</span>}
+        {it.status === 'draft' && <span className="tag draft">To review</span>}
+        {(it.duplicate_of && !it.duplicate_ok) || it.on_brand === false ? (
+          <span className="flags">
+            {it.duplicate_of && !it.duplicate_ok && <span className="tag dup" title="Looks like a copy of another file">Duplicate?</span>}
+            {it.on_brand === false && <span className="tag offbrand" title={it.on_brand_reason || 'Doesn’t match the brand’s imagery rules'}>Off-brand</span>}
+          </span>
+        ) : null}
       </div>
       <div className="meta"><span className="t">{it.name}</span><span className="s">{right}</span></div>
     </div>

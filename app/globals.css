@@ -1133,3 +1133,33 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .start-a{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 @media (max-width:640px){.start-steps li{grid-template-columns:24px 1fr}.start-a{grid-column:2;justify-content:flex-start}}
 .src-h.kitfiles{margin:22px 0 10px;font-size:13px;color:var(--ink-3)}
+
+/* ---------- the library grid, in the portal's style (2 Oct) ---------- */
+.grid.masonry{columns:4 240px;column-gap:16px}
+.grid.masonry>.selwrap,.grid.masonry>.tile{margin-bottom:20px}
+.grid.masonry .thumb{border:0;border-radius:12px;background:var(--surface)}
+.grid.masonry .thumb img{transition:transform .3s ease}
+.grid.masonry .tile:hover .thumb{box-shadow:none}
+.grid.masonry .tile:hover .thumb img{transform:scale(1.02)}
+.grid.masonry .thumb.logo{aspect-ratio:4/3}
+.grid.masonry .thumb.logo img{object-fit:contain;padding:14%}
+.thumb.product.photo{aspect-ratio:4/5;background:var(--surface);border:0;border-radius:12px}
+.thumb.product.photo img{object-fit:contain;padding:8%;mix-blend-mode:multiply}
+.grid:not(.masonry) .thumb.product.photo{border:1px solid var(--line)}
+.meta{padding:0 2px}
+.meta .t{font-weight:400;color:var(--ink-2)}
+.meta .s{opacity:0;transition:opacity .15s}
+.tile:hover .meta .s,.tile:focus-visible .meta .s,.thumb.product.photo+.meta .s{opacity:1}
+.tile:hover .meta .t{color:var(--ink)}
+.tag.ai{display:none}
+.thumb .flags{position:absolute;right:8px;bottom:8px;display:flex;gap:4px;opacity:0;transition:opacity .15s}
+.thumb .flags .tag{position:static}
+.tile:hover .thumb .flags,.tile:focus-visible .thumb .flags{opacity:1}
+/* kind tabs as pills, like the portal */
+.lib-tabs{border-bottom:0;margin-bottom:22px}
+.lib-tabs .tabs-row{gap:6px;flex-wrap:wrap}
+.lib-tabs .tabs-row button{border:1px solid var(--line-strong);border-radius:999px;padding:6px 14px;margin:0;font-size:14px;align-items:center}
+.lib-tabs .tabs-row button:hover{background:var(--hover)}
+.lib-tabs .tabs-row button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:500}
+.lib-tabs .tabs-row button[aria-pressed="true"] span{color:#fff;opacity:.7}
+.lib-tabs .source{margin-bottom:0}
