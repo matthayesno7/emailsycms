@@ -32,5 +32,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // The MCP endpoint and health check authenticate themselves; skip them here.
-  matcher: ['/((?!api/mcp|api/health|_next/static|_next/image|favicon.ico|icon.svg).*)'],
+  // .well-known is skipped so Claude's OAuth discovery gets a plain 404 (no sign-in needed), not a login redirect.
+  matcher: ['/((?!api/mcp|api/health|\.well-known|_next/static|_next/image|favicon.ico|icon.svg).*)'],
 };

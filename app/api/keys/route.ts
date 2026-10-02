@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
-import { appUrl, newApiKey } from '@/lib/keys';
+import { newApiKey } from '@/lib/keys';
+import { publicOrigin } from '@/lib/origin';
 
 // Create a personal connector link for Claude. The full key is shown once and only its hash is stored.
 export async function POST(request: Request) {
@@ -15,5 +16,5 @@ export async function POST(request: Request) {
     .select('id, name, prefix, created_at, last_used_at')
     .single();
   if (error) return Response.json({ error: error.message }, { status: 400 });
-  return Response.json({ key: data, url: `${appUrl()}/api/mcp/${key}` });
+  return Response.json({ key: data, url: `${publicOrigin(request)}/api/mcp/${key}` });
 }
