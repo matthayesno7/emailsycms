@@ -1057,3 +1057,21 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .ie-save .linkish:disabled{opacity:.45;cursor:default;text-decoration:none}
 .ie-side .ed-sizes .chip{padding:6px 9px;font-size:13px}
 .ie-side .ed-sizes .chip span{font-size:11px}
+
+/* design editing on the asset page */
+.de-stage{display:flex;align-items:center;justify-content:center;padding:24px}
+.de-fit{max-width:100%;max-height:100%}
+.de-canvas{width:100%;box-shadow:0 10px 40px rgba(20,20,22,.16);border-radius:4px;overflow:hidden;transition:opacity .2s}
+.de-canvas.busy{opacity:.55}
+.de-field{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)}
+.de-field .in{font-size:14px;color:var(--ink)}
+.de-field textarea.in{resize:vertical}
+.de-img{display:flex;align-items:center;gap:10px;font-size:13px}
+.vthumb.logo{background:#fff;border:1px solid var(--line)}
+.vthumb.logo img{object-fit:contain;padding:4px}
+.de-picker{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px}
+.de-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:260px;overflow:auto}
+.de-grid button{border:0;padding:0;background:var(--hover);border-radius:8px;aspect-ratio:1;overflow:hidden;cursor:pointer;font-size:11px;color:var(--ink-2)}
+.de-grid button:hover{outline:2px solid var(--accent)}
+.de-grid img{width:100%;height:100%;object-fit:cover;display:block}
+.design-edit form.ed-sec .btn{align-self:flex-start;display:inline-flex;align-items:center;gap:6px}

@@ -9,6 +9,8 @@ import { Icon } from './icons';
 import AssetAbout from './AssetAbout';
 import AssetVersions from './AssetVersions';
 import ImageEditor, { type EditResult } from './ImageEditor';
+import DesignEditor from './DesignEditor';
+import type { StudioBrand } from './DesignCanvas';
 import type { Asset } from './Library';
 
 const TYPES: [string, string][] = [['image', 'Image'], ['logo', 'Logo'], ['product', 'Product']];
@@ -20,7 +22,7 @@ const SIZES: [string, string, number | null][] = [['original', 'Original size', 
 // Opens at ?asset=<id>, so it has its own link and Back works.
 // Two ways to change it: Edit (hands-on, free, saves a new version; Studio designs reopen in the
 // Studio with their layout live) and AI edit (prompt-led, coming next).
-export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, onEditDesign, onAddPreset }: {
+export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, design, onDesignSaved, onAddPreset }: {
   it: Asset;
   folders?: { id: string; name: string }[];
   onShare?: () => Promise<string | null>;
@@ -35,7 +37,9 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   kit?: BrandKit | null;
   onSaveEdit?: (r: EditResult, asCopy: boolean) => Promise<boolean>;
   onRevert?: (version: number) => Promise<boolean>;
-  onEditDesign?: () => void; // Studio designs: reopen in the Studio
+  // Studio designs: edited right here with their layout live.
+  design?: { wsId: string; brand: StudioBrand; fonts: string[]; srcOf: (id: string) => string | undefined; library: Asset[]; thumbOf: (a: Asset) => string | undefined };
+  onDesignSaved?: (newId?: string) => void;
   onAddPreset?: (p: TeamPreset) => Promise<boolean>;
   src: string | null;
   usedIn?: Asset[];
@@ -49,7 +53,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   position?: string;
   toast: (m: string) => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<false | 'image' | 'design'>(false);
   const [zoom, setZoom] = useState<'fit' | '1x'>('fit');
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [focus, setFocus] = useState<Focus>(it.focus || { x: 0.5, y: 0.5 });
@@ -72,7 +76,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   const isVideo = it.kind === 'video';
   const isSvg = /svg/.test(it.mime || '');
   const isDesign = it.provenance?.via === 'studio' && !!it.provenance?.spec;
-  const canEdit = !!src && !isVideo && !isSvg && (isDesign ? !!onEditDesign : !!onSaveEdit);
+  const canEdit = !!src && !isVideo && !isSvg && (isDesign ? !!design && !!supabase : !!onSaveEdit);
 
   // Keyboard: arrows move between assets (outside text fields and edit mode).
   useEffect(() => {
@@ -148,7 +152,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         <div className="ed-title">
           <input className="title-in" value={name} maxLength={120} aria-label="Asset name" title="Rename"
             onChange={(e) => setName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-          <div className="sub">{editing ? `Editing · saves as version ${(it.version || 1) + 1}, the original is kept` : info || 'No image yet'}</div>
+          <div className="sub">{editing ? `Editing · saves as version ${(it.version || 1) + 1}` : info || 'No image yet'}</div>
         </div>
         <span className="spacer" />
         {!editing && (onPrev || onNext) && (
@@ -160,7 +164,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         )}
         {!editing && src && (
           <div className="modes" role="group" aria-label="Change this asset">
-            {canEdit && <button className="btn" type="button" onClick={() => (isDesign ? onEditDesign!() : setEditing(true))} title={isDesign ? 'Opens in the Studio with the layout live: change copy, swap images, or change it with words' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />Edit</button>}
+            {canEdit && <button className="btn" type="button" onClick={() => setEditing(isDesign ? 'design' : 'image')} title={isDesign ? 'Change the words, swap photos or the logo, or change it with words, with the layout live' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />Edit</button>}
             {!isVideo && <button className="btn" type="button" disabled title="Remove backgrounds, extend, upscale and change it with words. Coming next."><Icon.Sparkle size={15} />AI edit <em className="soon">Soon</em></button>}
           </div>
         )}
@@ -184,7 +188,11 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         {!editing && src && !isVideo && !isSvg && <button className="primary" type="button" onClick={copyImage}>Copy image</button>}
       </header>
 
-      {editing && src && onSaveEdit ? (
+      {editing === 'design' && design && supabase ? (
+        <DesignEditor it={it} supabase={supabase} {...design} toast={toast}
+          onCancel={() => setEditing(false)}
+          onSaved={(newId) => { setEditing(false); onDesignSaved?.(newId); }} />
+      ) : editing === 'image' && src && onSaveEdit ? (
         <ImageEditor it={it} src={src} kit={kit || null} toast={toast} onAddPreset={onAddPreset}
           onCancel={() => setEditing(false)}
           onSave={async (r, asCopy) => { const ok = await onSaveEdit(r, asCopy); if (ok) setEditing(false); return ok; }} />
@@ -226,7 +234,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 </div>
                 {it.provenance?.prompt && <p className="tip">“{it.provenance.prompt}”</p>}
                 <p className="tip">{[it.provenance?.model, it.provenance?.style, it.provenance?.source_product_pid && `from product ${it.provenance.source_product_pid}`, it.provenance?.brand_kit_version && `brand kit v${it.provenance.brand_kit_version}`].filter(Boolean).join(' · ')}</p>
-                {isDesign && onEditDesign && <p className="tip">Made in the Studio: <button type="button" className="linkish" onClick={onEditDesign}>edit it with the layout live</button>.</p>}
+                {isDesign && canEdit && <p className="tip">Made in the Studio: <button type="button" className="linkish" onClick={() => setEditing('design')}>edit it with the layout live</button>.</p>}
               </div>
             )}
 

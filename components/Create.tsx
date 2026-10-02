@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import Studio, { formatFor, type Variant } from './Studio';
+import Studio, { formatFor } from './Studio';
 import type { StudioBrand } from './DesignCanvas';
 import { CATEGORIES, MOCKS, PROMPTS, USE_LABEL, fillPrompt, type PromptCategory } from '@/lib/prompts';
 import { normaliseKit, type BrandKitRow } from '@/lib/brandKit';
@@ -26,12 +26,10 @@ const FORMATS: { label: string; size: [number, number]; ask: string; video?: boo
 // Ideas the Studio can design right here (single-canvas designs; AI photos and video go to Claude).
 const LIVE = new Set(['hero', 'strip', 'post', 'story', 'thumb', 'slide']);
 
-export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, editDesign, onEditDone }: {
+export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast }: {
   ws: Ws; userId: string; supabase: SupabaseClient; onSaved: () => void;
   items: Asset[]; urls: Record<string, string>; kit: BrandKitRow | null; connected: boolean;
   onConnect: () => void; onBrandKit: () => void; onReview: () => void; onOpen: (a: Asset) => void; toast: (m: string) => void;
-  editDesign?: Asset | null; // a saved Studio design to edit (from the asset page's Edit)
-  onEditDone?: () => void;
 }) {
   const [cat, setCat] = useState<PromptCategory | 'all'>('all');
   const [ask, setAsk] = useState('');
@@ -117,22 +115,6 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     { done: kit?.status === 'approved', label: kit ? 'Approve your brand kit' : 'Brand kit', note: kit ? 'It’s a draft' : 'From your site or Figma', go: onBrandKit },
     { done: pool.length > 0, label: 'Add images', note: 'Photos, products, logos', go: undefined },
   ];
-
-  // Editing a saved design: the same Studio, opened on that design with its layout live.
-  if (editDesign?.provenance?.spec) {
-    const current = items.find((i) => i.id === editDesign.id) || editDesign; // stays up to date after each save
-    const size = editDesign.provenance.size || { w: editDesign.width || 1200, h: editDesign.height || 600 };
-    const initial: Variant[] = [{ key: 'edit', size, status: 'ready', spec: editDesign.provenance.spec, history: [], label: 'Current version' }];
-    return (
-      <div className="create">
-        {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
-        <Studio key={`edit-${editDesign.id}`} ws={ws} userId={userId} supabase={supabase} brand={studioBrand} fonts={fonts} srcOf={srcOf}
-          brief={editDesign.provenance.prompt || editDesign.name} size={size} initial={initial} editOf={current}
-          onBrief={() => {}} onClose={() => onEditDone?.()} onSaved={onSaved}
-          onOpenAsset={() => onEditDone?.()} toast={toast} />
-      </div>
-    );
-  }
 
   if (studio) {
     return (

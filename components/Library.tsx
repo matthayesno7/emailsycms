@@ -15,6 +15,7 @@ import Create from './Create';
 import ImportSources from './ImportSources';
 import { TABS, tabOf, tabLabel } from '@/lib/formats';
 import { normaliseKit, type BrandKitRow } from '@/lib/brandKit';
+import { studioKit } from '@/lib/studioBrand';
 import { dhash, findDuplicate } from '@/lib/phash';
 import { describeRules, haystack, matchesQuery, matchesRules, suggestCollections, type Collection, type Rules } from '@/lib/collections';
 import AutoOrganise from './AutoOrganise';
@@ -48,7 +49,6 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [collection, setCollection] = useState<string | null>(null); // a smart collection instead of a folder
   const [collForm, setCollForm] = useState<Partial<Collection> | null>(null);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
-  const [editDesign, setEditDesign] = useState<Asset | null>(null); // a Studio design reopened from its asset page
   const [selected, setSelected] = useState<string[]>([]);
   const toggleSel = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const [newFolder, setNewFolder] = useState<string | null>(null);
@@ -642,8 +642,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   }
 
   // A product opens as its email card: edit the copy right there.
+  // Every asset opens on the same asset page (products too); blocks keep their own email editor.
   function openProduct(p: Asset) {
-    showBlock(productDraft(p));
+    openEditor(p.id);
   }
 
   // One click from an asset: logos make a Footer, images and products a Hero or Card.
@@ -724,7 +725,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     };
   });
 
-  const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); setEditDesign(null); };
+  const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); };
   const library = (k: string, o = 'any') => { setView(k); setOrigin(o); go('library'); };
   const openSettings = (t: typeof settingsTab) => { setSettingsTab(t); go('settings'); };
   const wsIndex = workspaces.findIndex((w) => w.id === ws);
@@ -795,7 +796,6 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <div className="content">
           {page === 'create' && curWs ? (
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
-              editDesign={editDesign} onEditDone={() => { const a = editDesign; setEditDesign(null); setPage('library'); if (a) openEditor(a.id); }}
               onConnect={() => openSettings('claude')} onBrandKit={() => go('brand')} onReview={() => library('all', 'draft')}
               onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
           ) : page === 'settings' && curWs ? (
@@ -985,7 +985,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onSaveEdit={(r, asCopy) => saveEdit(openAsset, r, asCopy)}
           onRevert={(v) => revertAsset(openAsset, v)}
           onAddPreset={addPreset}
-          onEditDesign={() => { setEditDesign(openAsset); openEditor(null, true); setPage('create'); window.scrollTo({ top: 0 }); }}
+          design={openAsset.provenance?.via === 'studio' && openAsset.provenance?.spec ? (() => {
+            const sk = studioKit(curWs?.name || '', kitRow, items, urls);
+            return { wsId: ws, brand: sk.brand, fonts: sk.fonts, srcOf: sk.srcOf, thumbOf: (a: Asset) => emailSrcOf(a) || undefined,
+              library: items.filter((i) => (i.kind === 'image' || i.kind === 'product') && i.storage_path && i.status !== 'draft' && i.provenance?.via !== 'studio') };
+          })() : undefined}
+          onDesignSaved={async (newId) => { await loadAssets(ws); if (newId) openEditor(newId, true); }}
           onShare={async () => {
             if (!openAsset.storage_path) { toast('Nothing to share yet.'); return null; }
             setShareTarget({ kind: 'assets', asset_ids: [openAsset.id], title: openAsset.name });
