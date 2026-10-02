@@ -61,6 +61,11 @@ export function supabaseRepo(db: SupabaseClient): Repo {
       if (error) throw error;
       return data as AssetRow;
     },
+    async newVersion(id, file, note, provenance) {
+      const { data, error } = await db.rpc('asset_new_version', { p_asset: id, p_file: file, p_note: note, p_provenance: provenance || null });
+      if (error) throw error;
+      return data as AssetRow;
+    },
     async upload(path, buf, type) {
       const { error } = await db.storage.from('assets').upload(path, buf, { contentType: type });
       if (error) throw error;

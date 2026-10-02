@@ -1075,3 +1075,7 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .de-grid button:hover{outline:2px solid var(--accent)}
 .de-grid img{width:100%;height:100%;object-fit:cover;display:block}
 .design-edit form.ed-sec .btn{align-self:flex-start;display:inline-flex;align-items:center;gap:6px}
+
+.pe-stage{display:flex;align-items:center;justify-content:center;padding:32px}
+.pe-card{width:min(420px,100%);background:#fff;border-radius:8px;box-shadow:0 10px 40px rgba(20,20,22,.12);overflow:hidden}
+.de-field .count{font-style:normal;float:right;color:var(--ink-3);font-size:11.5px}

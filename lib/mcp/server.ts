@@ -23,6 +23,8 @@ export interface Repo {
   download(path: string): Promise<{ blob: Blob; mime: string } | null>;
   updateAsset(id: string, patch: Record<string, any>): Promise<void>;
   insertAsset(row: Record<string, any>): Promise<AssetRow>;
+  // Make the file the asset's new current version (the old one is kept). Optional.
+  newVersion?(id: string, file: Record<string, any>, note: string, provenance?: Record<string, any> | null): Promise<AssetRow>;
   upload(path: string, buf: Buffer, type: string): Promise<void>;
   getBrandKit(workspaceId: string): Promise<Record<string, any> | null>;
   saveBrandKit(row: Record<string, any>): Promise<Record<string, any>>;
@@ -55,7 +57,7 @@ The user can pick ready-made requests from this server's prompts (the Mise promp
 
 Designs made in Mise Studio (provenance.via "studio") carry their layout in provenance.spec: layers with x, y, w, h as percentages of the canvas (provenance.size), text sizes as a percentage of the canvas width, and colours as brand kit roles. To rebuild one in Figma: make a frame at provenance.size, map each layer to a Figma layer (images via push_image_to_figma with the layer's asset id, rectangles with the role's brand kit colour, text as live text in the kit's fonts, the button in the kit's button style), then save it back with add_generated_asset if the user changed it.
 
-Saving something you designed in Figma back into Mise (a banner, a social image, a finished email section): call Figma's download_assets on the finished frame, take its export URL (a temporary https link) and pass it straight to add_generated_asset as image_url, with figma_file_key and figma_node_id, the Mise asset ids you used in source_asset_ids, and a short description of the brief as prompt. Do it as the last step whenever you make a finished image for a workspace, without being asked, and tell the user it's waiting for approval in Mise. Never tell the user to export and upload by hand.
+Saving something you designed in Figma back into Mise (a banner, a social image, a finished email section): call Figma's download_assets on the finished frame, take its export URL (a temporary https link) and pass it straight to add_generated_asset as image_url, with figma_file_key and figma_node_id, the Mise asset ids you used in source_asset_ids, and a short description of the brief as prompt. Do it as the last step whenever you make a finished image for a workspace, without being asked, and tell the user it's waiting for approval in Mise. Never tell the user to export and upload by hand. When you changed an existing Mise asset (the user asked to update one, or Mise sent you its asset id), pass replaces_asset_id so it becomes a new version of that asset rather than a new one.
 
 What each kind of asset becomes in Figma:
 - image and logo: stay images. Place them with push_image_to_figma; never add text to them.
@@ -228,6 +230,7 @@ const TOOLS = [
         style: { type: 'string', description: 'Short style label, e.g. "studio, warm light".' },
         figma_file_key: { type: 'string', description: 'If it was designed in Figma: the file key.' },
         figma_node_id: { type: 'string', description: 'If it was designed in Figma: the frame\'s node id.' },
+        replaces_asset_id: { type: 'string', description: 'When you changed an existing Mise asset (e.g. new copy on a Figma banner): its id. The file becomes a new version of that asset instead of a new asset; the old version is kept and its tags, folder and links stay.' },
       },
       required: ['workspace_id', 'image_url', 'name'],
       additionalProperties: false,
@@ -579,6 +582,19 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const path = `${w.ws.id}/generated/${crypto.randomUUID()}.${ext}`;
       await ctx.repo.upload(path, got.buf, type);
       const size = kind === 'video' ? null : imageSize(got.buf);
+      // An update to an existing asset: a new version of it, not a new asset.
+      if (args.replaces_asset_id && ctx.repo.newVersion) {
+        const old = await ctx.repo.getAsset(String(args.replaces_asset_id));
+        if (!old || old.workspace_id !== w.ws.id) return toolError('replaces_asset_id is not an asset in this workspace.');
+        const row = await ctx.repo.newVersion(old.id, { storage_path: path, mime: type, bytes: got.buf.length, width: size?.w ?? null, height: size?.h ?? null, images: {}, phash: null },
+          String(args.prompt || 'Updated in Figma').slice(0, 200),
+          { ...(old.provenance || {}), model: args.model ? String(args.model).slice(0, 120) : old.provenance?.model || null, prompt: args.prompt ? String(args.prompt).slice(0, 4000) : old.provenance?.prompt || null, updated_at: new Date().toISOString() });
+        if (args.figma_file_key && args.figma_node_id) await ctx.repo.updateAsset(old.id, { figma: { file_key: String(args.figma_file_key).slice(0, 80), node_id: String(args.figma_node_id).slice(0, 40), component_key: null, note: 'Designed in Figma', placed_at: new Date().toISOString() } });
+        if (args.alt) await ctx.repo.updateAsset(old.id, { fields: { ...(old.fields || {}), alt: String(args.alt).slice(0, 300) } });
+        // The words changed: let auto-organise read it again (people's own edits are still kept).
+        await ctx.repo.updateAsset(old.id, { ai_status: 'pending', ai_attempts: 0 });
+        return text({ ok: true, asset: publicAsset(row, w.ws), next: `Saved as version ${row.version} of "${old.name}" in Mise. The previous version is kept in its history.` });
+      }
       const row = await ctx.repo.insertAsset({
         workspace_id: w.ws.id, kind, name, storage_path: path, mime: type, bytes: got.buf.length, width: size?.w ?? null, height: size?.h ?? null,
         origin: 'generated', status: 'draft', created_by: ctx.userId,

@@ -10,6 +10,7 @@ import AssetAbout from './AssetAbout';
 import AssetVersions from './AssetVersions';
 import ImageEditor, { type EditResult } from './ImageEditor';
 import DesignEditor from './DesignEditor';
+import ProductEditor from './ProductEditor';
 import type { StudioBrand } from './DesignCanvas';
 import type { Asset } from './Library';
 
@@ -53,7 +54,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   position?: string;
   toast: (m: string) => void;
 }) {
-  const [editing, setEditing] = useState<false | 'image' | 'design'>(false);
+  const [editing, setEditing] = useState<false | 'image' | 'design' | 'product'>(false);
   const [zoom, setZoom] = useState<'fit' | '1x'>('fit');
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [focus, setFocus] = useState<Focus>(it.focus || { x: 0.5, y: 0.5 });
@@ -76,7 +77,9 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   const isVideo = it.kind === 'video';
   const isSvg = /svg/.test(it.mime || '');
   const isDesign = it.provenance?.via === 'studio' && !!it.provenance?.spec;
-  const canEdit = !!src && !isVideo && !isSvg && (isDesign ? !!design && !!supabase : !!onSaveEdit);
+  const isProduct = it.kind === 'product';
+  const canEdit = isProduct || (!!src && !isVideo && !isSvg && (isDesign ? !!design && !!supabase : !!onSaveEdit));
+  const figmaUrl2 = it.figma?.file_key ? `https://www.figma.com/design/${it.figma.file_key}?node-id=${String(it.figma.node_id || '').replace(':', '-')}` : null;
 
   // Keyboard: arrows move between assets (outside text fields and edit mode).
   useEffect(() => {
@@ -152,7 +155,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         <div className="ed-title">
           <input className="title-in" value={name} maxLength={120} aria-label="Asset name" title="Rename"
             onChange={(e) => setName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-          <div className="sub">{editing ? `Editing · saves as version ${(it.version || 1) + 1}` : info || 'No image yet'}</div>
+          <div className="sub">{editing === 'product' ? 'Editing the product card' : editing ? `Editing · saves as version ${(it.version || 1) + 1}` : info || 'No image yet'}</div>
         </div>
         <span className="spacer" />
         {!editing && (onPrev || onNext) && (
@@ -162,10 +165,10 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
             <button className="x" type="button" aria-label="Next asset" disabled={!onNext} onClick={onNext}><Icon.Chevron /></button>
           </div>
         )}
-        {!editing && src && (
+        {!editing && (src || isProduct) && (
           <div className="modes" role="group" aria-label="Change this asset">
-            {canEdit && <button className="btn" type="button" onClick={() => setEditing(isDesign ? 'design' : 'image')} title={isDesign ? 'Change the words, swap photos or the logo, or change it with words, with the layout live' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />Edit</button>}
-            {!isVideo && <button className="btn" type="button" disabled title="Remove backgrounds, extend, upscale and change it with words. Coming next."><Icon.Sparkle size={15} />AI edit <em className="soon">Soon</em></button>}
+            {canEdit && <button className="btn" type="button" onClick={() => setEditing(isDesign ? 'design' : isProduct ? 'product' : 'image')} title={isDesign ? 'Change the words, swap photos or the logo, or change it with words, with the layout live' : isProduct ? 'Name, label, description, price, button, link and photo' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />Edit</button>}
+            {!isVideo && src && <button className="btn" type="button" disabled title="Remove backgrounds, extend, upscale and change it with words. Coming next."><Icon.Sparkle size={15} />AI edit <em className="soon">Soon</em></button>}
           </div>
         )}
         {!editing && src && isVideo && <a className="btn" href={src} download={`${it.name.replace(/[^\w.-]+/g, '-')}.mp4`} target="_blank" rel="noreferrer">Download</a>}
@@ -192,8 +195,17 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         <DesignEditor it={it} supabase={supabase} {...design} toast={toast}
           onCancel={() => setEditing(false)}
           onSaved={(newId) => { setEditing(false); onDesignSaved?.(newId); }} />
+      ) : editing === 'product' ? (
+        <ProductEditor it={it} src={src} toast={toast} onCancel={() => setEditing(false)} onSave={onPatch}
+          onPhoto={src && onSaveEdit && !isSvg ? () => setEditing('image') : undefined} />
       ) : editing === 'image' && src && onSaveEdit ? (
         <ImageEditor it={it} src={src} kit={kit || null} toast={toast} onAddPreset={onAddPreset}
+          onFigmaWords={figmaUrl2 ? (words) => {
+            const prompt = `Update my Mise asset "${it.name}" (asset id ${it.id}), which was designed in Figma: ${figmaUrl2}\n\nChange its words to:\n${words}\n\nKeep the layout, fonts, colours and size exactly as they are. Then export the frame with download_assets and save it back to Mise with add_generated_asset, passing replaces_asset_id "${it.id}" so it becomes a new version of the same asset.`;
+            try { navigator.clipboard.writeText(prompt); } catch {}
+            window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
+            toast('Opened Claude. The new version appears here when it’s done.');
+          } : undefined}
           onCancel={() => setEditing(false)}
           onSave={async (r, asCopy) => { const ok = await onSaveEdit(r, asCopy); if (ok) setEditing(false); return ok; }} />
       ) : (

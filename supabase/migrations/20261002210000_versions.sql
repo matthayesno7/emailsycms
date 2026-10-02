@@ -65,7 +65,8 @@ returns public.assets language plpgsql security definer set search_path = public
 declare a public.assets; result public.assets;
 begin
   select * into a from public.assets where id = p_asset for update;
-  if a.id is null or not public.is_member(a.workspace_id) then raise exception 'Asset not found'; end if;
+  -- The team, or the Mise server for the Claude connector (it checks the workspace itself).
+  if a.id is null or not (public.is_member(a.workspace_id) or coalesce(auth.role(), '') = 'service_role') then raise exception 'Asset not found'; end if;
   if a.kind = 'block' then raise exception 'Blocks have their own editor'; end if;
   if coalesce(p_file->>'storage_path', '') not like a.workspace_id::text || '/%' then raise exception 'The file must be in this workspace'; end if;
   perform public.asset_archive_current(a);
