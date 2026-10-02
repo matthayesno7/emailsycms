@@ -34,5 +34,5 @@ export const config = {
   // The MCP endpoint and health check authenticate themselves; skip them here.
   // .well-known is skipped so Claude's OAuth discovery gets a plain 404 (no sign-in needed), not a login redirect.
   // Public pages (share links /s, portals /p) and their API check access themselves.
-  matcher: ['/((?!api/mcp|api/health|api/public|s/|p/|\.well-known|_next/static|_next/image|favicon.ico|icon.svg).*)'],
+  matcher: ['/((?!api/mcp|api/health|api/public|s/|p/|\.well-known|_next/static|_next/image|favicon.ico|favicon.svg|icon.svg|icon-\\d+\\.png|apple-touch-icon.png|site.webmanifest).*)'],
 };
