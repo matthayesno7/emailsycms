@@ -14,7 +14,7 @@ import BrandKitView from './BrandKit';
 import Create from './Create';
 import ImportSources from './ImportSources';
 import { TABS, tabOf, tabLabel } from '@/lib/formats';
-import type { BrandKitRow } from '@/lib/brandKit';
+import { normaliseKit, type BrandKitRow } from '@/lib/brandKit';
 import { dhash, findDuplicate } from '@/lib/phash';
 import { describeRules, haystack, matchesQuery, matchesRules, suggestCollections, type Collection, type Rules } from '@/lib/collections';
 import AutoOrganise from './AutoOrganise';
@@ -48,6 +48,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [collection, setCollection] = useState<string | null>(null); // a smart collection instead of a folder
   const [collForm, setCollForm] = useState<Partial<Collection> | null>(null);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+  const [editDesign, setEditDesign] = useState<Asset | null>(null); // a Studio design reopened from its asset page
   const [selected, setSelected] = useState<string[]>([]);
   const toggleSel = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const [newFolder, setNewFolder] = useState<string | null>(null);
@@ -357,6 +358,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   async function deleteAsset(a: Asset) {
     const paths: string[] = [];
+    const { data: old } = await supabase.from('asset_versions').select('storage_path, images').eq('asset_id', a.id);
+    for (const v of (old || []) as any[]) { if (v.storage_path) paths.push(v.storage_path); if (v.images?.email?.path) paths.push(v.images.email.path); }
     const referenced = (p: string) => items.some((o) => o.id !== a.id && Object.values(o.images || {}).some((s: any) => s?.original_path === p || s?.path === p));
     if (a.storage_path && !referenced(a.storage_path)) paths.push(a.storage_path);
     for (const s of Object.values(a.images || {}) as any[]) if (s?.path && !referenced(s.path)) paths.push(s.path);
@@ -549,6 +552,44 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     toast('Collection deleted. The files are still in your library.');
   }
 
+  // Edit mode saves: upload the file, make its email-ready copy and fingerprint, then either
+  // a new version of the same asset (original kept) or a separate copy.
+  async function saveEdit(a: Asset, r: { blob: Blob; mime: string; width: number; height: number; note: string }, asCopy: boolean) {
+    const ext = r.mime.includes('png') ? 'png' : r.mime.includes('webp') ? 'webp' : 'jpg';
+    const path = `${ws}/v/${crypto.randomUUID()}.${ext}`;
+    const up = await supabase.storage.from('assets').upload(path, r.blob, { contentType: r.mime });
+    if (up.error) { toast(/size|large/i.test(up.error.message) ? 'The edited file is over the size limit.' : 'Couldn’t upload the edit.'); return false; }
+    let email: any = null, phash: string | null = null;
+    const local = URL.createObjectURL(r.blob);
+    try { const img = await loadImg(local); phash = dhash(img); email = await emailRendition(supabase, ws, img, { mime: r.mime, bytes: r.blob.size }); } catch {} finally { URL.revokeObjectURL(local); }
+    const file = { storage_path: path, mime: r.mime, width: r.width, height: r.height, bytes: r.blob.size, images: email ? { email } : {}, phash: phash || '-' };
+    const { data, error } = asCopy
+      ? await supabase.rpc('asset_save_copy', { p_asset: a.id, p_file: file, p_name: `${a.name} (${r.width}×${r.height})`, p_note: r.note })
+      : await supabase.rpc('asset_new_version', { p_asset: a.id, p_file: file, p_note: r.note });
+    if (error || !data) { toast(`Couldn’t save the edit${error?.message ? `: ${error.message}` : ''}`); await supabase.storage.from('assets').remove([path, ...(email ? [email.path] : [])]); return false; }
+    await loadAssets(ws);
+    if (asCopy) { toast('Saved as a copy. The original is unchanged.'); openEditor((data as any).id, true); }
+    else toast(`Saved as version ${(data as any).version}. The previous version is in the history.`);
+    return true;
+  }
+  async function revertAsset(a: Asset, version: number) {
+    const { error } = await supabase.rpc('asset_revert', { p_asset: a.id, p_version: version });
+    if (error) { toast('Couldn’t restore that version.'); return false; }
+    await loadAssets(ws);
+    return true;
+  }
+  // A size the team can reuse in Edit, kept with the brand kit.
+  async function addPreset(p: { name: string; w: number; h: number }) {
+    const kit = normaliseKit(kitRow?.kit || { name: curWs?.name }, curWs?.name || '');
+    const presets = [...(kit.presets || []).filter((x) => x.name.toLowerCase() !== p.name.toLowerCase()), p].slice(-30);
+    const { error } = kitRow
+      ? await supabase.from('brand_kits').update({ kit: { ...kit, presets } }).eq('workspace_id', ws)
+      : await supabase.from('brand_kits').insert({ workspace_id: ws, kit: { ...kit, presets }, status: 'draft', source: { type: 'manual' } });
+    if (error) { toast('Couldn’t add the size.'); return false; }
+    await loadKit(ws);
+    return true;
+  }
+
   async function createWorkspace(name: string) {
     const { data, error } = await supabase.rpc('create_workspace', { ws_name: name });
     if (error || !data) { toast('Couldn’t create the workspace.'); return; }
@@ -683,7 +724,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     };
   });
 
-  const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); };
+  const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); setEditDesign(null); };
   const library = (k: string, o = 'any') => { setView(k); setOrigin(o); go('library'); };
   const openSettings = (t: typeof settingsTab) => { setSettingsTab(t); go('settings'); };
   const wsIndex = workspaces.findIndex((w) => w.id === ws);
@@ -754,6 +795,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <div className="content">
           {page === 'create' && curWs ? (
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
+              editDesign={editDesign} onEditDone={() => { const a = editDesign; setEditDesign(null); setPage('library'); if (a) openEditor(a.id); }}
               onConnect={() => openSettings('claude')} onBrandKit={() => go('brand')} onReview={() => library('all', 'draft')}
               onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
           ) : page === 'settings' && curWs ? (
@@ -938,6 +980,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           duplicate={openAsset.duplicate_of ? (() => { const d = itemById(openAsset.duplicate_of); return d ? { id: d.id, name: d.name } : null; })() : null}
           onOpenAsset={(id) => { const a = itemById(id); if (!a) return; if (a.kind === 'product') openProduct(a); else openEditor(id); }}
           onRetag={async () => { if (await patchAsset(openAsset.id, { ai_status: 'pending', ai_attempts: 0, ai_error: null })) { kickTag(); toast('Organising…'); } }}
+          supabase={supabase}
+          kit={kitRow ? normaliseKit(kitRow.kit, curWs?.name || '') : null}
+          onSaveEdit={(r, asCopy) => saveEdit(openAsset, r, asCopy)}
+          onRevert={(v) => revertAsset(openAsset, v)}
+          onAddPreset={addPreset}
+          onEditDesign={() => { setEditDesign(openAsset); openEditor(null, true); setPage('create'); window.scrollTo({ top: 0 }); }}
           onShare={async () => {
             if (!openAsset.storage_path) { toast('Nothing to share yet.'); return null; }
             setShareTarget({ kind: 'assets', asset_ids: [openAsset.id], title: openAsset.name });

@@ -7,7 +7,7 @@ import { emailRendition } from '@/lib/renditions';
 import { loadImg } from '@/lib/images';
 import DesignCanvas, { type StudioBrand } from './DesignCanvas';
 import { Icon } from './icons';
-import type { Ws } from './Library';
+import type { Asset, Ws } from './Library';
 
 export type Variant = {
   key: string;
@@ -42,11 +42,12 @@ function formatId(brief: string) {
 let seq = 0;
 const key = () => `v${++seq}`;
 
-export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brief, size, initial, onBrief, onClose, onSaved, onOpenAsset, toast }: {
+export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brief, size, initial, editOf, onBrief, onClose, onSaved, onOpenAsset, toast }: {
   ws: Ws; userId: string; supabase: SupabaseClient; brand: StudioBrand; fonts: string[];
   srcOf: (id: string) => string | undefined;
   brief: string; size: { w: number; h: number };
-  initial?: Variant[]; // for previews and tests: skip designing and show these
+  initial?: Variant[]; // skip designing and show these (editing a saved design, previews, tests)
+  editOf?: Asset | null; // editing this saved design: saving its variant makes a new version of it
   onBrief: (brief: string, size: { w: number; h: number }) => void;
   onClose: () => void; onSaved: () => void; onOpenAsset: (id: string) => void; toast: (m: string) => void;
 }) {
@@ -128,6 +129,9 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
 
   const png = (v: Variant) => exportPng({ spec: v.spec!, size: v.size, brand, srcOf, fonts });
 
+  // The design being edited (when reopened from the library) saves as a new version of the same asset.
+  const isEdit = (v: Variant) => !!editOf && v.key === 'edit';
+
   async function save(v: Variant): Promise<string | null> {
     if (!v.spec) return null;
     if (v.savedId) return v.savedId;
@@ -140,6 +144,19 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
       const url = URL.createObjectURL(blob);
       let email: any = null;
       try { const img = await loadImg(url); email = await emailRendition(supabase, ws.id, img, { mime: 'image/png', bytes: blob.size }); } catch {} finally { URL.revokeObjectURL(url); }
+      if (isEdit(v)) {
+        const { error } = await supabase.rpc('asset_new_version', {
+          p_asset: editOf!.id,
+          p_file: { storage_path: path, mime: 'image/png', width: v.size.w, height: v.size.h, bytes: blob.size, images: email ? { email } : {} },
+          p_note: 'Edited in the Studio',
+          p_provenance: { ...(editOf!.provenance || {}), spec: v.spec, size: v.size, source_asset_ids: assetsUsed(v.spec), edited_at: new Date().toISOString() },
+        });
+        if (error) throw error;
+        patch(v.key, { savedId: editOf!.id, busy: undefined });
+        onSaved();
+        toast(`Saved as version ${(editOf!.version || 1) + 1}. The previous version is kept.`);
+        return editOf!.id;
+      }
       const { data, error } = await supabase.from('assets').insert({
         workspace_id: ws.id, kind: 'image', name: v.spec.name, storage_path: path, mime: 'image/png', bytes: blob.size, width: v.size.w, height: v.size.h,
         images: email ? { email } : {}, origin: 'generated', status: 'approved', created_by: userId,
@@ -191,6 +208,12 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
 
   return (
     <div className="studio">
+      {editOf ? (
+        <div className="st-bar">
+          <button className="ghost" type="button" onClick={onClose}><Icon.Back />Back to the asset</button>
+          <div className="st-editing"><b>Editing “{editOf.name}”</b><span>Change any text by double-clicking it, or say what to change below. Saving makes version {(editOf.version || 1) + 1}; the current one is kept.</span></div>
+        </div>
+      ) : (
       <div className="st-bar">
         <button className="ghost" type="button" onClick={onClose}><Icon.Back />New idea</button>
         <form className="st-brief" onSubmit={(e) => { e.preventDefault(); if (edit.trim() && edit.trim() !== brief) onBrief(edit.trim(), size); }}>
@@ -208,6 +231,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
           })}
         </div>
       </div>
+      )}
 
       <div className="st-status" aria-live="polite">
         {loading ? <><span className="st-spin" />{STAGES[stage]}…</> : ready ? <>Double-click any text to edit it. Pick a design to change it with words.</> : null}
@@ -239,7 +263,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
                     <button type="button" onClick={() => toFigma(v)} disabled={!!v.busy}>{v.busy === 'figma' ? 'Saving…' : 'Edit in Figma'}</button>
                     {v.savedId
                       ? <button type="button" className="saved" onClick={() => onOpenAsset(v.savedId!)}>✓ Saved</button>
-                      : <button type="button" className="go" onClick={() => save(v)} disabled={!!v.busy}>{v.busy === 'saving' ? 'Saving…' : 'Save'}</button>}
+                      : <button type="button" className="go" onClick={() => save(v)} disabled={!!v.busy}>{v.busy === 'saving' ? 'Saving…' : isEdit(v) ? `Save as version ${(editOf!.version || 1) + 1}` : 'Save'}</button>}
                   </div>
                 )}
               </div>

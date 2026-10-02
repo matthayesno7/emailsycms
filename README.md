@@ -122,6 +122,17 @@ Run `supabase/migrations/20261002180000_sharing.sql`. No new keys needed (passco
 - Drafts and email blocks are never public. The brand's own team always sees a preview and isn't counted.
 - Invite-list portals send sign-in emails through Supabase Auth, so they need Resend (or other SMTP) set up in Supabase to avoid its email rate limit. Add `https://<your domain>/auth/callback` to Supabase's redirect URLs (a `/**` wildcard covers it).
 
+## 9. Edit and versions
+
+Run `supabase/migrations/20261002210000_versions.sql`. Nothing else to set up.
+
+- **Create makes new things; Edit changes an existing one.** Every edit is a new version of the same asset (`asset_versions` keeps the old ones; `asset_new_version` / `asset_revert` / `asset_save_copy` do the work in one transaction), so tags, folder, product link, collections and share links stay. Originals are never overwritten; restoring an old version keeps the current one too.
+- **Photos and uploads:** Edit on the asset page opens the hands-on editor (`components/ImageEditor.tsx`, `lib/imageEdit.ts`): crop free or locked, sizes from the brand kit (email width at 2x), social formats, retail and the team's own sizes (saved in the brand kit), rotate, flip, brightness, contrast, saturation, remove white background. Save as a new version, save as a copy, or just download the result.
+- **Designs made in the Studio:** Edit reopens them in the same Studio with the layout live (copy, images, change with words); saving makes a new version of that asset rather than a duplicate.
+- **Downloads:** original file, or JPG / PNG / WebP at original, web (2000px) or email-ready (1200px) size.
+- AI edit has its place next to Edit, marked "soon" (brief step 7).
+- Logic test: `scripts/edit-selftest.ts` (same command as the other self-tests).
+
 ## How the pieces fit
 
 ```

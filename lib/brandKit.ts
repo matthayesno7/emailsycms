@@ -22,6 +22,7 @@ export type BrandKit = {
   imagery: { style: string; references: string[]; do: string[]; dont: string[] };
   voice: { tone: string[]; samples: string[] };
   notes: string;
+  presets?: { name: string; w: number; h: number }[]; // image sizes the team added in Edit
 };
 
 export const COLOR_ROLES = ['primary', 'secondary', 'accent', 'text', 'text_muted', 'background', 'surface', 'border', 'link', 'button_bg', 'button_text'] as const;
@@ -153,6 +154,7 @@ export function normaliseKit(input: any, name = ''): BrandKit {
     },
     voice: { tone: list(k.voice?.tone, 6, 40), samples: list(k.voice?.samples, 5, 200) },
     notes: str(k.notes, 1000),
+    presets: (Array.isArray(k.presets) ? k.presets : []).map((p: any) => ({ name: str(p?.name, 40), w: num(p?.w, 16, 8000, 0), h: num(p?.h, 16, 8000, 0) })).filter((p: any) => p.name && p.w && p.h).slice(0, 30),
   };
 }
 
