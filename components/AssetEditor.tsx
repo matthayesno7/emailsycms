@@ -57,6 +57,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
 }) {
   const [editing, setEditing] = useState<false | 'image' | 'design' | 'product' | 'figma'>(false);
   const [zoom, setZoom] = useState<'fit' | '1x'>('fit');
+  const [pmenu, setPmenu] = useState<{ x: number; y: number; left: boolean; up: boolean } | null>(null); // click the picture: its actions, where you clicked
   const [picking, setPicking] = useState(false); // choosing the focal point: only then is the picture clickable and the marker shown
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [focus, setFocus] = useState<Focus>(it.focus || { x: 0.5, y: 0.5 });
@@ -67,7 +68,13 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
 
   useEffect(() => setName(it.name), [it.name]);
   useEffect(() => setFocus(it.focus || { x: 0.5, y: 0.5 }), [it.focus]);
-  useEffect(() => { setEditing(false); setPicking(false); }, [it.id, it.version]);
+  useEffect(() => { setEditing(false); setPicking(false); setPmenu(null); }, [it.id, it.version]);
+  useEffect(() => {
+    if (!pmenu) return;
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setPmenu(null); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [pmenu]);
   // Esc while editing leaves edit mode (and doesn't close the page underneath).
   useEffect(() => {
     if (!editing) return;
@@ -84,6 +91,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   // made in Figma (by Claude, or sent there) → edited in Figma; uploaded photos → photo tools here.
   const madeIn: 'create' | 'figma' | 'upload' = isDesign ? 'create' : (it.figma?.file_key || /figma/i.test(it.provenance?.model || '')) ? 'figma' : 'upload';
   const canEdit = isProduct || (!isVideo && !isSvg && (madeIn === 'figma' ? true : !!src && (isDesign ? !!design && !!supabase : !!onSaveEdit)));
+  const startEdit = () => setEditing(isProduct ? 'product' : madeIn === 'create' ? 'design' : madeIn === 'figma' ? 'figma' : 'image');
+  const editLabel = madeIn === 'figma' && !isProduct ? 'Edit in Figma' : 'Edit';
 
   // Keyboard: arrows move between assets (outside text fields and edit mode).
   useEffect(() => {
@@ -172,7 +181,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         )}
         {!editing && (src || isProduct) && (
           <div className="modes" role="group" aria-label="Change this asset">
-            {canEdit && <button className="btn" type="button" onClick={() => setEditing(isProduct ? 'product' : madeIn === 'create' ? 'design' : madeIn === 'figma' ? 'figma' : 'image')} title={isProduct ? 'Name, label, description, price, button, link and photo' : madeIn === 'create' ? 'Made in Create: change the words, photos and logo here, with the layout live' : madeIn === 'figma' ? 'Made in Figma: say what to change and Claude edits it there' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />{madeIn === 'figma' && !isProduct ? 'Edit in Figma' : 'Edit'}</button>}
+            {canEdit && <button className="btn" type="button" onClick={startEdit} title={isProduct ? 'Name, label, description, price, button, link and photo' : madeIn === 'create' ? 'Made in Create: change the words, photos and logo here, with the layout live' : madeIn === 'figma' ? 'Made in Figma: say what to change and Claude edits it there' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />{editLabel}</button>}
             {!isVideo && src && <button className="btn" type="button" disabled title="Remove backgrounds, extend, upscale and change it with words. Coming next."><Icon.Sparkle size={15} />AI edit <em className="soon">Soon</em></button>}
           </div>
         )}
@@ -233,7 +242,27 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 <div className={'ed-view' + (picking ? ' picking' : '')}>
                   <img className="ed-out" src={src} alt={it.fields?.alt || it.name} draggable data-drag={base()} data-png={/png/.test(it.mime || '') ? '1' : '0'}
                     onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                    onPointerUp={(e) => { if (picking && it.kind === 'image') setFocal(pointAt(e)); }} />
+                    onPointerUp={(e) => { if (picking && it.kind === 'image') setFocal(pointAt(e)); }}
+                    onClick={(e) => {
+                      if (picking) return;
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const x = e.clientX - r.left, y = e.clientY - r.top;
+                      setPmenu({ x, y, left: e.clientX > window.innerWidth - 560, up: e.clientY > window.innerHeight - 300 });
+                    }} />
+                  {pmenu && (
+                    <>
+                      <div className="clickaway" onClick={() => setPmenu(null)} />
+                      <div className={'pmenu' + (pmenu.left ? ' left' : '') + (pmenu.up ? ' up' : '')} role="menu" style={{ left: pmenu.x, top: pmenu.y }} onClick={() => setPmenu(null)}>
+                        {canEdit && <button type="button" role="menuitem" onClick={startEdit}><Icon.Palette size={15} />{editLabel}</button>}
+                        {!isSvg && <button type="button" role="menuitem" onClick={copyImage}><Icon.Copy size={15} />Copy image<small>Paste into Figma</small></button>}
+                        <button type="button" role="menuitem" onClick={() => setDlOpen(true)}><Icon.Download size={15} />Download…</button>
+                        {onShare && <button type="button" role="menuitem" onClick={async () => { const u = await onShare(); if (u) { try { await navigator.clipboard.writeText(u); toast('Link copied.'); } catch { toast(u); } } }}><Icon.Share size={15} />Copy a share link</button>}
+                        <hr />
+                        {it.kind === 'image' && <button type="button" role="menuitem" onClick={() => { setZoom('fit'); setPicking(true); }}><Icon.Target size={15} />Set focal point</button>}
+                        <button type="button" role="menuitem" onClick={() => setZoom(zoom === 'fit' ? '1x' : 'fit')}><Icon.Search size={15} />{zoom === 'fit' ? 'View at 100%' : 'Fit to screen'}</button>
+                      </div>
+                    </>
+                  )}
                   {picking && <i className="ed-focus" style={{ left: `${focus.x * 100}%`, top: `${focus.y * 100}%` }} />}
                 </div>
               )}

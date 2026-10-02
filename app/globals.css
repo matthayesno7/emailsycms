@@ -1176,3 +1176,18 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .ed-view.picking::after{content:"";position:absolute;inset:0;border-radius:3px;box-shadow:inset 0 0 0 2px var(--accent);pointer-events:none}
 .ed-view .ed-focus{width:22px;height:22px;margin:-11px 0 0 -11px;border:2px solid #fff;background:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.3)}
 .sm-btn{padding:5px 12px;font-size:13.5px}
+
+/* click the picture: its actions, where you clicked */
+.ed-view .ed-out{cursor:pointer}
+.ed-view.picking .ed-out{cursor:crosshair}
+.ed-view .clickaway{z-index:28}
+.pmenu{position:absolute;z-index:29;min-width:220px;transform:translate(6px,6px);background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column;gap:1px;line-height:1.3;animation:pm-in .12s ease-out}
+.pmenu.left{transform:translate(calc(-100% - 6px),6px)}
+.pmenu.up{transform:translate(6px,calc(-100% - 6px))}
+.pmenu.left.up{transform:translate(calc(-100% - 6px),calc(-100% - 6px))}
+.pmenu button{display:flex;align-items:center;gap:10px;border:0;background:none;text-align:left;padding:8px 10px;border-radius:8px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;white-space:nowrap}
+.pmenu button:hover,.pmenu button:focus-visible{background:var(--hover);outline:none}
+.pmenu button svg{color:var(--ink-2);flex:none}
+.pmenu button small{margin-left:auto;padding-left:14px;color:var(--ink-3);font-size:12px}
+.pmenu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+@keyframes pm-in{from{opacity:0}to{opacity:1}}
