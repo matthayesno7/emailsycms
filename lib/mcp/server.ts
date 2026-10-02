@@ -104,7 +104,7 @@ const TOOLS = [
   },
   {
     name: 'list_assets',
-    description: 'List assets. Filter by workspace, kind (image, logo, product, block), origin (uploaded, product_feed, generated), status (approved, draft) and a search over names and product IDs.',
+    description: 'List assets. Filter by workspace, kind (image, logo, product, block), origin, status, format and a plain-words search over names, product IDs, AI descriptions, tags, colours and text in the image (e.g. "woman outdoors blue bag"). Each result has its description, tags, colours and on-brand check when auto-organise has run.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -113,7 +113,7 @@ const TOOLS = [
         origin: { type: 'string', enum: ['uploaded', 'product_feed', 'generated'], description: 'Where the asset came from.' },
         status: { type: 'string', enum: ['approved', 'draft'], description: 'Generated assets start as drafts until a person approves them.' },
         format: { type: 'string', enum: ['photo', ...IMAGE_TABS.map((t) => t.id)], description: 'Images by what they are for, worked out from their size: photo, email-banner, linkedin-banner, linkedin-post, social-post, story, thumb, display.' },
-        query: { type: 'string', description: 'Matches asset names and product IDs.' },
+        query: { type: 'string', description: 'Plain words; every word must match the name, PID, description, tags, colours or text in the image.' },
         limit: { type: 'number', minimum: 1, maximum: 200, default: 50 },
       },
       additionalProperties: false,
@@ -253,6 +253,14 @@ function publicAsset(a: AssetRow, ws?: Workspace) {
   if (a.width) Object.assign(out, { width: a.width, height: a.height });
   if (a.kind === 'image') out.format = tabOf(a);
   if (a.fields?.alt) out.alt = a.fields.alt;
+  if (a.description && a.kind !== 'product') out.description = a.description;
+  if (a.tags?.length) out.tags = a.tags;
+  if (a.colours?.length) out.colours = a.colours;
+  if (a.colour_names?.length) out.colour_names = a.colour_names;
+  if (a.text_in_image) out.text_in_image = a.text_in_image;
+  if (typeof a.on_brand === 'boolean') out.on_brand = { ok: a.on_brand, reason: a.on_brand_reason || '' };
+  if (a.product_id && a.kind !== 'block') out.shows_product_id = a.product_id;
+  if (a.duplicate_of && !a.duplicate_ok) out.possible_duplicate_of = a.duplicate_of;
   if (a.kind === 'product') Object.assign(out, { pid: a.pid, price: a.price, link: a.link, description: a.fields?.description || '', has_image: !!a.storage_path });
   if (a.kind === 'block') Object.assign(out, { block_type: a.block_type, block_type_name: BLOCK_TYPES[a.block_type]?.name });
   if (a.figma) out.figma = a.figma;

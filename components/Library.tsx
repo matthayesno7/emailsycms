@@ -15,6 +15,10 @@ import Create from './Create';
 import ImportSources from './ImportSources';
 import { TABS, tabOf, tabLabel } from '@/lib/formats';
 import type { BrandKitRow } from '@/lib/brandKit';
+import { dhash, findDuplicate } from '@/lib/phash';
+import { describeRules, haystack, matchesQuery, matchesRules, suggestCollections, type Collection, type Rules } from '@/lib/collections';
+import AutoOrganise from './AutoOrganise';
+import CollectionForm from './CollectionForm';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
 export type Ws = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
@@ -22,7 +26,7 @@ const WS_COLORS = ['#2f5bff', '#26313e', '#32a5db', '#e8a317', '#7b61ff', '#2f9e
 const KINDS = ['image', 'logo', 'video', 'product', 'block'];
 // Where assets come from. Products always come from the feed and blocks are made by the team,
 // so the filter shows on the views where it means something.
-const ORIGINS: [string, string][] = [['any', 'All'], ['uploaded', 'Uploaded'], ['product_feed', 'From feed'], ['generated', 'Generated'], ['draft', 'To review']];
+const ORIGINS: [string, string][] = [['any', 'All'], ['uploaded', 'Uploaded'], ['product_feed', 'From feed'], ['generated', 'Generated'], ['draft', 'To review'], ['dupes', 'Possible duplicates']];
 const originOf = (a: Asset) => a.origin || (a.kind === 'product' ? 'product_feed' : 'uploaded');
 
 export default function Library({ userId, email, appUrl }: { userId: string; email: string; appUrl: string }) {
@@ -37,6 +41,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [page, setPage] = useState<'create' | 'library' | 'brand' | 'settings'>('library');
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [folder, setFolder] = useState<string>('all'); // 'all' or a folder id
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collection, setCollection] = useState<string | null>(null); // a smart collection instead of a folder
+  const [collForm, setCollForm] = useState<Partial<Collection> | null>(null);
   const [newFolder, setNewFolder] = useState<string | null>(null);
   const [dropFolder, setDropFolder] = useState<string | null>(null);
   const [boxReturn, setBoxReturn] = useState(false);
@@ -50,7 +57,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (r === 'connected') { setBoxReturn(true); setModal('import'); }
     else setTimeout(() => toast(r === 'cancelled' ? 'Box wasn’t connected.' : 'Couldn’t connect Box. Try again.'), 300);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [settingsTab, setSettingsTab] = useState<'workspace' | 'members' | 'claude' | 'help'>('workspace');
+  const [settingsTab, setSettingsTab] = useState<'workspace' | 'organise' | 'members' | 'claude' | 'help'>('workspace');
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
   const [wsOpen, setWsOpen] = useState(false);
@@ -164,6 +171,17 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setFolders(data || []);
   }, [supabase]);
 
+  const loadCollections = useCallback(async (wsId: string) => {
+    const { data } = await supabase.from('collections').select('*').eq('workspace_id', wsId).order('position').order('created_at');
+    setCollections((data as Collection[]) || []);
+  }, [supabase]);
+
+  // Tell the server there's something new to organise (it also checks every 20 seconds).
+  const kickTag = useCallback(() => {
+    if (!ws) return;
+    fetch('/api/jobs/tag', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws, action: 'kick' }) }).catch(() => {});
+  }, [ws]);
+
   useEffect(() => {
     if (!ws) return;
     try { localStorage.setItem('emailsy.ws', ws); } catch {}
@@ -172,13 +190,18 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     loadAssets(ws);
     loadKit(ws);
     loadFolders(ws);
+    loadCollections(ws);
+    setCollection(null);
+    // Auto-organise updates many rows in a row: reload at most about once a second.
+    let t: any = null;
+    const soon = () => { clearTimeout(t); t = setTimeout(() => loadAssets(ws), 900); };
     const ch = supabase
       .channel('assets-' + ws)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets', filter: `workspace_id=eq.${ws}` }, () => loadAssets(ws))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets', filter: `workspace_id=eq.${ws}` }, soon)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'brand_kits', filter: `workspace_id=eq.${ws}` }, () => loadKit(ws))
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [ws, supabase, loadAssets, loadKit]);
+    return () => { clearTimeout(t); supabase.removeChannel(ch); };
+  }, [ws, supabase, loadAssets, loadKit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const r = pending.current;
@@ -210,6 +233,29 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     });
   }, [items, urls, supabase]);
 
+  // Fingerprint files that don't have one yet (added from a cloud drive, a feed, Claude, or before
+  // duplicate checks existed), a few at a time while the library is open.
+  const hashing = useRef(false);
+  useEffect(() => {
+    if (hashing.current || !ready) return;
+    const todo = items.filter((i) => ['image', 'logo', 'product'].includes(i.kind) && i.storage_path && !i.phash && (i.images?.email?.path ? urls[i.images.email.path] : urls[i.storage_path])).slice(0, 12);
+    if (!todo.length) return;
+    hashing.current = true;
+    (async () => {
+      const known = items.filter((i) => i.phash && i.phash !== '-');
+      for (const a of todo) {
+        if (document.hidden) break;
+        let hash: string | null = null;
+        if (!/svg/.test(a.mime || '')) { try { hash = dhash(await loadImg(urls[a.images?.email?.path] || urls[a.storage_path])); } catch {} }
+        const dup = hash ? findDuplicate(hash, known, a) : null;
+        await supabase.from('assets').update({ phash: hash || '-', ...(dup && !a.duplicate_ok ? { duplicate_of: dup.id } : {}) }).eq('id', a.id);
+        if (hash) known.push({ ...a, phash: hash });
+        setItems((list) => list.map((i) => (i.id === a.id ? { ...i, phash: hash || '-', ...(dup && !a.duplicate_ok ? { duplicate_of: dup.id } : {}) } : i)));
+      }
+      hashing.current = false;
+    })();
+  }, [items, urls, ready, supabase]);
+
   const srcOf = useCallback((a?: Asset | null) => (a?.storage_path ? urls[a.storage_path] || null : null), [urls]);
   // The email-ready copy when there is one (what gets dragged into Figma).
   const emailSrcOf = useCallback((a?: Asset | null) => (a?.images?.email?.path && urls[a.images.email.path]) || srcOf(a), [urls, srcOf]);
@@ -229,7 +275,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return m;
   }, [items]);
   const showOrigins = !['product', 'block'].includes(view);
-  const inFolder = useCallback((it: Asset) => folder === 'all' || it.folder_id === folder, [folder]);
+  const curColl = collection ? collections.find((c) => c.id === collection) || null : null;
+  const inFolder = useCallback((it: Asset) => (curColl ? matchesRules(it, curColl.rules) : folder === 'all' || it.folder_id === folder), [folder, curColl]);
+  const dupes = useMemo(() => items.filter((i) => i.duplicate_of && !i.duplicate_ok).length, [items]);
+  const collCounts = useMemo(() => Object.fromEntries(collections.map((c) => [c.id, items.filter((i) => matchesRules(i, c.rules)).length])), [collections, items]);
+  const suggestions = useMemo(() => suggestCollections(items, collections), [items, collections]);
+  const hay = useMemo(() => new Map(items.map((i) => [i.id, haystack(i)])), [items]);
   const inView = useCallback((it: Asset) => inFolder(it) && (view === 'all' || tabOf(it) === view), [view, inFolder]);
   const tabCounts = useMemo(() => { const inF = items.filter(inFolder); const m: Record<string, number> = { all: inF.length }; for (const i of inF) { const t = tabOf(i); m[t] = (m[t] || 0) + 1; } return m; }, [items, inFolder]);
   const folderCounts = useMemo(() => { const m: Record<string, number> = {}; for (const i of items) if (i.folder_id) m[i.folder_id] = (m[i.folder_id] || 0) + 1; return m; }, [items]);
@@ -238,9 +289,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const s = q.trim().toLowerCase();
     const o = showOrigins ? origin : 'any';
     return items.filter((it) => inView(it)
-      && (o === 'any' || (o === 'draft' ? it.status === 'draft' : originOf(it) === o))
-      && (!s || it.name.toLowerCase().includes(s) || (it.pid || '').toLowerCase().includes(s)));
-  }, [items, inView, q, origin, showOrigins]);
+      && (o === 'any' || (o === 'draft' ? it.status === 'draft' : o === 'dupes' ? !!it.duplicate_of && !it.duplicate_ok : originOf(it) === o))
+      && (!s || matchesQuery(it, s, hay.get(it.id))));
+  }, [items, inView, q, origin, showOrigins, hay]);
 
   // ---------- writes ----------
   async function patchAsset(id: string, patch: Record<string, any>) {
@@ -277,12 +328,15 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (!video) { try { img = await loadImg(local); } catch {} }
     URL.revokeObjectURL(local);
     const w = img?.naturalWidth || null, h = img?.naturalHeight || null;
+    // Near-duplicate check against what's already here.
+    const phash = img && !/svg/.test(type) ? dhash(img) : null;
+    const dup = phash ? findDuplicate(phash, items) : null;
     const email = img ? await emailRendition(supabase, ws, img, { mime: type, bytes: file.size }) : null;
     const images = email ? { email } : {};
     const base = baseName(file.name || 'Pasted image');
     const prod = opts.attachToProduct === false || video ? null : items.find((i) => i.kind === 'product' && i.pid === base);
     if (prod) {
-      await patchAsset(prod.id, { storage_path: path, mime: type, width: w, height: h, bytes: file.size, images: { ...(prod.images || {}), ...images } });
+      await patchAsset(prod.id, { storage_path: path, mime: type, width: w, height: h, bytes: file.size, images: { ...(prod.images || {}), ...images }, phash: phash || '-' });
       toast(`Attached to ${prod.name}`);
       return { asset: { ...prod, storage_path: path }, img };
     }
@@ -291,8 +345,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       workspace_id: ws, kind, name: base.replace(/[-_]+/g, ' ').slice(0, 120) || 'Image', storage_path: path, mime: type,
       folder_id: opts.folderId !== undefined ? opts.folderId : folder !== 'all' ? folder : null,
       width: w, height: h, bytes: file.size, images, created_by: userId,
+      phash: phash || (video ? null : '-'), duplicate_of: dup?.id || null,
     }).select('*').single();
     if (e2 || !data) { toast('Couldn’t save the image.'); return null; }
+    if (dup) toast(`${base} looks like a copy of ${dup.name}. It’s flagged so you can decide.`);
     // Optional: AI alt text, filled in shortly after upload (skipped if no API key is set).
     if (img && !/svg/.test(type)) suggestAlt(img).then((alt) => { if (alt) supabase.from('assets').update({ fields: { ...(data.fields || {}), alt } }).eq('id', data.id).then(() => {}); });
     return { asset: data as Asset, img };
@@ -361,6 +417,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       if (!json.remaining || (!json.done && !(json.failed || []).length)) break;
       toast(`Fetched ${done} product images…`);
     }
+    if (done) kickTag();
     toast(failed ? `${done} product images added. ${failed} couldn’t be downloaded; drop PID.jpg files to add them.` : `${done} product images added`);
   }
 
@@ -379,7 +436,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (view === 'block' && imgs.length) { await blocksFromImages(imgs); return; }
     if (imgs.length > 1) toast(`Adding ${imgs.length} images…`);
     for (const f of imgs) await addImageAsset(f, { folderId });
-    if (imgs.length) loadAssets(ws);
+    if (imgs.length) { loadAssets(ws); kickTag(); }
     if (folderId) { setFolder(folderId); setView('all'); toast(`${imgs.length + vids.length} files added to ${folderName}`); }
     if (imgs.length || vids.length) setPage((p) => (p === 'brand' ? p : 'library'));
   }
@@ -413,6 +470,29 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setItems((list) => list.map((i) => (i.folder_id === id ? { ...i, folder_id: null } : i)));
     setFolder('all');
     toast('Folder deleted. Its files are still in All files.');
+  }
+
+  async function saveCollection(c: { name: string; rules: Rules }, id?: string) {
+    if (id) {
+      const { error } = await supabase.from('collections').update(c).eq('id', id);
+      if (error) { toast('Couldn’t save the collection.'); return; }
+      setCollections((cs) => cs.map((x) => (x.id === id ? { ...x, ...c } : x)));
+      toast('Collection saved');
+    } else {
+      const { data, error } = await supabase.from('collections').insert({ ...c, workspace_id: ws, position: collections.length, created_by: userId }).select('*').single();
+      if (error || !data) { toast('Couldn’t create the collection.'); return; }
+      setCollections((cs) => [...cs, data as Collection]);
+      setCollection(data.id); setView('all'); setQ('');
+      toast(`${c.name}: fills itself as files arrive`);
+    }
+    setCollForm(null);
+  }
+  async function deleteCollection(id: string) {
+    const { error } = await supabase.from('collections').delete().eq('id', id);
+    if (error) { toast('Couldn’t delete the collection.'); return; }
+    setCollections((cs) => cs.filter((x) => x.id !== id));
+    setCollection(null); setCollForm(null);
+    toast('Collection deleted. The files are still in your library.');
   }
 
   async function createWorkspace(name: string) {
@@ -625,12 +705,13 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             <div className="settings-page">
               <div className="head"><h1>Settings</h1></div>
               <div className="seg tabs" role="tablist">
-                {([['workspace', 'Brand workspace'], ['members', 'Team'], ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
+                {([['workspace', 'Brand workspace'], ['organise', 'Auto-organise'], ['members', 'Team'], ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
                   <button key={k} type="button" role="tab" aria-pressed={settingsTab === k} onClick={() => setSettingsTab(k)}>{l}{k === 'claude' && !connected ? ' •' : ''}</button>
                 ))}
               </div>
               <div className="settings-body">
                 {settingsTab === 'workspace' && <WorkspaceSettings supabase={supabase} ws={curWs} toast={toast} onSaved={() => loadWorkspaces(curWs.id)} />}
+                {settingsTab === 'organise' && <AutoOrganise ws={curWs.id} toast={toast} />}
                 {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
                 {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
@@ -643,10 +724,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           ) : (
             <>
               <div className="lib-head">
-                <h1>{folder === 'all' ? 'Assets' : folders.find((f) => f.id === folder)?.name || 'Assets'}</h1>
-                {folder !== 'all' && <span className="lib-fact">{folderCounts[folder] || 0} files · <button type="button" className="linkish" onClick={() => renameFolder(folder)}>Rename</button> · <button type="button" className="linkish" onClick={() => deleteFolder(folder)}>Delete folder</button></span>}
+                <h1>{curColl ? curColl.name : folder === 'all' ? 'Assets' : folders.find((f) => f.id === folder)?.name || 'Assets'}</h1>
+                {curColl && <span className="lib-fact">Smart collection · {describeRules(curColl.rules)} · <button type="button" className="linkish" onClick={() => setCollForm(curColl)}>Edit</button></span>}
+                {!curColl && folder !== 'all' && <span className="lib-fact">{folderCounts[folder] || 0} files · <button type="button" className="linkish" onClick={() => renameFolder(folder)}>Rename</button> · <button type="button" className="linkish" onClick={() => deleteFolder(folder)}>Delete folder</button></span>}
                 <span className="spacer" />
-                <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search names and PIDs" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /><kbd>/</kbd></label>
+                <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search: beach, blue bag, logo…" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /><kbd>/</kbd></label>
+                {q.trim() && <button className="btn quiet savesearch" type="button" title="Save this search as a smart collection" onClick={() => setCollForm({ name: q.trim().replace(/^./, (c) => c.toUpperCase()), rules: { text: q.trim(), ...(['image', 'logo', 'product', 'video'].includes(view) ? { kinds: [view] } : {}) } })}>Save search</button>}
                 <div className="addwrap">
                   <button className="primary" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((o) => !o)}><Icon.Plus size={16} />Add</button>
                   {addOpen && (
@@ -665,16 +748,31 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               </div>
               {addOpen && <div className="clickaway" onClick={() => setAddOpen(false)} />}
 
-              {(folders.length > 0 || newFolder !== null) && (
-                <div className="folders" aria-label="Folders">
+              {suggestions.length > 0 && collections.length === 0 && (
+                <div className="suggest" aria-label="Suggested collections">
+                  <span className="suggest-h"><Icon.Sparkle size={14} />Suggested collections</span>
+                  {suggestions.map((sg) => (
+                    <button key={sg.name} type="button" className="chip" title={describeRules(sg.rules)} onClick={() => saveCollection({ name: sg.name, rules: sg.rules })}>+ {sg.name}<span>{sg.count}</span></button>
+                  ))}
+                </div>
+              )}
+
+              {(folders.length > 0 || newFolder !== null || collections.length > 0 || suggestions.length > 0) && (
+                <div className="folders" aria-label="Folders and collections">
                   {[{ id: 'all', name: 'All files' }, ...folders].map((f) => (
-                    <button key={f.id} type="button" className={'folder' + (folder === f.id ? ' on' : '') + (dropFolder === f.id ? ' drop' : '')} onClick={() => { setFolder(f.id); setView('all'); }}
+                    <button key={f.id} type="button" className={'folder' + (!curColl && folder === f.id ? ' on' : '') + (dropFolder === f.id ? ' drop' : '')} onClick={() => { setFolder(f.id); setCollection(null); setView('all'); }}
                       onDragOver={(e) => { if (e.dataTransfer.types.includes('application/x-emailsy-asset')) { e.preventDefault(); setDropFolder(f.id); } }}
                       onDragLeave={() => setDropFolder(null)}
                       onDrop={(e) => { const id = e.dataTransfer.getData('application/x-emailsy-asset'); setDropFolder(null); if (id) { e.preventDefault(); e.stopPropagation(); moveToFolder(id, f.id === 'all' ? null : f.id); } }}>
                       <Icon.Folder size={16} />{f.name}<span>{f.id === 'all' ? items.length : folderCounts[f.id] || 0}</span>
                     </button>
                   ))}
+                  {collections.map((c) => (
+                    <button key={c.id} type="button" className={'folder smart' + (collection === c.id ? ' on' : '')} title={`Smart collection: ${describeRules(c.rules)}`} onClick={() => { setCollection(c.id); setView('all'); }}>
+                      <Icon.Sparkle size={15} />{c.name}<span>{collCounts[c.id] || 0}</span>
+                    </button>
+                  ))}
+                  <button type="button" className="folder add" onClick={() => setCollForm({})}><Icon.Sparkle size={14} />Smart collection</button>
                   {newFolder === null ? (
                     <button type="button" className="folder add" onClick={() => setNewFolder('')}><Icon.Plus size={15} />Folder</button>
                   ) : (
@@ -695,8 +793,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 </div>
                 {showOrigins && (
                   <select className="in source" value={origin} onChange={(e) => setOrigin(e.target.value)} aria-label="Where assets came from">
-                    {ORIGINS.filter(([k]) => (k !== 'product_feed' || view === 'all') && (k !== 'draft' || drafts || origin === 'draft')).map(([k, l]) => (
-                      <option key={k} value={k}>{k === 'any' ? 'From anywhere' : k === 'draft' ? `To review (${drafts})` : k === 'generated' ? 'Made with Claude' : l}</option>
+                    {ORIGINS.filter(([k]) => (k !== 'product_feed' || view === 'all') && (k !== 'draft' || drafts || origin === 'draft') && (k !== 'dupes' || dupes || origin === 'dupes')).map(([k, l]) => (
+                      <option key={k} value={k}>{k === 'any' ? 'From anywhere' : k === 'draft' ? `To review (${drafts})` : k === 'dupes' ? `Possible duplicates (${dupes})` : k === 'generated' ? 'Made with Claude' : l}</option>
                     ))}
                   </select>
                 )}
@@ -763,6 +861,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           toast={toast}
           folders={folders}
           figmaUrl={curWs?.figma_file_url}
+          product={openAsset.product_id ? (() => { const p = itemById(openAsset.product_id); return p ? { id: p.id, name: p.name } : null; })() : null}
+          suggested={openAsset.ai?.product?.id && !openAsset.product_id ? (() => { const p = itemById(openAsset.ai.product.id); return p ? { id: p.id, name: p.name } : null; })() : null}
+          duplicate={openAsset.duplicate_of ? (() => { const d = itemById(openAsset.duplicate_of); return d ? { id: d.id, name: d.name } : null; })() : null}
+          onOpenAsset={(id) => { const a = itemById(id); if (!a) return; if (a.kind === 'product') openProduct(a); else openEditor(id); }}
+          onRetag={async () => { if (await patchAsset(openAsset.id, { ai_status: 'pending', ai_attempts: 0, ai_error: null })) { kickTag(); toast('Organising…'); } }}
           onShare={async () => {
             const path = openAsset.storage_path;
             if (!path) { toast('Nothing to share yet.'); return null; }
@@ -811,7 +914,15 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           <h2>Import from where your images live</h2>
           <ImportSources ws={ws} folderId={folder !== 'all' ? folder : null} folderName={folder !== 'all' ? folders.find((f) => f.id === folder)?.name : null}
             startBox={boxReturn} toast={toast}
-            onDone={(landed) => { loadAssets(ws); loadFolders(ws); setPage('library'); setView('all'); if (landed) setFolder(landed); }} />
+            onDone={(landed) => { loadAssets(ws); loadFolders(ws); kickTag(); setPage('library'); setView('all'); setCollection(null); if (landed) setFolder(landed); }} />
+        </Modal>
+      )}
+      {collForm && (
+        <Modal onClose={() => setCollForm(null)}>
+          <CollectionForm initial={collForm} items={items}
+            onSave={(c) => saveCollection(c, collForm.id)}
+            onDelete={collForm.id ? () => deleteCollection(collForm.id!) : undefined}
+            onCancel={() => setCollForm(null)} />
         </Modal>
       )}
       {modal === 'blocktype' && (
@@ -902,6 +1013,8 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
         )}
         {src && <span className="drag">Drag to Figma</span>}
         {it.origin === 'generated' && <span className={'tag ' + (it.status === 'draft' ? 'draft' : 'ai')}>{it.status === 'draft' ? 'Draft · AI' : 'AI'}</span>}
+        {it.duplicate_of && !it.duplicate_ok && <span className="tag dup" title="Looks like a copy of another file">Duplicate?</span>}
+        {it.on_brand === false && <span className="tag offbrand" title={it.on_brand_reason || 'Doesn’t match the brand’s imagery rules'}>Off-brand</span>}
       </div>
       <div className="meta"><span className="t">{it.name}</span><span className="s">{right}</span></div>
     </div>

@@ -92,6 +92,17 @@ Run `supabase/migrations/20261001120000_connections.sql` first (Box keeps its si
 2. Redirect URI: `https://<your-app>/api/connect/box/callback`. Scope: *Read all files and folders stored in Box*.
 3. Set `BOX_CLIENT_ID` and `BOX_CLIENT_SECRET`.
 
+## 6. Auto-organise
+
+Run `supabase/migrations/20261002000000_auto_organise.sql` in the SQL editor. Needs `ANTHROPIC_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` on Railway; nothing else to set up.
+
+- Every new image, logo and product photo is queued. A worker inside the web server (started by `instrumentation.ts`) works through the queue every 20 seconds, and straight away after an upload or import. It asks Claude Haiku for a description, tags, colours (matched to the brand kit), text in the image, an on-brand check against the kit's imagery rules, and the product it shows.
+- Older files: Settings → Auto-organise → "Organise N older files". Shows the rough cost first, then live progress.
+- People's edits to tags, description, alt text and the product link always win.
+- Smart collections are saved searches (`collections` table) and appear next to folders; starters are suggested from the tags. Near-duplicates are flagged with a perceptual hash worked out in the browser.
+- Optional: `ANTHROPIC_TAG_MODEL` (default Haiku 4.5), `DISABLE_AUTO_TAG=1` to switch it off.
+- Logic test: `npx tsc scripts/organise-selftest.ts --outDir /tmp/st --module commonjs --target es2022 --esModuleInterop --skipLibCheck && node /tmp/st/scripts/organise-selftest.js`
+
 ## How the pieces fit
 
 ```

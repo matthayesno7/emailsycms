@@ -21,8 +21,9 @@ export function supabaseRepo(db: SupabaseClient): Repo {
       if (origin) q = q.eq('origin', origin);
       if (status) q = q.eq('status', status);
       if (query) {
-        const s = query.replace(/[%,()]/g, ' ').trim();
-        if (s) q = q.or(`name.ilike.%${s}%,pid.ilike.%${s}%`);
+        // Every word matches somewhere: name, PID, AI description, text in the image, a tag or a colour.
+        const words = query.toLowerCase().replace(/[%,()"{}\\]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 6);
+        for (const w of words) q = q.or(`name.ilike.%${w}%,pid.ilike.%${w}%,description.ilike.%${w}%,text_in_image.ilike.%${w}%,tags.cs.{${w}},colour_names.cs.{${w}}`);
       }
       const { data, error } = await q;
       if (error) throw error;

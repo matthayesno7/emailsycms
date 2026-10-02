@@ -4,6 +4,7 @@ import { PRESETS } from '@/lib/blockTypes';
 import { DEFAULT_CTA } from '@/lib/products';
 import { cutWhite, drawFit, loadImg, toBlob } from '@/lib/images';
 import { Icon } from './icons';
+import AssetAbout from './AssetAbout';
 import type { Asset } from './Library';
 
 const TYPES: [string, string][] = [['image', 'Image'], ['logo', 'Logo'], ['product', 'Product']];
@@ -12,12 +13,17 @@ type Focus = { x: number; y: number };
 
 // Full-page editor for one image, logo or product image: a big canvas on the left,
 // the settings on the right. Opens at ?asset=<id>, so it has its own link and Back works.
-export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl }: {
+export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag }: {
   it: Asset;
   folders?: { id: string; name: string }[];
   onShare?: () => Promise<string | null>; // a link anyone can open for a week
   onEmailCopy?: () => void; // download the email-ready version
   figmaUrl?: string | null;
+  product?: { id: string; name: string } | null;
+  suggested?: { id: string; name: string } | null;
+  duplicate?: { id: string; name: string } | null;
+  onOpenAsset?: (id: string) => void;
+  onRetag?: () => void;
   src: string | null;
   usedIn?: Asset[];
   onOpenBlock?: (b: Asset) => void;
@@ -217,6 +223,11 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
               {it.provenance?.prompt && <p className="tip">“{it.provenance.prompt}”</p>}
               <p className="tip">{[it.provenance?.model, it.provenance?.style, it.provenance?.source_product_pid && `from product ${it.provenance.source_product_pid}`, it.provenance?.brand_kit_version && `brand kit v${it.provenance.brand_kit_version}`].filter(Boolean).join(' · ')}</p>
             </div>
+          )}
+
+          {!isVideo && (
+            <AssetAbout it={it} onPatch={onPatch} toast={toast} product={product} suggested={suggested} onOpenProduct={onOpenAsset}
+              onRetag={onRetag} duplicate={duplicate} onOpenDuplicate={onOpenAsset} onDelete={onDelete} />
           )}
 
           <div className="ed-sec">
