@@ -1230,3 +1230,9 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .tile:hover .copyfig,.tile:focus-within .copyfig,.copyfig:focus-visible{opacity:.94}
 .copyfig:hover{opacity:1;background:var(--accent)}
 .thumb .flags{right:auto;left:8px}
+/* Google's Drive picker lives in our page: keep our global box-sizing, fonts and line height out of it
+   (they squash its frame), and keep it above Mise's own windows. */
+.picker-dialog,.picker-dialog *,.picker-dialog-bg{box-sizing:content-box}
+.picker-dialog{font:13px/normal Arial,Helvetica,sans-serif;color:#202124;z-index:1001 !important}
+.picker-dialog-bg{z-index:1000 !important}
+.picker-dialog iframe{max-width:none;max-height:none}
