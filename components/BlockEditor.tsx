@@ -311,7 +311,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
                     </div>
                   </div>
                   {pickFor === d.k && (
-                    <div className="picker">
+                    <div className="img-picker">
                       {pickable.length ? pickable.map((i) => (
                         <button key={i.id} type="button" className={'pk ' + i.kind} title={i.name}
                           onClick={() => { setImage(d.k, { ...(slot || {}), source_asset_id: i.id, alt: i.fields?.alt || i.name, dirty: true, original_path: i.storage_path, crop: undefined }); setPickFor(null); }}>
