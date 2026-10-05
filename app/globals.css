@@ -1191,3 +1191,36 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .pmenu button small{margin-left:auto;padding-left:14px;color:var(--ink-3);font-size:12px}
 .pmenu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
 @keyframes pm-in{from{opacity:0}to{opacity:1}}
+
+/* ---------- review: what needs a person ---------- */
+.review{max-width:980px}
+.rv-week{display:flex;align-items:center;gap:8px;margin:0 0 22px;padding:12px 16px;border-radius:14px;background:var(--surface);font-size:14px;color:var(--ink-2)}
+.rv-week svg{color:var(--accent);flex:none}
+.rv-sec{margin:0 0 28px}
+.rv-sec-h{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.rv-sec h2{font-size:18px;margin:0}
+.rv-sec h2 span{font:500 13px var(--mono);color:var(--ink-3);margin-left:4px}
+.rv-sec>.tip{margin:2px 0 10px}
+.rv-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:16px;background:var(--bg);overflow:hidden}
+.rv-row{display:flex;align-items:center;gap:14px;padding:12px 14px;border-top:1px solid var(--line);transition:opacity .2s}
+.rv-row:first-child{border-top:0}
+.rv-row.busy{opacity:.45;pointer-events:none}
+.rv-thumbs{display:flex;align-items:center;gap:6px;flex:none}
+.rv-thumb{width:64px;height:64px;border-radius:10px;border:0;padding:0;background:var(--surface);display:grid;place-items:center;overflow:hidden;color:var(--ink-3);cursor:pointer}
+.rv-thumb:disabled{cursor:default}
+.rv-thumb img{width:100%;height:100%;object-fit:cover}
+.rv-eq{color:var(--ink-3);font-size:16px}
+.rv-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.rv-text b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv-text span{font-size:13px;color:var(--ink-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rv-acts{display:flex;gap:6px;flex:none;align-items:center}
+.rv-acts .btn,.rv-acts .primary{min-height:34px;padding:0 13px;font-size:13.5px}
+.rv-clear{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:56px 20px;border:1px dashed var(--line-strong);border-radius:18px}
+.rv-clear h2{margin:4px 0 0;font-size:20px}
+.rv-clear .tip{max-width:46ch}
+.rv-tick{width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center}
+.rv-claude{margin-top:8px}
+@media (max-width:700px){
+  .rv-row{flex-wrap:wrap}
+  .rv-acts{width:100%;justify-content:flex-end}
+}

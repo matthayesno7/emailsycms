@@ -106,12 +106,11 @@ export function patchFrom(a: AssetLike, r: TagResult, kit: BrandKit | null | und
     colours: r.colours,
     colour_names: colourNames(r.colours),
     text_in_image: r.text_in_image || null,
-    on_brand: r.on_brand ? r.on_brand.ok : null,
-    on_brand_reason: r.on_brand?.reason || null,
     ai: { ...r, brand_colours: brand, model, at: new Date().toISOString() },
     ai_status: 'done',
     ai_error: null,
   };
+  if (!edited.has('on_brand')) { patch.on_brand = r.on_brand ? r.on_brand.ok : null; patch.on_brand_reason = r.on_brand?.reason || null; }
   if (!edited.has('description')) patch.description = r.description || null;
   if (!edited.has('tags')) patch.tags = r.tags;
   // Alt text for email, when nobody has written one yet.

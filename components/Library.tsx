@@ -25,6 +25,8 @@ import { chipsOf, removeChip, searchKey, type SearchFilters } from '@/lib/search
 import CollectionForm from './CollectionForm';
 import Sharing from './Sharing';
 import ShareDialog, { type ShareTarget } from './ShareDialog';
+import Review from './Review';
+import { reviewQueue } from '@/lib/review';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
 export type Ws = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
@@ -44,7 +46,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [ready, setReady] = useState(false);
   // Three places: Create (home), Library (everything the brand has) and Brand kit; plus Settings.
   // Assets come first (the home), then Create; Brand kit and Settings support both.
-  const [page, setPage] = useState<'create' | 'library' | 'brand' | 'sharing' | 'settings'>('library');
+  const [page, setPage] = useState<'review' | 'create' | 'library' | 'brand' | 'sharing' | 'settings'>('library');
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [folder, setFolder] = useState<string>('all'); // 'all' or a folder id
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -321,6 +323,14 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const tabCounts = useMemo(() => { const inF = items.filter(inFolder); const m: Record<string, number> = { all: inF.length }; for (const i of inF) { const t = tabOf(i); m[t] = (m[t] || 0) + 1; } return m; }, [items, inFolder]);
   const folderCounts = useMemo(() => { const m: Record<string, number> = {}; for (const i of items) if (i.folder_id) m[i.folder_id] = (m[i.folder_id] || 0) + 1; return m; }, [items]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
+  // Review: what Mise did on its own that needs a person. It's the home whenever something's waiting.
+  const toReview = useMemo(() => reviewQueue(items, kitRow).count, [items, kitRow]);
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current || !ready) return;
+    landed.current = true;
+    if (toReview > 0 && !new URL(location.href).searchParams.toString()) setPage((p) => (p === 'library' ? 'review' : p));
+  }, [ready, toReview]);
   // ---------- AI search ----------
   // Typing: reset to the plain words. 3+ words: also ask Claude to read the query into filters.
   useEffect(() => {
@@ -795,9 +805,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </div>
 
         <nav className="mainnav">
-          <button className="nav big" type="button" aria-current={page === 'library'} onClick={() => library(view === 'all' ? 'all' : view)}><Icon.Image />Assets
-            {drafts > 0 ? <span className="count pill-n" title="Waiting for approval">{drafts}</span> : null}
+          <button className="nav big" type="button" aria-current={page === 'review'} onClick={() => go('review')}><Icon.Check />Review
+            {toReview > 0 ? <span className="count pill-n" title="Things that need you">{toReview}</span> : null}
           </button>
+          <button className="nav big" type="button" aria-current={page === 'library'} onClick={() => library(view === 'all' ? 'all' : view)}><Icon.Image />Assets</button>
           <button className="nav big" type="button" aria-current={page === 'create'} onClick={() => go('create')}><Icon.Sparkle />Create</button>
           <button className="nav big" type="button" aria-current={page === 'sharing'} onClick={() => go('sharing')}><Icon.Share />Sharing</button>
           <button className="nav big" type="button" aria-current={page === 'brand'} onClick={() => go('brand')}><Icon.Palette />Brand kit
@@ -817,11 +828,27 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       <main>
         <div className="bar mobile-only">
           <button className="menu" type="button" aria-label="Open navigation" onClick={() => setSideOpen(true)}><Icon.Menu /></button>
-          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{page === 'create' ? 'Create' : page === 'library' ? 'Assets' : page === 'brand' ? 'Brand kit' : page === 'sharing' ? 'Sharing' : 'Settings'}</b></div>
+          <div className="crumb">{curWs?.name || '…'}<Icon.Chevron /><b>{page === 'review' ? 'Review' : page === 'create' ? 'Create' : page === 'library' ? 'Assets' : page === 'brand' ? 'Brand kit' : page === 'sharing' ? 'Sharing' : 'Settings'}</b></div>
         </div>
 
         <div className="content">
-          {page === 'create' && curWs ? (
+          {page === 'review' && curWs ? (
+            ready ? <Review items={items} kit={kitRow} thumbOf={emailSrcOf}
+              onApprove={async (ids) => {
+                setItems((list) => list.map((i) => (ids.includes(i.id) ? { ...i, status: 'approved' } : i)));
+                const { error } = await supabase.from('assets').update({ status: 'approved' }).in('id', ids);
+                if (error) { toast('Couldn’t approve. Try again.'); loadAssets(ws); return; }
+                toast(ids.length === 1 ? 'Approved' : `${ids.length} approved`);
+              }}
+              onReject={deleteAsset}
+              onKeepBoth={async (a) => { if (await patchAsset(a.id, { duplicate_ok: true })) toast('Kept both'); }}
+              onFine={async (a) => { if (await patchAsset(a.id, { on_brand: true, on_brand_reason: 'Checked by a person', edited: [...new Set([...(a.edited || []), 'on_brand'])] })) toast('Marked as on-brand'); }}
+              onRetry={async (a) => { if (await patchAsset(a.id, { ai_status: 'pending', ai_attempts: 0, ai_error: null })) { kickTag(); toast('Organising…'); } }}
+              onOpen={(id) => openEditor(id)}
+              onProducts={() => library('product')}
+              onBrandKit={() => go('brand')}
+              onLibrary={() => library('all')} /> : <p className="loading">Loading…</p>
+          ) : page === 'create' && curWs ? (
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
               onConnect={() => openSettings('claude')} onBrandKit={() => go('brand')} onReview={() => library('all', 'draft')}
               onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
