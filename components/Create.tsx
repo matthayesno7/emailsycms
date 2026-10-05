@@ -26,10 +26,11 @@ const FORMATS: { label: string; size: [number, number]; ask: string; video?: boo
 // Ideas the Studio can design right here (single-canvas designs; AI photos and video go to Claude).
 const LIVE = new Set(['hero', 'strip', 'post', 'story', 'thumb', 'slide']);
 
-export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast }: {
+export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed }: {
   ws: Ws; userId: string; supabase: SupabaseClient; onSaved: () => void;
   items: Asset[]; urls: Record<string, string>; kit: BrandKitRow | null; connected: boolean;
   onConnect: () => void; onBrandKit: () => void; onReview: () => void; onOpen: (a: Asset) => void; toast: (m: string) => void;
+  autoBrief?: string | null; onAutoUsed?: () => void; // first designs after sign-up
 }) {
   const [cat, setCat] = useState<PromptCategory | 'all'>('all');
   const [ask, setAsk] = useState('');
@@ -39,6 +40,12 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const [live, setLive] = useState<boolean | null>(null); // can the Studio design here (API key set)?
   const [studio, setStudio] = useState<{ brief: string; size: { w: number; h: number } } | null>(null);
   useEffect(() => { fetch('/api/design').then((r) => r.json()).then((j) => setLive(!!j.enabled)).catch(() => setLive(false)); }, []);
+  useEffect(() => {
+    if (!autoBrief || live === null) return;
+    if (live) setStudio({ brief: autoBrief, size: formatFor(autoBrief) });
+    else setAsk(autoBrief);
+    onAutoUsed?.();
+  }, [autoBrief, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const src = (a?: Asset) => (a ? (a.images?.email?.path && urls[a.images.email.path]) || (a.storage_path ? urls[a.storage_path] : undefined) : undefined);
   const products = useMemo(() => items.filter((i) => i.kind === 'product'), [items]);

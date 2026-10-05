@@ -25,7 +25,10 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const open = path.startsWith('/login') || path.startsWith('/auth');
   if (!user && !open) {
-    return NextResponse.redirect(`${publicOrigin(request)}/login`);
+    // Keep what the landing page asked for (?site=, ?plan=, ?connect=) through sign-in.
+    const keep = new URLSearchParams();
+    for (const k of ['site', 'plan', 'connect']) { const v = request.nextUrl.searchParams.get(k); if (v) keep.set(k, v.slice(0, 200)); }
+    return NextResponse.redirect(`${publicOrigin(request)}/login${keep.toString() ? `?${keep}` : ''}`);
   }
   return response;
 }

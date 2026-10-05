@@ -14,6 +14,8 @@ export async function GET(request: Request) {
       const next = searchParams.get('next') || '';
       if (/^\/(p|s)\/[\w-]+(\/[\w-]+)?$/.test(next)) return NextResponse.redirect(`${origin}${next}`);
       await supabase.rpc('bootstrap');
+      // From the landing page: /?site=…&plan=…&connect=… (nothing else is allowed through).
+      if (/^\/\?(?:(?:site|plan|connect)=[^&#]*&?){1,3}$/.test(next)) return NextResponse.redirect(`${origin}${next}`);
       return NextResponse.redirect(`${origin}/`);
     }
   }

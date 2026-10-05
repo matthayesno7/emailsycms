@@ -90,6 +90,25 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [newWs, setNewWs] = useState<string | null>(null);
   const [origin, setOrigin] = useState('any');
   const [kitRow, setKitRow] = useState<BrandKitRow | null>(null);
+  const [kitFor, setKitFor] = useState(''); // which workspace kitRow has been loaded for
+  // From the landing page (?site=, ?plan=, ?connect=, or kept by the sign-in page): read once.
+  const [signup, setSignup] = useState<{ site?: string; plan?: string; connect?: string } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const it: { site?: string; plan?: string; connect?: string } = {};
+    try {
+      const u = new URL(location.href);
+      for (const k of ['site', 'plan', 'connect'] as const) { const v = u.searchParams.get(k); if (v) { it[k] = v.slice(0, 200); u.searchParams.delete(k); } }
+      if (Object.keys(it).length) history.replaceState({}, '', u);
+      const kept = JSON.parse(localStorage.getItem('mise.signup') || 'null');
+      localStorage.removeItem('mise.signup');
+      if (!Object.keys(it).length && kept && Date.now() - kept.at < 864e5) Object.assign(it, { site: kept.site, plan: kept.plan, connect: kept.connect });
+    } catch {}
+    for (const k of Object.keys(it) as (keyof typeof it)[]) if (!it[k]) delete it[k];
+    return Object.keys(it).length ? it : null;
+  });
+  const fromSignup = useRef(!!signup);
+  const [autoSite, setAutoSite] = useState<string | null>(null);
+  const [autoBrief, setAutoBrief] = useState<string | null>(null);
   const toastT = useRef<any>(null);
   const fileImg = useRef<HTMLInputElement>(null);
   const fileCsv = useRef<HTMLInputElement>(null);
@@ -182,6 +201,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (!wsId) return;
     const { data } = await supabase.from('brand_kits').select('*').eq('workspace_id', wsId).maybeSingle();
     setKitRow((data as BrandKitRow) || null);
+    setKitFor(wsId);
   }, [supabase]);
 
   useEffect(() => { loadWorkspaces(); }, [loadWorkspaces]);
@@ -360,6 +380,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   useEffect(() => {
     if (landed.current || !ready) return;
     landed.current = true;
+    if (fromSignup.current) return; // the landing page's request decides where to go
     const u = new URL(location.href);
     if (u.searchParams.has('review')) { u.searchParams.delete('review'); history.replaceState({}, '', u); setPage('review'); return; }
     if (toReview > 0 && !u.searchParams.toString()) setPage((p) => (p === 'library' ? 'review' : p));
@@ -663,13 +684,32 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return true;
   }
 
-  async function createWorkspace(name: string) {
+  async function createWorkspace(name: string, quiet = false) {
     const { data, error } = await supabase.rpc('create_workspace', { ws_name: name });
-    if (error || !data) { toast('Couldn’t create the workspace.'); return; }
+    if (error || !data) { toast('Couldn’t create the workspace.'); return null; }
     await loadWorkspaces((data as any).id);
     setView('all'); setPage('library');
-    toast(`${name} workspace created`);
+    if (!quiet) toast(`${name} workspace created`);
+    return (data as any).id as string;
   }
+
+  // The landing page's request, once the brand and its kit are loaded:
+  // a website builds the brand kit and then the first designs; connect=claude opens the connector link.
+  useEffect(() => {
+    if (!signup || !ready || !curWs || kitFor !== ws) return;
+    const it = signup;
+    setSignup(null);
+    if (it.plan) { try { localStorage.setItem('mise.plan', it.plan); } catch {} }
+    if (it.connect === 'claude' && !it.site) { openSettings('claude'); return; }
+    if (!it.site) return;
+    const host = (s?: string | null) => String(s || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase();
+    const want = host(it.site);
+    if (!kitRow) { setAutoSite(it.site); setPage('brand'); return; }
+    if (host(kitRow.source?.url) === want) { setPage('brand'); toast('Your brand kit from ' + want + ' is already here.'); return; }
+    // This brand already has its kit: make a new brand for the new website.
+    const name = (want.split('.')[0] || 'New brand').replace(/[-_]+/g, ' ').replace(/^./, (c) => c.toUpperCase()).slice(0, 40);
+    createWorkspace(name, true).then((id) => { if (id) { setAutoSite(it.site!); setPage('brand'); } });
+  }, [signup, ready, curWs, kitFor, ws, kitRow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- block flows ----------
   // Blocks use assets; they never move or replace them.
@@ -890,6 +930,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               onLibrary={() => library('all')} /> : <p className="loading">Loading…</p>
           ) : page === 'create' && curWs ? (
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
+              autoBrief={autoBrief} onAutoUsed={() => setAutoBrief(null)}
               onConnect={() => openSettings('claude')} onBrandKit={() => go('brand')} onReview={() => library('all', 'draft')}
               onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
           ) : page === 'settings' && curWs ? (
@@ -917,7 +958,14 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           ) : page === 'sharing' && curWs ? (
             <Sharing key={curWs.id} supabase={supabase} ws={curWs} items={items} folders={folders} collections={collections.map((c) => ({ id: c.id, name: c.name }))} toast={toast} />
           ) : page === 'brand' && curWs ? (
-            ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); loadWorkspaces(ws); }} /> : <p className="loading">Loading your brand kit…</p>
+            ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); loadWorkspaces(ws); }}
+              autoSite={autoSite}
+              onBuilt={async (name) => {
+                setAutoSite(null);
+                await Promise.all([loadKit(ws), loadAssets(ws)]);
+                setAutoBrief(`A launch post introducing ${name}, made from our own photos and logo, for Instagram.`);
+                setPage('create');
+              }} /> : <p className="loading">Loading your brand kit…</p>
           ) : !ready ? (
             <p className="loading">Loading your library…</p>
           ) : (

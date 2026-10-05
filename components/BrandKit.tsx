@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { COLOR_LABEL, COLOR_ROLES, emptyKit, missing, normaliseKit, warnings, type BrandKit, type BrandKitRow } from '@/lib/brandKit';
 import { Icon } from './icons';
@@ -7,7 +7,7 @@ import type { Asset, Ws } from './Library';
 
 // The workspace's brand kit: build it from the website or from Figma (through Claude),
 // review it against a live email preview, then approve it.
-export default function BrandKitView({ supabase, ws, userId, row, items, urls, toast, onChanged }: {
+export default function BrandKitView({ supabase, ws, userId, row, items, urls, toast, onChanged, autoSite, onBuilt }: {
   supabase: SupabaseClient;
   ws: Ws;
   userId: string;
@@ -16,6 +16,8 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
   urls: Record<string, string>;
   toast: (m: string) => void;
   onChanged: () => void;
+  autoSite?: string | null; // from the landing page: build the kit from this website now
+  onBuilt?: (name: string) => void;
 }) {
   const [kit, setKit] = useState<BrandKit>(() => normaliseKit(row?.kit || { name: ws.name }, ws.name));
   const [dirty, setDirty] = useState(false);
@@ -34,11 +36,19 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
   const gaps = missing(kit), warns = warnings(kit);
   const figmaPrompt = `Build the Mise brand kit for the "${ws.name}" workspace from our Figma email design system${ws.figma_file_url ? `: ${ws.figma_file_url}` : ' (paste the Figma link here)'}.`;
 
-  async function buildFromSite(e?: React.FormEvent) {
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (!autoSite || row || autoRan.current) return;
+    autoRan.current = true;
+    setSite(autoSite);
+    buildFromSite(undefined, autoSite);
+  }, [autoSite, row]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function buildFromSite(e?: React.FormEvent, url = site) {
     e?.preventDefault();
-    if (!site.trim()) return;
+    if (!url.trim()) return;
     setBuilding(true);
-    const res = await fetch('/api/brand-kit/extract', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, url: site }) }).catch(() => null);
+    const res = await fetch('/api/brand-kit/extract', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, url }) }).catch(() => null);
     const json = res ? await res.json().catch(() => null) : null;
     setBuilding(false);
     if (!res?.ok || !json?.kit) { toast(json?.error || 'Couldn’t read that website. Try again.'); return; }
@@ -47,6 +57,7 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
     onChanged();
     const f = json.found || {};
     toast(`Brand kit drafted from ${new URL(json.kit.source.url).hostname}${f.logo ? ' with its logo' : ''}${json.renamed ? `, and your brand is now called ${json.renamed}` : ''}. Check it, then approve.`);
+    if (autoSite && onBuilt) onBuilt(json.renamed || json.kit?.kit?.name || ws.name);
   }
 
   async function save(status?: 'approved') {
@@ -78,6 +89,7 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
             <span>We read your site’s colours, fonts, buttons and logo, and draft the kit for you to check.</span>
             <input className="in" placeholder="yourbrand.com" value={site} onChange={(e) => setSite(e.target.value)} disabled={building} />
             <button className="primary" type="submit" disabled={building || !site.trim()}>{building ? 'Reading your site…' : 'Build my brand kit'}</button>
+            {building && autoSite && <span className="tip">Reading {site}: colours, fonts, buttons and logo. About 20 seconds, then your first designs.</span>}
           </form>
           <div className="bk-start">
             <b>From your Figma design system</b>
