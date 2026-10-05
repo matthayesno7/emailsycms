@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createPaidBrand, syncSubscription } from '@/lib/billing';
-import { stripe, verifyWebhook } from '@/lib/stripe';
+import { stripe } from '@/lib/stripe';
+import { verifyWebhook } from '@/lib/stripeWebhook';
 import { notify } from '@/lib/notify';
 
 // Stripe → Mise. Point a webhook endpoint at /api/billing/webhook with these events:

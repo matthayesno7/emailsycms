@@ -1,10 +1,10 @@
-// Stripe, server only: a small client over the REST API (no SDK), webhook signature checks,
-// and the meter event for extra Studio designs.
+// Stripe, server only: a small client over the REST API (no SDK) and the meter event for extra
+// Studio designs. Webhook signature checks are in stripeWebhook.ts (it needs node:crypto, and this
+// file is pulled into the background worker, which Next also bundles for the edge runtime).
 //
 // Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PRO_MONTH, STRIPE_PRICE_PRO_YEAR,
 // STRIPE_PRICE_OVERAGE_MONTH, STRIPE_PRICE_OVERAGE_YEAR (optional: no overage billed without them),
 // STRIPE_METER_EVENT (default studio_design). scripts/stripe-setup.mjs creates them all.
-import crypto from 'node:crypto';
 import type { Interval } from './plans';
 
 const API = 'https://api.stripe.com/v1';
@@ -47,20 +47,6 @@ export async function stripe<T = any>(method: 'GET' | 'POST' | 'DELETE', path: s
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j?.error?.message || `Stripe ${r.status}`);
   return j as T;
-}
-
-// Check the Stripe-Signature header (v1 scheme, 5 minute tolerance). Returns the event or null.
-export function verifyWebhook(payload: string, header: string | null): any | null {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret || !header) return null;
-  const parts = Object.fromEntries(header.split(',').map((p) => p.split('=') as [string, string]).filter((p) => p.length === 2 && p[0] !== 'v1'));
-  const sigs = header.split(',').filter((p) => p.startsWith('v1=')).map((p) => p.slice(3));
-  const t = Number(parts.t);
-  if (!t || Math.abs(Date.now() / 1000 - t) > 300 || !sigs.length) return null;
-  const expected = crypto.createHmac('sha256', secret).update(`${t}.${payload}`).digest('hex');
-  const ok = sigs.some((s) => s.length === expected.length && crypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected)));
-  if (!ok) return null;
-  try { return JSON.parse(payload); } catch { return null; }
 }
 
 // One extra Studio design for a brand's Stripe customer (billed at 50p on the next invoice).
