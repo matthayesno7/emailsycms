@@ -3,6 +3,7 @@
 // find the link or portal, check it's live and the visitor may see it, then work out exactly
 // which assets it shares. Uses the service-role client, so everything is scoped by hand.
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { isAvailable } from './lifecycle';
 import { cookies } from 'next/headers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from './supabase/admin';
@@ -122,11 +123,12 @@ export async function portalAccess(portal: PortalRow, visitorEmail: string | nul
 }
 
 // ---------- what a link or portal shares ----------
-const COLS = 'id, workspace_id, kind, name, storage_path, mime, width, height, bytes, images, fields, folder_id, description, tags, colour_names, text_in_image, on_brand, origin, status, pid, created_at';
-// Drafts and blocks are never public.
-const publicAsset = (a: any) => a.status !== 'draft' && a.kind !== 'block' && !!a.storage_path;
+const COLS = 'id, workspace_id, kind, name, storage_path, mime, width, height, bytes, images, fields, folder_id, description, tags, colour_names, text_in_image, on_brand, origin, status, pid, created_at, lifecycle, licence_expires_at';
+// Drafts, blocks and anything no longer available (archived, licence expired, obsolete) are never public.
+const publicAsset = (a: any) => a.status !== 'draft' && a.kind !== 'block' && !!a.storage_path && isAvailable(a);
 
-export async function shareAssets(db: SupabaseClient, s: ShareRow): Promise<any[]> {
+// gone: how many files in the link are no longer available (shown as a note, never as files).
+export async function shareAssets(db: SupabaseClient, s: ShareRow): Promise<any[] & { gone: number }> {
   let rows: any[] = [];
   if (s.kind === 'assets' && s.asset_ids?.length) {
     const { data } = await db.from('assets').select(COLS).eq('workspace_id', s.workspace_id).in('id', s.asset_ids);
@@ -140,7 +142,9 @@ export async function shareAssets(db: SupabaseClient, s: ShareRow): Promise<any[
     if (c) { const hits = await collectionHits(db, s.workspace_id, c.rules as Rules); rows = (await allWorkspaceAssets(db, s.workspace_id)).filter((a) => matchesRules(a, c.rules as Rules, hits)); }
   }
   // A link to hand-picked files may include drafts the sender chose; folders and collections never do.
-  return rows.filter((a) => a.kind !== 'block' && a.storage_path && (s.kind === 'assets' || a.status !== 'draft'));
+  const shareable = rows.filter((a) => a.kind !== 'block' && a.storage_path && (s.kind === 'assets' || a.status !== 'draft'));
+  const live = shareable.filter((a) => isAvailable(a));
+  return Object.assign(live, { gone: shareable.length - live.length });
 }
 
 async function allWorkspaceAssets(db: SupabaseClient, ws: string) {
@@ -236,7 +240,7 @@ export async function publicContext(ref: { s?: string | null; p?: string | null 
       const missing = ids.filter((id) => !assets.some((a) => a.id === id));
       if (missing.length) {
         const { data } = await r.db.from('assets').select(COLS).eq('workspace_id', r.portal.workspace_id).in('id', missing);
-        assets.push(...(data || []).filter((a: any) => a.storage_path));
+        assets.push(...(data || []).filter((a: any) => a.storage_path && isAvailable(a)));
       }
     }
     return { db: r.db, workspace_id: r.portal.workspace_id, share_id: undefined as string | undefined, portal_id: r.portal.id, email: r.portal.access === 'allowlist' ? v.email : null, member: v.member, assets, allow_download: r.portal.allow_download, formats: r.portal.formats as Format[] };

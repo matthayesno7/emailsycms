@@ -1,5 +1,7 @@
 // Mise MCP server: a stateless JSON-RPC handler for the MCP "streamable HTTP"
 // transport. Each POST carries one message (or a batch) and gets a JSON reply.
+import { isAvailable, lifecycleForClaude } from '../lifecycle';
+import { MAX_IMAGE_BYTES, MAX_IMPORT_BYTES } from '../plans';
 import { BLOCK_TYPES, isReadDesign } from '../blockTypes';
 import { productAsBlock } from '../products';
 import { mergeKit, missing, normaliseKit, warnings } from '../brandKit';
@@ -49,6 +51,8 @@ Never invent values: leave a role empty rather than guess. Email Love design sys
 Building from a website instead happens in Mise itself (Brand kit → From your website); suggest that when the user has no design system.
 
 Where assets come from: each asset has an origin: uploaded (added by the team), product_feed (from the product feed, keyed by PID) or generated (made by AI), and a status: approved or draft. Generated assets start as drafts and carry provenance (prompt, model, source product). Images you create for a workspace go into the library with add_generated_asset; a person approves them in Mise, so never describe a draft as approved. Prefer approved assets when building emails; use drafts only when the user asks for them.
+
+No longer available: an asset can be archived, expired (its licence or usage rights ran out) or obsolete (superseded, e.g. an old logo). list_assets leaves these out unless include_unavailable is true; get_asset marks them with availability, reason and use_instead. Never use an unavailable asset in new work: use its replacement (use_instead) or ask the user.
 
 Making things (Mise holds the brand and the source assets; the Figma connector does the making):
 - Designs (banners, social posts, ads, slides): build them in Figma from the brand kit and Mise assets (push_image_to_figma), headline as live text, then save the finished frame with add_generated_asset.
@@ -125,6 +129,7 @@ const TOOLS = [
         since: { type: 'string', description: 'Only files added on or after this date or time (ISO), e.g. for "what’s new since Monday".' },
         folder_id: { type: 'string', description: 'Only files in this folder (list_folders).' },
         collection_id: { type: 'string', description: 'Only files in this smart collection (list_folders).' },
+        include_unavailable: { type: 'boolean', description: 'Also list files that are no longer available (archived, licence expired, obsolete). Off by default: never use those in new work.' },
         limit: { type: 'number', minimum: 1, maximum: 200, default: 50 },
       },
       additionalProperties: false,
@@ -273,6 +278,8 @@ export function publicAsset(a: AssetRow, ws?: Workspace) {
   if (typeof a.on_brand === 'boolean') out.on_brand = { ok: a.on_brand, reason: a.on_brand_reason || '' };
   if (a.product_id && a.kind !== 'block') out.shows_product_id = a.product_id;
   if (a.duplicate_of && !a.duplicate_ok) out.possible_duplicate_of = a.duplicate_of;
+  const life = lifecycleForClaude(a);
+  if (life) Object.assign(out, life);
   if (a.kind === 'product') Object.assign(out, { pid: a.pid, price: a.price, link: a.link, description: a.fields?.description || '', has_image: !!a.storage_path });
   if (a.kind === 'block') Object.assign(out, { block_type: a.block_type, block_type_name: BLOCK_TYPES[a.block_type]?.name });
   if (a.figma) out.figma = a.figma;
@@ -361,6 +368,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const opts = { kind: args.format ? 'image' : kind, origin: args.origin, status: args.status, limit: narrow ? 1000 : limit };
       let rows = (args.query && ctx.repo.search ? await ctx.repo.search(ids, String(args.query), opts).catch(() => null) : null)
         ?? await ctx.repo.listAssets(ids, { ...opts, query: args.query ? String(args.query) : undefined });
+      if (!args.include_unavailable) rows = rows.filter((a) => isAvailable(a));
       if (args.format) rows = rows.filter((a) => tabOf(a) === args.format);
       if (args.since) { const t = Date.parse(String(args.since)); if (isNaN(t)) return toolError('since must be a date, e.g. 2026-10-05.'); rows = rows.filter((a) => Date.parse(a.created_at) >= t); }
       if (args.folder_id) rows = rows.filter((a) => a.folder_id === args.folder_id);
@@ -447,6 +455,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const r = await allowedAsset(ctx, args.asset_id);
       if (r.error) return toolError(r.error);
       const a = r.asset!;
+      if (!isAvailable(a)) { const l = lifecycleForClaude(a)!; return toolError(`"${a.name}" is no longer available (${l.reason}), so it can’t go into new designs.${a.replaced_by ? ` Use its replacement instead: asset ${a.replaced_by}.` : ' Ask the user which file to use instead.'}`); }
       let url: URL;
       try {
         url = new URL(String(args.upload_url));
@@ -574,7 +583,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       let u: URL;
       try { u = new URL(String(args.image_url)); } catch { return toolError('image_url is not a valid URL.'); }
       if (u.protocol !== 'https:') return toolError('image_url must be an https address.');
-      const got = await fetchLimited(u, { accept: 'image/*,video/*', maxBytes: 100 * 1024 * 1024, timeoutMs: 45000, fetchImpl: ctx.fetchImpl });
+      const got = await fetchLimited(u, { accept: 'image/*,video/*', maxBytes: MAX_IMPORT_BYTES, timeoutMs: 45000, fetchImpl: ctx.fetchImpl });
       if ('error' in got) return toolError(`Couldn't download the file (${got.error}).`);
       // Some storage hosts send a generic type: fall back to the file extension.
       let type = got.type;
@@ -584,7 +593,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       }
       if (/^video\//.test(type)) kind = 'video';
       if (!/image\/(png|jpeg|webp|gif|svg\+xml)|video\/(mp4|webm|quicktime)/.test(type)) return toolError(`That URL isn't an image (PNG, JPEG, WebP) or video (MP4, WebM): ${got.type || 'unknown type'}.`);
-      if (kind !== 'video' && got.buf.length > 25 * 1024 * 1024) return toolError('That image is over 25 MB.');
+      if (kind !== 'video' && got.buf.length > MAX_IMAGE_BYTES) return toolError('That image is over 50 MB, the most Mise takes for an image.');
       let product: AssetRow | null = null;
       if (args.source_product_pid) {
         const hits = await ctx.repo.listAssets([w.ws.id], { kind: 'product', query: String(args.source_product_pid), limit: 20 });

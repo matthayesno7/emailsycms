@@ -27,6 +27,9 @@ import Sharing from './Sharing';
 import ShareDialog, { type ShareTarget } from './ShareDialog';
 import Review from './Review';
 import { reviewQueue } from '@/lib/review';
+import { PlanSettings, NewBrandPaywall } from './Billing';
+import { effectivePlan, mb, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, tooBig, type Plan } from '@/lib/plans';
+import { expiresSoon, isAvailable, lifecycleOf, LIFECYCLE } from '@/lib/lifecycle';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
 export type Ws = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
@@ -34,7 +37,7 @@ const WS_COLORS = ['#2f5bff', '#26313e', '#32a5db', '#e8a317', '#7b61ff', '#2f9e
 const KINDS = ['image', 'logo', 'video', 'product', 'block'];
 // Where assets come from. Products always come from the feed and blocks are made by the team,
 // so the filter shows on the views where it means something.
-const ORIGINS: [string, string][] = [['any', 'All'], ['uploaded', 'Uploaded'], ['product_feed', 'From feed'], ['generated', 'Generated'], ['draft', 'To review'], ['dupes', 'Possible duplicates']];
+const ORIGINS: [string, string][] = [['any', 'All'], ['uploaded', 'Uploaded'], ['product_feed', 'From feed'], ['generated', 'Generated'], ['draft', 'To review'], ['dupes', 'Possible duplicates'], ['unavailable', 'No longer available']];
 const originOf = (a: Asset) => a.origin || (a.kind === 'product' ? 'product_feed' : 'uploaded');
 
 export default function Library({ userId, email, appUrl }: { userId: string; email: string; appUrl: string }) {
@@ -58,6 +61,41 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [newFolder, setNewFolder] = useState<string | null>(null);
   const [dropFolder, setDropFolder] = useState<string | null>(null);
   const [boxReturn, setBoxReturn] = useState(false);
+  // Coming back from Stripe: ?billing=upgraded|new-brand|portal|cancelled[&ws=…]
+  useEffect(() => {
+    const u = new URL(location.href);
+    const b = u.searchParams.get('billing');
+    if (!b) return;
+    const target = u.searchParams.get('ws');
+    u.searchParams.delete('billing'); u.searchParams.delete('ws');
+    history.replaceState({}, '', u);
+    if (target) { setWs(target); try { localStorage.setItem('emailsy.ws', target); } catch {} }
+    if (b === 'upgraded') setTimeout(() => { toast('Welcome to Pro. It can take a few seconds to show.'); setSettingsTab('plan'); setPage('settings'); }, 300);
+    if (b === 'new-brand') {
+      setTimeout(() => toast('Setting up your new brand…'), 300);
+      // The brand is created by Stripe's webhook: look for it for up to half a minute.
+      const before = Date.now();
+      const poll = async () => {
+        const { data } = await supabase.from('workspace_members').select('workspace_id, created_at').eq('user_id', userId).eq('role', 'owner').order('created_at', { ascending: false }).limit(1);
+        const newest = data?.[0];
+        if (newest && Date.parse(newest.created_at) > before - 5 * 60e3) { await loadWorkspaces(newest.workspace_id); setPage('brand'); toast('Your new brand is ready. Start with its brand kit.'); return; }
+        if (Date.now() - before < 30e3) setTimeout(poll, 2500); else toast('Payment done. Your new brand will appear in a moment; refresh if it doesn’t.');
+      };
+      setTimeout(poll, 1500);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // This brand's plan (members can read it; only Stripe's webhook writes it).
+  useEffect(() => {
+    if (!ws) return;
+    setPlan('free');
+    supabase.from('workspace_billing').select('plan, subscription_status').eq('workspace_id', ws).maybeSingle().then(({ data }) => setPlan(effectivePlan(data)));
+  }, [ws, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const on = (e: Event) => setLimitHit((e as CustomEvent).detail?.message || 'This brand has used its Studio designs for this month.');
+    window.addEventListener('mise:limit', on);
+    return () => window.removeEventListener('mise:limit', on);
+  }, []);
+
   // Coming back from connecting Box: open the import window on the Box browser.
   useEffect(() => {
     const u = new URL(location.href);
@@ -68,7 +106,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (r === 'connected') { setBoxReturn(true); setModal('import'); }
     else setTimeout(() => toast(r === 'cancelled' ? 'Box wasn’t connected.' : 'Couldn’t connect Box. Try again.'), 300);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [settingsTab, setSettingsTab] = useState<'workspace' | 'organise' | 'members' | 'claude' | 'help'>('workspace');
+  const [settingsTab, setSettingsTab] = useState<'workspace' | 'plan' | 'organise' | 'members' | 'claude' | 'help'>('workspace');
+  const [paywall, setPaywall] = useState<string | null>(null);   // a new brand's name, when Free already covers one
+  const [limitHit, setLimitHit] = useState<string | null>(null);  // out of Studio designs this month
+  const [plan, setPlan] = useState<Plan>('free');
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
   const [wsOpen, setWsOpen] = useState(false);
@@ -371,9 +412,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const suggestions = useMemo(() => suggestCollections(items, collections), [items, collections]);
   const hay = useMemo(() => new Map(items.map((i) => [i.id, haystack(i)])), [items]);
   const inView = useCallback((it: Asset) => inFolder(it) && (view === 'all' || tabOf(it) === view), [view, inFolder]);
-  const tabCounts = useMemo(() => { const inF = items.filter(inFolder); const m: Record<string, number> = { all: inF.length }; for (const i of inF) { const t = tabOf(i); m[t] = (m[t] || 0) + 1; } return m; }, [items, inFolder]);
+  const tabCounts = useMemo(() => { const inF = items.filter((i) => inFolder(i) && isAvailable(i)); const m: Record<string, number> = { all: inF.length }; for (const i of inF) { const t = tabOf(i); m[t] = (m[t] || 0) + 1; } return m; }, [items, inFolder]);
   const folderCounts = useMemo(() => { const m: Record<string, number> = {}; for (const i of items) if (i.folder_id) m[i.folder_id] = (m[i.folder_id] || 0) + 1; return m; }, [items]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
+  const unavailable = useMemo(() => items.filter((i) => !isAvailable(i)).length, [items]);
   // Review: what Mise did on its own that needs a person. It's the home whenever something's waiting.
   const toReview = useMemo(() => reviewQueue(items, kitRow).count, [items, kitRow]);
   const landed = useRef(false);
@@ -424,7 +466,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
     const o = showOrigins ? origin : 'any';
-    const keep = (it: Asset) => inView(it) && (o === 'any' || (o === 'draft' ? it.status === 'draft' : o === 'dupes' ? !!it.duplicate_of && !it.duplicate_ok : originOf(it) === o));
+    // Archived, expired and obsolete files only show under "No longer available".
+    const keep = (it: Asset) => inView(it) && (o === 'unavailable' ? !isAvailable(it) : isAvailable(it) && (o === 'any' || (o === 'draft' ? it.status === 'draft' : o === 'dupes' ? !!it.duplicate_of && !it.duplicate_ok : originOf(it) === o)));
     if (s && hits && hits.key === curKey) {
       // Best matches first, then anything else whose words match (e.g. not made searchable yet).
       const ranked = hits.ids.map((id) => byId.get(id)).filter((it): it is Asset => !!it && keep(it));
@@ -470,9 +513,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   async function addImageAsset(file: File, opts: { kind?: string; attachToProduct?: boolean; folderId?: string | null } = {}): Promise<{ asset: Asset; img: HTMLImageElement | null } | null> {
     const ext = extOf(file);
     const type = file.type || (ext === 'svg' ? 'image/svg+xml' : ext === 'png' ? 'image/png' : 'image/jpeg');
+    const big = tooBig({ size: file.size, type, name: file.name });
+    if (big) { toast(big); return null; }
     const path = `${ws}/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from('assets').upload(path, file, { contentType: type, upsert: false });
-    if (error) { toast(/size|large/i.test(error.message) ? `${file.name} is over 25 MB.` : `Couldn’t upload ${file.name}.`); return null; }
+    if (error) { toast(/size|large|exceed/i.test(error.message) ? `${file.name} is too large to upload. Images can be up to ${mb(MAX_IMAGE_BYTES)}, videos ${mb(MAX_VIDEO_BYTES)}.` : `Couldn’t upload ${file.name}.`); return null; }
     const video = /^video\//.test(type);
     const local = URL.createObjectURL(file);
     let img: HTMLImageElement | null = null;
@@ -686,6 +731,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   async function createWorkspace(name: string, quiet = false) {
     const { data, error } = await supabase.rpc('create_workspace', { ws_name: name });
+    // Free covers one brand you own; the next one starts on Pro, through checkout.
+    if (error && /FREE_BRAND_LIMIT/.test(error.message)) { setPaywall(name); setModal('paywall'); return null; }
     if (error || !data) { toast('Couldn’t create the workspace.'); return null; }
     await loadWorkspaces((data as any).id);
     setView('all'); setPage('library');
@@ -701,6 +748,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setSignup(null);
     if (it.plan) { try { localStorage.setItem('mise.plan', it.plan); } catch {} }
     if (it.connect === 'claude' && !it.site) { openSettings('claude'); return; }
+    if (it.plan && /pro/i.test(it.plan) && !it.site) { openSettings('plan'); return; }
     if (!it.site) return;
     const host = (s?: string | null) => String(s || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase();
     const want = host(it.site);
@@ -912,6 +960,15 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </div>
 
         <div className="content">
+          {limitHit && (
+            <div className="limit-banner" role="status">
+              <span>{limitHit}</span>
+              <span className="acts">
+                <button className="btn" type="button" onClick={() => { setLimitHit(null); openSettings('plan'); }}>See plans</button>
+                <button className="btn quiet" type="button" onClick={() => setLimitHit(null)}>Dismiss</button>
+              </span>
+            </div>
+          )}
           {page === 'review' && curWs ? (
             ready ? <Review items={items} kit={kitRow} thumbOf={emailSrcOf}
               onApprove={async (ids) => {
@@ -937,7 +994,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             <div className="settings-page">
               <div className="head"><h1>Settings</h1></div>
               <div className="seg tabs" role="tablist">
-                {([['workspace', 'Brand workspace'], ['organise', 'Auto-organise'], ['members', 'Team'], ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
+                {([['workspace', 'Brand workspace'], ['plan', 'Plan'], ['organise', 'Auto-organise'], ['members', 'Team'], ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
                   <button key={k} type="button" role="tab" aria-pressed={settingsTab === k} onClick={() => setSettingsTab(k)}>{l}{k === 'claude' && !connected ? ' •' : ''}</button>
                 ))}
               </div>
@@ -949,7 +1006,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     if (next) { setWs(next.id); await loadWorkspaces(next.id); setPage('library'); setView('all'); setFolder('all'); }
                     else location.href = '/'; // no brands left: start fresh
                   }} />}
-                {settingsTab === 'organise' && <AutoOrganise ws={curWs.id} toast={toast} />}
+                {settingsTab === 'plan' && <PlanSettings key={curWs.id} ws={curWs} toast={toast} />}
+                {settingsTab === 'organise' && <AutoOrganise ws={curWs.id} toast={toast} onUpgrade={plan === 'free' ? () => setSettingsTab('plan') : undefined} />}
                 {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
                 {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
@@ -1044,8 +1102,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 </div>
                 {showOrigins && (
                   <select className="in source" value={origin} onChange={(e) => setOrigin(e.target.value)} aria-label="Where assets came from">
-                    {ORIGINS.filter(([k]) => (k !== 'product_feed' || view === 'all') && (k !== 'draft' || drafts || origin === 'draft') && (k !== 'dupes' || dupes || origin === 'dupes')).map(([k, l]) => (
-                      <option key={k} value={k}>{k === 'any' ? 'From anywhere' : k === 'draft' ? `To review (${drafts})` : k === 'dupes' ? `Possible duplicates (${dupes})` : k === 'generated' ? 'Made with Claude' : l}</option>
+                    {ORIGINS.filter(([k]) => (k !== 'product_feed' || view === 'all') && (k !== 'draft' || drafts || origin === 'draft') && (k !== 'dupes' || dupes || origin === 'dupes') && (k !== 'unavailable' || unavailable || origin === 'unavailable')).map(([k, l]) => (
+                      <option key={k} value={k}>{k === 'any' ? 'From anywhere' : k === 'draft' ? `To review (${drafts})` : k === 'dupes' ? `Possible duplicates (${dupes})` : k === 'unavailable' ? `No longer available (${unavailable})` : k === 'generated' ? 'Made with Claude' : l}</option>
                     ))}
                   </select>
                 )}
@@ -1130,6 +1188,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onClose={() => openEditor(null)}
           onPatch={(p) => patchAsset(openAsset.id, p)}
           onDelete={() => deleteAsset(openAsset)}
+          pro={plan !== 'free'}
+          replacements={items.filter((i) => i.kind === openAsset.kind && i.id !== openAsset.id && isAvailable(i)).map((i) => ({ id: i.id, name: i.name })).sort((a, b) => a.name.localeCompare(b.name))}
+          onUpgrade={() => { openEditor(null); openSettings('plan'); }}
           usedIn={usedIn[openAsset.id] || []}
           onOpenBlock={(b) => showBlock(blockDraft(b))}
           onMakeBlock={() => useInBlock(openAsset)}
@@ -1152,7 +1213,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           design={openAsset.provenance?.via === 'studio' && openAsset.provenance?.spec ? (() => {
             const sk = studioKit(curWs?.name || '', kitRow, items, urls);
             return { wsId: ws, brand: sk.brand, fonts: sk.fonts, srcOf: sk.srcOf, thumbOf: (a: Asset) => emailSrcOf(a) || undefined,
-              library: items.filter((i) => (i.kind === 'image' || i.kind === 'product') && i.storage_path && i.status !== 'draft' && i.provenance?.via !== 'studio') };
+              library: items.filter((i) => (i.kind === 'image' || i.kind === 'product') && i.storage_path && i.status !== 'draft' && isAvailable(i) && i.provenance?.via !== 'studio') };
           })() : undefined}
           onDesignSaved={async (newId) => { await loadAssets(ws); if (newId) openEditor(newId, true); }}
           onShare={async () => {
@@ -1163,6 +1224,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onEmailCopy={async () => {
             const path = openAsset.images?.email?.path || openAsset.storage_path;
             if (!path) return;
+            if (lifecycleOf(openAsset) === 'expired') { toast('Its licence has expired, so it can’t be downloaded.'); return; }
             const name = openAsset.name.replace(/[^\w.-]+/g, '-').toLowerCase() + '-email.' + (path.split('.').pop() || 'jpg');
             const { data } = await supabase.storage.from('assets').createSignedUrl(path, 600, { download: name });
             if (data?.signedUrl) location.href = data.signedUrl;
@@ -1197,6 +1259,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         />
       )}
 
+      {modal === 'paywall' && paywall && (
+        <Modal onClose={() => { setModal(null); setPaywall(null); }}>
+          <NewBrandPaywall name={paywall} toast={toast} onClose={() => { setModal(null); setPaywall(null); }} />
+        </Modal>
+      )}
       {modal === 'feedback' && <Feedback ws={curWs?.id} page={page === 'settings' ? `settings/${settingsTab}` : page} onClose={() => setModal(null)} toast={toast} />}
       {modal === 'import' && curWs && (
         <Modal onClose={() => { setModal(null); setBoxReturn(false); }}>
@@ -1306,13 +1373,24 @@ function CopyBtn({ onCopy }: { onCopy?: () => void }) {
   );
 }
 
+// Unavailable files are greyed with their state; a licence ending within 30 days is flagged.
+function tileClass(it: Asset) {
+  return 'tile' + (!isAvailable(it) ? ' unavail' : expiresSoon(it) ? ' soon' : '');
+}
+function lifeLabel(it: Asset) {
+  const l = lifecycleOf(it);
+  if (l !== 'active') return LIFECYCLE[l].badge;
+  if (expiresSoon(it)) return `Licence ends ${new Date(it.licence_expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+  return undefined;
+}
+
 function Tile({ it, src, urls, used = 0, onOpen, onCopy }: { it: Asset; src: string | null; urls: Record<string, string>; used?: number; onOpen: () => void; onCopy?: () => void }) {
   const usedLabel = used ? `In ${used} block${used > 1 ? 's' : ''}` : '';
   const onKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } };
   if (it.kind === 'block') {
     const bt = BLOCK_TYPES[it.block_type] || { name: 'Block', fields: [] };
     return (
-      <div className="tile" role="button" tabIndex={0} title="Open block" onClick={onOpen} onKeyDown={onKey}>
+      <div className={tileClass(it)} data-life={lifeLabel(it)} role="button" tabIndex={0} title="Open block" onClick={onOpen} onKeyDown={onKey}>
         <div className="thumb block live">
           {bt.fields.length ? <FitPreview width={previewWidth(it)}><Preview b={it} bt={bt.fields} slotSrc={(s: any) => (s?.path ? urls[s.path] : undefined)} /></FitPreview> : <Wire type={it.block_type} />}
           <span className="tag">{bt.name}</span>
@@ -1324,7 +1402,7 @@ function Tile({ it, src, urls, used = 0, onOpen, onCopy }: { it: Asset; src: str
   // Products show as their photo, like the portal; the email card lives in the product editor.
   if (it.kind === 'product') {
     return (
-      <div className="tile" role="button" tabIndex={0} title="Click to open" onClick={onOpen} onKeyDown={onKey}>
+      <div className={tileClass(it)} data-life={lifeLabel(it)} role="button" tabIndex={0} title="Click to open" onClick={onOpen} onKeyDown={onKey}>
         <div className="thumb product photo">
           {src ? <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.pid || it.name} data-id={it.id} data-png={it.mime === 'image/png' ? '1' : '0'} />
             : <div className="noimg"><code>{it.pid}</code>Drop {it.pid}.jpg to add its image</div>}
@@ -1337,7 +1415,7 @@ function Tile({ it, src, urls, used = 0, onOpen, onCopy }: { it: Asset; src: str
   if (it.kind === 'video') {
     const vsrc = it.storage_path ? urls[it.storage_path] : undefined;
     return (
-      <div className="tile" role="button" tabIndex={0} title="Open video" onClick={onOpen} onKeyDown={onKey}>
+      <div className={tileClass(it)} data-life={lifeLabel(it)} role="button" tabIndex={0} title="Open video" onClick={onOpen} onKeyDown={onKey}>
         <div className="thumb video" style={{ aspectRatio: '4 / 5' }}>
           {vsrc && <video src={vsrc} muted loop playsInline preload="metadata" onMouseEnter={(e) => e.currentTarget.play().catch(() => {})} onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }} />}
           <span className="tag vid">Video</span>
@@ -1349,7 +1427,7 @@ function Tile({ it, src, urls, used = 0, onOpen, onCopy }: { it: Asset; src: str
   }
   const right = usedLabel || (it.width ? `${it.width}×${it.height}` : '');
   return (
-    <div className="tile" role="button" tabIndex={0} title="Click to open" onClick={onOpen} onKeyDown={onKey}>
+    <div className={tileClass(it)} data-life={lifeLabel(it)} role="button" tabIndex={0} title="Click to open" onClick={onOpen} onKeyDown={onKey}>
       <div className={'thumb ' + it.kind} style={it.kind === 'image' && it.width && it.height ? { aspectRatio: `${Math.max(0.5, Math.min(6, it.width / it.height))}` } : undefined}>
         {src ? (
           <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.name} data-id={it.id} data-png={it.mime === 'image/png' ? '1' : '0'} />

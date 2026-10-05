@@ -13,6 +13,9 @@ import { FORMATS as SHARE_FORMATS, hashPasscode, newToken, shareState } from '..
 import { brandKitFromWebsite } from '../brandFromSite';
 import { fetchLimited, IMAGE_EXT } from '../net';
 import { imageSize } from '../imageSize';
+import { lifecyclePatch } from '../lifecycle';
+import { MAX_IMAGE_BYTES, MAX_IMPORT_BYTES } from '../plans';
+import { planOf } from '../billing';
 
 export type MoreCtx = Ctx & { db?: SupabaseClient; appUrl?: string };
 
@@ -60,6 +63,10 @@ export const MORE_TOOLS = [
         folder: { type: 'string', description: 'Folder name; made if it doesn’t exist.' },
         kind: { type: 'string', enum: ['image', 'logo'] },
         focus: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, description: 'Focal point, 0..1 from the top left: crops keep it in view.' },
+        availability: { type: 'string', enum: ['available', 'archived', 'obsolete'], description: 'Retire a file: archived (no longer used) or obsolete (superseded, e.g. an old logo; Pro). available brings it back. Unavailable files stay in Mise, marked, but are kept out of new work, links and portals.' },
+        availability_reason: { type: 'string', description: 'Why, in a few words, e.g. "Replaced by the 2026 logo".' },
+        replaced_by: { type: ['string', 'null'], description: 'For an obsolete file: the asset id people should use instead (Pro).' },
+        licence_expires_at: { type: ['string', 'null'], description: 'ISO date the licence or usage rights end (Pro). On that date the file is blocked automatically. null removes it.' },
       },
       required: ['asset_id'], additionalProperties: false,
     },
@@ -382,6 +389,26 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
         if ('error' in f) return toolError(f.error);
         patch.folder_id = f.id; made = !!f.made;
       }
+      // Availability: archive, obsolete (with a replacement) and licence dates. The last two are on Pro.
+      const wantsPro = args.availability === 'obsolete' || args.replaced_by || 'licence_expires_at' in args;
+      if (wantsPro && ctx.db && (await planOf(ctx.db, a.workspace_id)).plan === 'free') return toolError('Licence dates and obsolete files with replacements are on Pro. The brand’s owner can upgrade in Mise → Settings → Plan. Archiving works on every plan.');
+      if ('licence_expires_at' in args) {
+        if (args.licence_expires_at === null || args.licence_expires_at === '') patch.licence_expires_at = null;
+        else { const t = Date.parse(String(args.licence_expires_at)); if (isNaN(t)) return toolError('licence_expires_at must be a date, e.g. 2026-12-31.'); patch.licence_expires_at = new Date(t).toISOString(); if (t <= Date.now()) Object.assign(patch, lifecyclePatch('expired', 'Licence expired')); }
+      }
+      if (args.availability) {
+        if (!['available', 'archived', 'obsolete'].includes(args.availability)) return toolError('availability must be available, archived or obsolete.');
+        Object.assign(patch, lifecyclePatch(args.availability === 'available' ? 'active' : args.availability, args.availability_reason));
+        if (args.availability !== 'obsolete') patch.replaced_by = null;
+      }
+      if ('replaced_by' in args) {
+        if (args.replaced_by) {
+          const rr = await ownAssets(ctx, [String(args.replaced_by)]);
+          if ('error' in rr || rr.rows[0].workspace_id !== a.workspace_id || rr.rows[0].id === a.id) return toolError('replaced_by must be another asset in the same brand.');
+        }
+        patch.replaced_by = args.replaced_by || null;
+      }
+      if ('lifecycle' in patch) patch.lifecycle_by = ctx.userId;
       if (!Object.keys(patch).length) return toolError('Nothing to change: pass at least one field.');
       if (edited.size !== (a.edited || []).length) patch.edited = [...edited];
       await ctx.repo.updateAsset(a.id, patch);
@@ -626,14 +653,14 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
       if (args.folder) { const f = await folderFor(ctx, w.ws.id, undefined, args.folder); if ('error' in f) return toolError(f.error); folderId = f.id; }
       const added: any[] = [], failed: any[] = [];
       for (const u of urls) {
-        const got = await fetchLimited(u, { accept: 'image/*,video/*', maxBytes: 100 * 1024 * 1024, timeoutMs: 30000, fetchImpl: ctx.fetchImpl });
+        const got = await fetchLimited(u, { accept: 'image/*,video/*', maxBytes: MAX_IMPORT_BYTES, timeoutMs: 30000, fetchImpl: ctx.fetchImpl });
         if ('error' in got) { failed.push({ url: u, why: got.error }); continue; }
         let type = got.type;
         const ext0 = new URL(u).pathname.toLowerCase().match(/\.(png|jpe?g|webp|gif|svg|mp4|webm)$/)?.[1];
         if (!/^(image|video)\//.test(type) && ext0) type = ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', mp4: 'video/mp4', webm: 'video/webm' } as Record<string, string>)[ext0];
         if (!/image\/(png|jpeg|webp|gif|svg\+xml)|video\/(mp4|webm)/.test(type)) { failed.push({ url: u, why: `not an image or video (${got.type || 'unknown'})` }); continue; }
         const video = type.startsWith('video/');
-        if (!video && got.buf.length > 25 * 1024 * 1024) { failed.push({ url: u, why: 'over 25 MB' }); continue; }
+        if (!video && got.buf.length > MAX_IMAGE_BYTES) { failed.push({ url: u, why: 'over 50 MB' }); continue; }
         const ext = IMAGE_EXT[type] || (type === 'video/webm' ? 'webm' : 'mp4');
         const path = `${w.ws.id}/${crypto.randomUUID()}.${ext}`;
         await ctx.repo.upload(path, got.buf, type);

@@ -26,19 +26,21 @@ async function member(request: Request, wsFrom: (u: URL, body: any) => string, b
 async function progress(supabase: any, ws: string) {
   const base = () => supabase.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', ws).in('kind', ELIGIBLE).not('storage_path', 'is', null);
   const all = () => supabase.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', ws).neq('kind', 'block');
-  const [organised, waiting, failed, notYet, searchAll, searchWaiting] = await Promise.all([
+  const [organised, waiting, failed, notYet, searchAll, searchWaiting, paused] = await Promise.all([
     base().in('ai_status', ['done', 'skipped']),
     base().in('ai_status', ['pending', 'processing']),
     base().eq('ai_status', 'failed'),
     base().is('ai_status', null),
     all(),
     all().eq('embed_pending', true),
+    base().eq('ai_status', 'paused'),
   ]);
   const n = (r: any) => r.count || 0;
   return {
     enabled: canTag(),
     organised: n(organised), waiting: n(waiting), failed: n(failed), not_yet: n(notYet),
-    total: n(organised) + n(waiting) + n(failed) + n(notYet),
+    paused: n(paused),  // Free: past this month's organising pace, waiting for the 1st or an upgrade
+    total: n(organised) + n(waiting) + n(failed) + n(notYet) + n(paused),
     cost_per_file_gbp: COST_PER_FILE_GBP,
     search_enabled: hasVoyage(),
     searchable: n(searchAll) - n(searchWaiting), search_waiting: n(searchWaiting),

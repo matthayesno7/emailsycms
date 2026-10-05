@@ -67,7 +67,11 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
     try {
       const res = await fetch('/api/design', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, brief, ...body }) });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) return { error: json.error || 'Something went wrong.' };
+      if (!res.ok) {
+        // Out of Studio designs for the month: the app shows the plan banner.
+        if (json.code === 'limit') window.dispatchEvent(new CustomEvent('mise:limit', { detail: { workspace_id: ws.id, message: json.error, reason: json.reason } }));
+        return { error: json.error || 'Something went wrong.' };
+      }
       return { spec: json.spec };
     } catch { return { error: 'Couldn’t reach Mise.' }; }
   }

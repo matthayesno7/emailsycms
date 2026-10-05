@@ -133,6 +133,29 @@ Run `supabase/migrations/20261002210000_versions.sql`. Nothing else to set up.
 - AI edit has its place next to Edit, marked "soon" (brief step 7).
 - Logic test: `scripts/edit-selftest.ts` (same command as the other self-tests).
 
+## 10. Plans and billing (Stripe)
+
+Free or Pro, per brand. Files, storage and search are unlimited on every plan (fair-use ceilings in `lib/plans.ts` only stop runaway imports). Free organises 500 files a month: the rest upload and work as normal, wait as `paused`, and are organised from the 1st, or straight away when the brand upgrades. Single files can be up to 50 MB (images) or 1 GB (videos) on every plan; imports through the server (Drive, Dropbox, Box, Claude) stop at 100 MB. The one metered thing is **Studio designs**: Free gets 20 a month, Pro 200, then 50p each up to a monthly cap the brand's owner sets (default £50).
+
+- Free covers **one brand you own**. Making another brand opens checkout; Stripe's webhook creates it, on Pro.
+- Each Pro brand has its own Stripe customer and subscription (invoices, VAT number and extra designs stay separate).
+- Plans live in `workspace_billing`, which only the server writes, so owners can't change their own plan.
+
+Set up:
+1. Run the migration `20261005120000_billing_and_lifecycle.sql` (it's at the end of `supabase/run-pending.sql`).
+2. `STRIPE_SECRET_KEY=sk_test_… node scripts/stripe-setup.mjs` creates the meter, products, prices and portal settings, and prints the env lines.
+3. In Stripe → Developers → Webhooks, add `https://<app>/api/billing/webhook` with `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
+4. Add the env vars to Railway. For UK VAT, turn on Stripe Tax, add the VAT registration, then set `STRIPE_TAX=1`.
+5. Test with card 4242 4242 4242 4242. Settings → Plan shows the plan, this month's designs and the cap.
+
+Without the Stripe env vars, billing stays off and every brand is on Free.
+
+## 11. Assets that are no longer available
+
+An asset can be **archived** (retired by hand), **expired** (its licence or usage rights ran out) or **obsolete** (superseded, e.g. an old logo, pointing to its replacement). They stay in the library, greyed with a badge, under *No longer available*, and are kept out of Studio, share links, portals and Claude (`list_assets` hides them unless `include_unavailable`; `get_asset` returns `availability`, `reason` and `use_instead`). Expired files can't be downloaded.
+
+Set it in the asset's **Availability** panel, or ask Claude (`update_asset` with `availability`, `replaced_by`, `licence_expires_at`). Archive works on every plan; licence dates and replacements are on Pro. A licence date in the past counts as expired straight away; with pg_cron on, an hourly job (`expire_licences()`) also flips them in the database. Files whose licence ends within 30 days are flagged in the library.
+
 ## How the pieces fit
 
 ```

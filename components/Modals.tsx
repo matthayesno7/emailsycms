@@ -309,6 +309,9 @@ function DeleteBrand({ supabase, ws, toast, onDeleted }: { supabase: SupabaseCli
   }, [open, supabase, ws.id]);
 
   async function remove() {
+    // On Pro: stop the subscription first, so a deleted brand is never billed again.
+    const stop = await fetch(`/api/billing?workspace_id=${ws.id}`, { method: 'DELETE' }).catch(() => null);
+    if (stop && !stop.ok && stop.status !== 401) { toast((await stop.json().catch(() => null))?.error || 'Couldn’t stop this brand’s subscription, so it wasn’t deleted. Try again.'); return; }
     setBusy(true);
     // Files first (the database rows go with the brand): every file of every asset and version.
     const paths = new Set<string>();
@@ -333,7 +336,7 @@ function DeleteBrand({ supabase, ws, toast, onDeleted }: { supabase: SupabaseCli
       <h3>Delete this brand</h3>
       {!open ? (
         <>
-          <p className="tip">Removes {ws.name} for everyone: its assets and their versions, files, folders, collections, brand kit, portals, share links and team access. This can’t be undone.</p>
+          <p className="tip">Removes {ws.name} for everyone: its assets and their versions, files, folders, collections, brand kit, portals, share links and team access. If it’s on Pro, its subscription stops today. This can’t be undone.</p>
           <button className="btn danger-btn" type="button" onClick={() => setOpen(true)}>Delete {ws.name}…</button>
         </>
       ) : (

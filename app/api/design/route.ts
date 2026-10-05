@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { askClaude, hasClaude, jsonFrom, MODEL } from '@/lib/anthropic';
 import { limitMessage, takeUsage } from '@/lib/usage';
+import { isAvailable } from '@/lib/lifecycle';
 import { cleanSpec, DIRECTIONS, FORMATS, systemPrompt, userPrompt, type LibraryItem } from '@/lib/design';
 
 // Mise Studio: one design per call (the page asks for several in parallel, so they
@@ -29,14 +30,16 @@ export async function POST(request: Request) {
   const [{ data: workspace }, { data: kitRow }, { data: rows }] = await Promise.all([
     supabase.from('workspaces').select('id, name').eq('id', ws).maybeSingle(),
     supabase.from('brand_kits').select('kit').eq('workspace_id', ws).maybeSingle(),
-    supabase.from('assets').select('id, kind, name, width, height, pid, price, fields, storage_path, status')
+    supabase.from('assets').select('id, kind, name, width, height, pid, price, fields, storage_path, status, lifecycle, licence_expires_at')
       .eq('workspace_id', ws).in('kind', ['image', 'product', 'logo']).not('storage_path', 'is', null)
       .order('updated_at', { ascending: false }).limit(80),
   ]);
   if (!workspace) return Response.json({ error: 'Workspace not found.' }, { status: 404 });
-  if (!(await takeUsage(ws, 'design')).ok) return Response.json({ error: limitMessage('design'), code: 'limit' }, { status: 429 });
+  const t = await takeUsage(ws, 'design');
+  if (!t.ok) return Response.json({ error: limitMessage('design', t), code: 'limit', plan: t.plan, reason: t.reason }, { status: 429 });
 
-  const library: LibraryItem[] = (rows || []).filter((r: any) => r.status !== 'draft').map((r: any) => ({
+  // Drafts and anything no longer available (archived, licence expired, obsolete) stay out of new designs.
+  const library: LibraryItem[] = (rows || []).filter((r: any) => r.status !== 'draft' && isAvailable(r)).map((r: any) => ({
     id: r.id, kind: r.kind, name: r.name, alt: r.fields?.alt || r.fields?.description || undefined, w: r.width, h: r.height, pid: r.pid, price: r.price,
   }));
   const allowed = new Set(library.map((a) => a.id));

@@ -1233,3 +1233,35 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 /* Google's Drive picker: above Mise's own windows. (Mise's own image chooser is .img-picker; Google's uses .picker.) */
 .picker-dialog{z-index:1001 !important}
 .picker-dialog-bg{z-index:1000 !important}
+
+/* ---------- plan and billing ---------- */
+.plan-card{border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:14px;background:var(--bg)}
+.plan-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.plan-name{font-size:16px;color:var(--ink)}
+.plan-head .tip{margin:4px 0 0}
+.plan-usage .tip{margin:6px 0 0}
+.plan-upgrade{border:1px solid var(--accent-soft);background:var(--side);border-radius:12px;padding:16px 18px}
+.plan-upgrade h3{margin:0 0 8px;font-size:15px}
+.plan-upgrade ul,.paywall ul{margin:0 0 14px;padding-left:18px;color:var(--ink-body);font-size:14px;line-height:1.6}
+.plan-actions{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.row-inline{display:flex;align-items:center;gap:8px}
+.row-inline .prefix{color:var(--ink-2)}
+.in.short{width:110px}
+.paywall{display:flex;flex-direction:column;gap:10px;max-width:460px}
+.paywall h2{margin:0}
+.paywall p{margin:0;color:var(--ink-body)}
+.limit-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--draft-bg);color:var(--draft-ink);border-radius:10px;padding:10px 14px;font-size:14px;margin:0 0 14px}
+.limit-banner .acts{display:flex;gap:8px;flex-shrink:0}
+
+/* ---------- assets that are no longer available ---------- */
+.tile.unavail .thumb{opacity:.45;filter:grayscale(.85)}
+.tile.unavail::before{content:attr(data-life);position:absolute;z-index:3;top:8px;left:8px;font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--ink);color:var(--bg);pointer-events:none}
+.tile.unavail .meta .t{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--line-strong)}
+.tile.soon::before{content:attr(data-life);position:absolute;z-index:3;top:8px;left:8px;font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--draft-bg);color:var(--draft-ink);pointer-events:none}
+.life-box{border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.life-box.off{background:var(--surface)}
+.life-box .life-state{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.life-box .life-state b{font-weight:600}
+.life-box .tip{margin:0}
+.life-box .row-inline{flex-wrap:wrap}
+.pro-pill{font-size:11px;font-weight:600;letter-spacing:.02em;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:6px}

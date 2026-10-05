@@ -7,6 +7,7 @@ import { exportAs, type TeamPreset } from '@/lib/imageEdit';
 import type { BrandKit } from '@/lib/brandKit';
 import { Icon } from './icons';
 import AssetAbout from './AssetAbout';
+import AssetLifecycle from './AssetLifecycle';
 import AssetVersions from './AssetVersions';
 import ImageEditor, { type EditResult } from './ImageEditor';
 import DesignEditor from './DesignEditor';
@@ -24,7 +25,7 @@ const SIZES: [string, string, number | null][] = [['original', 'Original size', 
 // Opens at ?asset=<id>, so it has its own link and Back works.
 // Two ways to change it: Edit (hands-on, free, saves a new version; Studio designs reopen in the
 // Studio with their layout live) and AI edit (prompt-led, coming next).
-export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, design, onDesignSaved, onAddPreset }: {
+export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, design, onDesignSaved, onAddPreset, pro = false, replacements = [], onUpgrade }: {
   it: Asset;
   folders?: { id: string; name: string }[];
   onShare?: () => Promise<string | null>;
@@ -43,6 +44,9 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   design?: { wsId: string; brand: StudioBrand; fonts: string[]; srcOf: (id: string) => string | undefined; library: Asset[]; thumbOf: (a: Asset) => string | undefined };
   onDesignSaved?: (newId?: string) => void;
   onAddPreset?: (p: TeamPreset) => Promise<boolean>;
+  pro?: boolean;                                   // the brand's plan: licence dates and replacements are on Pro
+  replacements?: { id: string; name: string }[];   // what an obsolete file can point to
+  onUpgrade?: () => void;
   src: string | null;
   usedIn?: Asset[];
   onOpenBlock?: (b: Asset) => void;
@@ -287,6 +291,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
               <AssetAbout it={it} onPatch={onPatch} toast={toast} product={product} suggested={suggested} onOpenProduct={onOpenAsset}
                 onRetag={onRetag} duplicate={duplicate} onOpenDuplicate={onOpenAsset} onDelete={onDelete} />
             )}
+
+            <AssetLifecycle it={it} pro={pro} replacements={replacements} onPatch={onPatch} onOpenAsset={onOpenAsset} onUpgrade={onUpgrade} toast={toast} />
 
             {supabase && onRevert && <AssetVersions it={it} supabase={supabase} onRevert={onRevert} toast={toast} />}
 

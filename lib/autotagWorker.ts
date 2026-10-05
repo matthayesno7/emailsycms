@@ -30,6 +30,7 @@ export async function runQueue(opts: { ws?: string | null; budgetMs?: number } =
   const stop = Date.now() + (opts.budgetMs ?? 50_000);
   let done = 0, failed = 0;
   try {
+    await resumePaused(ctx.db);
     while (Date.now() < stop) {
       const { data, error } = await ctx.db.rpc('claim_ai_jobs', { n: CONCURRENCY * 2, ws: opts.ws || null });
       if (error) { console.error('[autotag] claim failed', error.message); break; }
@@ -92,7 +93,7 @@ async function imageUrl(ctx: Ctx, a: any): Promise<{ url?: string; error?: strin
   return data?.signedUrl ? { url: data.signedUrl } : { error: 'Couldn’t read the file.' };
 }
 
-async function tagOne(ctx: Ctx, a: any): Promise<'done' | 'failed' | 'limited'> {
+async function tagOne(ctx: Ctx, a: any): Promise<'done' | 'failed' | 'limited' | 'paused'> {
   try {
     const kit = await kitFor(ctx, a.workspace_id);
     const folder = await folderName(ctx, a.folder_id);
@@ -107,8 +108,10 @@ async function tagOne(ctx: Ctx, a: any): Promise<'done' | 'failed' | 'limited'> 
     }
     const src = await imageUrl(ctx, a);
     if (src.error) return fail(ctx, a, src.error, true);
-    // Monthly allowance: over it, the file waits as failed with a clear note (Retry works next month or once raised).
+    // Monthly allowance. On Free, files past the pace wait as 'paused' until the 1st or an upgrade
+    // (resumePaused puts them back in the queue). Otherwise it's the fair-use ceiling: failed, with a note.
     const take = await takeUsage(a.workspace_id, 'tag');
+    if (!take.ok && take.plan === 'free') { await pause(ctx, a); return 'paused'; }
     if (!take.ok) return fail(ctx, a, limitMessage('tag'), true);
     const products = a.kind === 'product' ? [] : shortlist(await productsFor(ctx, a.workspace_id), a.name, folder);
     const input = { name: a.name, kind: a.kind, folder, kit, products };
@@ -139,6 +142,20 @@ async function tagOne(ctx: Ctx, a: any): Promise<'done' | 'failed' | 'limited'> 
 }
 
 // Try again on the next run, up to three times; some errors aren't worth retrying.
+async function pause(ctx: Ctx, a: any) {
+  await ctx.db.from('assets').update({ ai_status: 'paused', ai_attempts: Math.max(0, (a.ai_attempts || 1) - 1), ai_error: null }).eq('id', a.id);
+}
+
+// Paused files go back in the queue on the 1st of the month (and straight away when a brand
+// upgrades, from the billing webhook). Checked at most every 10 minutes per process.
+let lastResume = 0;
+async function resumePaused(db: SupabaseClient) {
+  if (Date.now() - lastResume < 10 * 60e3) return;
+  lastResume = Date.now();
+  const { error } = await db.rpc('resume_paused_tags', { ws: null });
+  if (error) console.error('[autotag] resume', error.message);
+}
+
 async function fail(ctx: Ctx, a: any, message: string, final = false): Promise<'failed'> {
   const last = final || (a.ai_attempts || 0) >= MAX_ATTEMPTS;
   await ctx.db.from('assets').update({ ai_status: last ? 'failed' : 'pending', ai_error: message.slice(0, 300) }).eq('id', a.id);

@@ -33,6 +33,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
         <h1>{share.title}</h1>
         {share.message && <p>{share.message}</p>}
         <p className="pub-meta">{assets.length} file{assets.length === 1 ? '' : 's'} from {brand.name}{expires ? ` · available until ${expires}` : ''}</p>
+        {assets.gone > 0 && <p className="pub-meta">{assets.gone} file{assets.gone === 1 ? ' in this link is' : 's in this link are'} no longer available. Ask {brand.name} for {assets.gone === 1 ? 'its replacement' : 'their replacements'}.</p>}
       </section>
       <Gallery assets={assets.map((a) => ({ ...publicView(a, thumbs[a.id]), tags: a.tags || [] }))} shareRef={{ s: token }} allowDownload={share.allow_download} formats={share.formats} searchable={assets.length > 6} />
     </>,

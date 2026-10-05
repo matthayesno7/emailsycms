@@ -1,4 +1,5 @@
 // Server side: copies a file from a cloud drive into a workspace's library.
+import { MAX_IMAGE_BYTES } from './plans';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { imageSize } from './imageSize';
 import { IMAGE_EXT } from './net';
@@ -27,6 +28,7 @@ export async function importFile(db: SupabaseClient, o: {
   const { data: prior } = await db.from('assets').select('id').eq('workspace_id', o.ws).contains('provenance', { source: o.source, external_id: o.externalId }).limit(1);
   if (prior?.[0]) return { id: prior[0].id, skipped: true };
   const video = type.startsWith('video/');
+  if (!video && o.buf.length > MAX_IMAGE_BYTES) return { error: 'Over 50 MB (the most Mise takes for an image)' };
   const ext = IMAGE_EXT[type] || VIDEO_EXT[type] || 'bin';
   const storagePath = `${o.ws}/${crypto.randomUUID()}.${ext}`;
   const up = await db.storage.from('assets').upload(storagePath, o.buf, { contentType: type });

@@ -50,6 +50,7 @@ export default function AssetAbout({ it, onPatch, toast, product, suggested, onO
           {status === 'pending' || status === 'processing' ? 'Organising…'
             : status === 'failed' ? <>Couldn’t organise{it.ai_error ? `: ${it.ai_error}` : ''}{onRetag && <> · <button type="button" className="linkish" onClick={onRetag}>Try again</button></>}</>
             : status === 'done' ? <>Organised by AI{onRetag && <> · <button type="button" className="linkish" onClick={onRetag} title="Your edits are kept">Redo</button></>}</>
+            : status === 'paused' ? 'Waiting: Free organises 500 files a month'
             : status === 'skipped' ? 'Tagged from its name'
             : isVisual && onRetag ? <button type="button" className="linkish" onClick={onRetag}>Organise with AI</button> : null}
         </span>
