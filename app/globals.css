@@ -1224,3 +1224,9 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
   .rv-row{flex-wrap:wrap}
   .rv-acts{width:100%;justify-content:flex-end}
 }
+
+/* copy for Figma: the hover action on tiles (Figma's desktop app doesn't take images dragged from Chrome) */
+.copyfig{position:absolute;right:8px;bottom:8px;display:flex;align-items:center;gap:5px;border:0;border-radius:999px;background:var(--ink);color:#fff;font:500 12px var(--font);padding:5px 10px;opacity:0;transition:opacity .15s;cursor:pointer;z-index:2}
+.tile:hover .copyfig,.tile:focus-within .copyfig,.copyfig:focus-visible{opacity:.94}
+.copyfig:hover{opacity:1;background:var(--accent)}
+.thumb .flags{right:auto;left:8px}

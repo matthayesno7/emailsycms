@@ -414,6 +414,13 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return items.filter((it) => keep(it) && (!s || matchesQuery(it, s, hay.get(it.id))));
   }, [items, inView, q, origin, showOrigins, hay, hits, curKey, byId, chips.length]);
 
+  async function copyTile(it: Asset) {
+    const u = emailSrcOf(it);
+    if (!u) return;
+    try { await copyImageFrom(u); toast('Copied. Press ⌘V in Figma (or select a layer and ⌘⇧R to replace its image).'); }
+    catch { toast('Your browser blocked copying. Open the image and use Download instead.'); }
+  }
+
   // ---------- writes ----------
   async function patchAsset(id: string, patch: Record<string, any>) {
     setItems((list) => list.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -1027,7 +1034,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     <div className="src-h kitfiles">From your brand kit</div>
                     <div className="grid masonry">
                       {visible.map((it) => (
-                        <div key={it.id} className="selwrap"><Tile it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => openEditor(it.id)} /></div>
+                        <div key={it.id} className="selwrap"><Tile it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => openEditor(it.id)} onCopy={() => copyTile(it)} /></div>
                       ))}
                     </div>
                   </>
@@ -1051,7 +1058,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   {visible.map((it) => (
                     <div key={it.id} className={'selwrap' + (selected.includes(it.id) ? ' sel' : '') + (selected.length ? ' selecting' : '')}>
                       {it.kind !== 'block' && <button type="button" className="selbox" aria-label={selected.includes(it.id) ? `Deselect ${it.name}` : `Select ${it.name}`} aria-pressed={selected.includes(it.id)} onClick={(e) => { e.stopPropagation(); toggleSel(it.id); }}><Icon.Check size={13} /></button>}
-                      <Tile it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onOpen={() => (selected.length && it.kind !== 'block' ? toggleSel(it.id) : it.kind === 'block' ? showBlock(blockDraft(it)) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />
+                      <Tile it={it} src={emailSrcOf(it)} urls={urls} used={(usedIn[it.id] || []).length} onCopy={() => copyTile(it)} onOpen={() => (selected.length && it.kind !== 'block' ? toggleSel(it.id) : it.kind === 'block' ? showBlock(blockDraft(it)) : it.kind === 'product' ? openProduct(it) : openEditor(it.id))} />
                     </div>
                   ))}
                 </div>
@@ -1227,7 +1234,31 @@ function productDraft(p: Asset) {
   return { ...pb, id: p.id, kind: 'product', workspace_id: p.workspace_id, name: p.name, product_id: p.id };
 }
 
-function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | null; urls: Record<string, string>; used?: number; onOpen: () => void }) {
+// Copy a picture to the clipboard as a PNG: the way into Figma's desktop app, which doesn't take
+// images dragged from Chrome. The PNG is made while the clipboard waits, so the click still counts.
+export async function copyImageFrom(url: string) {
+  const png = (async () => {
+    const blob = await (await fetch(url)).blob();
+    if (blob.type === 'image/png') return blob;
+    const bmp = await createImageBitmap(blob);
+    const cv = document.createElement('canvas');
+    cv.width = bmp.width; cv.height = bmp.height;
+    cv.getContext('2d')!.drawImage(bmp, 0, 0);
+    return await new Promise<Blob>((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('export failed'))), 'image/png'));
+  })();
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+}
+
+function CopyBtn({ onCopy }: { onCopy?: () => void }) {
+  if (!onCopy) return null;
+  return (
+    <button type="button" className="copyfig" title="Copy, then press ⌘V in Figma" onClick={(e) => { e.stopPropagation(); onCopy(); }} onKeyDown={(e) => e.stopPropagation()}>
+      <Icon.Copy size={13} />Copy for Figma
+    </button>
+  );
+}
+
+function Tile({ it, src, urls, used = 0, onOpen, onCopy }: { it: Asset; src: string | null; urls: Record<string, string>; used?: number; onOpen: () => void; onCopy?: () => void }) {
   const usedLabel = used ? `In ${used} block${used > 1 ? 's' : ''}` : '';
   const onKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } };
   if (it.kind === 'block') {
@@ -1245,10 +1276,11 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
   // Products show as their photo, like the portal; the email card lives in the product editor.
   if (it.kind === 'product') {
     return (
-      <div className="tile" role="button" tabIndex={0} title="Click to open · drag the image into Figma" onClick={onOpen} onKeyDown={onKey}>
+      <div className="tile" role="button" tabIndex={0} title="Click to open" onClick={onOpen} onKeyDown={onKey}>
         <div className="thumb product photo">
           {src ? <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.pid || it.name} data-id={it.id} data-png={it.mime === 'image/png' ? '1' : '0'} />
             : <div className="noimg"><code>{it.pid}</code>Drop {it.pid}.jpg to add its image</div>}
+          {src && <CopyBtn onCopy={onCopy} />}
         </div>
         <div className="meta"><span className="t">{it.name}</span><span className="s">{it.price || ''}</span></div>
       </div>
@@ -1269,14 +1301,14 @@ function Tile({ it, src, urls, used = 0, onOpen }: { it: Asset; src: string | nu
   }
   const right = usedLabel || (it.width ? `${it.width}×${it.height}` : '');
   return (
-    <div className="tile" role="button" tabIndex={0} title="Click to open · drag into Figma" onClick={onOpen} onKeyDown={onKey}>
+    <div className="tile" role="button" tabIndex={0} title="Click to open" onClick={onOpen} onKeyDown={onKey}>
       <div className={'thumb ' + it.kind} style={it.kind === 'image' && it.width && it.height ? { aspectRatio: `${Math.max(0.5, Math.min(6, it.width / it.height))}` } : undefined}>
         {src ? (
           <img src={src} alt={it.name} loading="lazy" draggable data-drag={it.name} data-id={it.id} data-png={it.mime === 'image/png' ? '1' : '0'} />
         ) : it.storage_path ? null : (
           <div className="noimg"><code>{it.pid}</code>Drop {it.pid}.jpg to add its image</div>
         )}
-        {src && <span className="drag">Drag to Figma</span>}
+        {src && !/svg/.test(it.mime || '') && <CopyBtn onCopy={onCopy} />}
         {it.status === 'draft' && <span className="tag draft">To review</span>}
         {(it.duplicate_of && !it.duplicate_ok) || it.on_brand === false ? (
           <span className="flags">

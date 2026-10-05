@@ -266,7 +266,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                   {picking && <i className="ed-focus" style={{ left: `${focus.x * 100}%`, top: `${focus.y * 100}%` }} />}
                 </div>
               )}
-              {src && !isVideo && <span className="hint">Drag into Figma, or copy and press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>R</kbd> on a selected layer to replace its image</span>}
+              {src && !isVideo && <span className="hint">Copy image, then <kbd>⌘</kbd> <kbd>V</kbd> in Figma, or <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>R</kbd> on a selected layer to replace its image</span>}
             </div>
           </section>
 
