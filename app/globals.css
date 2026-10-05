@@ -1,25 +1,25 @@
 
 :root{
-  /* Mise design system, warmed to match misedam.com: cream paper, dark-brown ink, Mise orange. Light only. */
+  /* Mise design system, matched to misedam.com: white working area, cream sidebar, dark-brown ink, Mise orange. Light only. */
   color-scheme:light;
-  --paper:#fdf8f1;                 /* paper: page ground (a touch lighter than the site's #fff8ee, so photos stay true) */
+  --paper:#ffffff;                 /* page ground: white, so photos and brand colours read true */
   --bg:#ffffff;                    /* surface: cards, inputs, menus, modals */
-  --side:#fdf8f1;                  /* sidebar sits on paper */
-  --hover:#f6ede1;                 /* surface-muted */
-  --surface:#f6ede1;               /* surface-muted: panels, chips */
-  --surface-2:#f1e4d2;             /* surface-sunken: skeletons, empty slots */
+  --side:#fdf8f1;                  /* sidebar: a hint of the site's cream */
+  --hover:#f7f3ed;                 /* surface-muted */
+  --surface:#f7f4ef;               /* surface-muted: panels, chips */
+  --surface-2:#f0ebe3;             /* surface-sunken: skeletons, empty slots */
   --ink:#2a1a14;                   /* ink */
   --ink-body:#4a3a30;              /* ink-2: body copy under a heading */
   --ink-2:#6e5a4e;                 /* muted: captions, metadata */
   --ink-3:#7a665a;                 /* quieter metadata (5:1 on paper) */
   --faint:#a8968a;                 /* decorative only */
-  --line:#eadfd0; --line-soft:#f2e9dd; --line-strong:#d8c2a8;
+  --line:#ece5da; --line-soft:#f3eee7; --line-strong:#d8cbb9;
   --accent:#c4501e; --accent-hover:#a8431a; --accent-ink:#ffffff; --accent-soft:#fbe9df;
   --success:#1f6b3a; --danger:#b42318; --draft-bg:#fff1d0; --draft-ink:#6b4a00;
   --scrim:rgba(42,26,20,.3);
   --shadow:0 24px 60px -24px rgba(42,26,20,.25);      /* shadow-float */
   --shadow-card:0 24px 50px -30px rgba(42,26,20,.3);  /* shadow-card */
-  --check:#efe6da; --check-2:#faf5ee;
+  --check:#eeeae4; --check-2:#f9f7f3;
   --font:"Geist","Helvetica Neue",Helvetica,sans-serif;
   --display:"Hanken Grotesk","Helvetica Neue",Arial,sans-serif;
   --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
