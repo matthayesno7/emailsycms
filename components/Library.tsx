@@ -237,7 +237,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     else showBlock(blockDraft(it), true);
   }, [items, ready, tick, showBlock]);
 
-  // Private bucket: sign every image path we need to show (valid for an hour).
+  // Private bucket: sign every image path we need to show. Links last 6 hours and are all renewed
+  // after 5, so a tab left open still hands Figma a working link when an image is dragged or copied.
+  const SIGN_TTL = 6 * 3600, RENEW_MS = 5 * 3600e3;
+  const signedAt = useRef(0);
   useEffect(() => {
     const paths = new Set<string>();
     for (const a of items) {
@@ -246,7 +249,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     }
     const missing = [...paths].filter((p) => !urls[p]);
     if (!missing.length) return;
-    supabase.storage.from('assets').createSignedUrls(missing, 3600).then(({ data }) => {
+    if (!signedAt.current) signedAt.current = Date.now();
+    supabase.storage.from('assets').createSignedUrls(missing, SIGN_TTL).then(({ data }) => {
       if (!data) return;
       setUrls((u) => {
         const next = { ...u };
@@ -254,7 +258,28 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         return next;
       });
     });
-  }, [items, urls, supabase]);
+  }, [items, urls, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+  const renewing = useRef(false);
+  useEffect(() => {
+    const renew = async () => {
+      if (renewing.current || !signedAt.current || Date.now() - signedAt.current < RENEW_MS) return;
+      renewing.current = true;
+      const paths = Object.keys(urls);
+      const next: Record<string, string> = {};
+      for (let i = 0; i < paths.length; i += 1000) {
+        const { data } = await supabase.storage.from('assets').createSignedUrls(paths.slice(i, i + 1000), SIGN_TTL);
+        for (const d of data || []) if (d.signedUrl && d.path) next[d.path] = d.signedUrl;
+      }
+      signedAt.current = Date.now();
+      setUrls((u) => ({ ...u, ...next }));
+      renewing.current = false;
+    };
+    const t = setInterval(renew, 5 * 60e3);
+    // A laptop waking up (timers pause while it sleeps): check straight away.
+    const wake = () => { if (!document.hidden) renew(); };
+    document.addEventListener('visibilitychange', wake); window.addEventListener('focus', wake);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', wake); window.removeEventListener('focus', wake); };
+  }, [urls, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fingerprint files that don't have one yet (added from a cloud drive, a feed, Claude, or before
   // duplicate checks existed), a few at a time while the library is open.
