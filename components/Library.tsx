@@ -112,6 +112,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     setWorkspaces(list);
     let saved = '';
     try { saved = localStorage.getItem('emailsy.ws') || ''; } catch {}
+    // A link to a brand (?brand=<id>, from Claude) picks it.
+    try {
+      const u = new URL(location.href);
+      const b = u.searchParams.get('brand');
+      if (b) { u.searchParams.delete('brand'); history.replaceState({}, '', u); if (list.some((w: Ws) => w.id === b)) saved = b; }
+    } catch {}
     const pick = select || (list.some((w: Ws) => w.id === saved) ? saved : list[0]?.id) || '';
     setWs((cur) => (select ? select : cur && list.some((w: Ws) => w.id === cur) ? cur : pick));
   }, [supabase, userId]);
@@ -329,7 +335,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   useEffect(() => {
     if (landed.current || !ready) return;
     landed.current = true;
-    if (toReview > 0 && !new URL(location.href).searchParams.toString()) setPage((p) => (p === 'library' ? 'review' : p));
+    const u = new URL(location.href);
+    if (u.searchParams.has('review')) { u.searchParams.delete('review'); history.replaceState({}, '', u); setPage('review'); return; }
+    if (toReview > 0 && !u.searchParams.toString()) setPage((p) => (p === 'library' ? 'review' : p));
   }, [ready, toReview]);
   // ---------- AI search ----------
   // Typing: reset to the plain words. 3+ words: also ask Claude to read the query into filters.

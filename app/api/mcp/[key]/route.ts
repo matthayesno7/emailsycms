@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { hashKey } from '@/lib/keys';
 import { handleBody } from '@/lib/mcp/server';
 import { supabaseRepo } from '@/lib/mcp/repo';
+import { publicOrigin } from '@/lib/origin';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -25,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ key
     return Response.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, { status: 400 });
   }
   await db.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', apiKey.id);
-  const result = await handleBody(body, { repo: supabaseRepo(db), userId: apiKey.user_id });
+  const result = await handleBody(body, { repo: supabaseRepo(db), userId: apiKey.user_id, db, appUrl: publicOrigin(request) });
   if (!result) return new Response(null, { status: 202 });
   return Response.json(result, { headers: { 'Cache-Control': 'no-store' } });
 }

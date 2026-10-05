@@ -7,6 +7,7 @@ import { fetchLimited, IMAGE_EXT } from '../net';
 import { imageSize } from '../imageSize';
 import { PROMPTS, fillPrompt, USE_LABEL } from '../prompts';
 import { IMAGE_TABS, tabOf } from '../formats';
+import { MORE_INSTRUCTIONS, MORE_TOOLS, callMoreTool, collectionMembers } from './more';
 
 export type Workspace = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 export type AssetRow = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -30,7 +31,8 @@ export interface Repo {
   saveBrandKit(row: Record<string, any>): Promise<Record<string, any>>;
 }
 
-export type Ctx = { repo: Repo; userId: string; fetchImpl?: typeof fetch };
+// db and appUrl: the service-role client and the app's address, for the working tools in more.ts.
+export type Ctx = { repo: Repo; userId: string; fetchImpl?: typeof fetch; db?: any; appUrl?: string };
 
 export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
@@ -91,7 +93,9 @@ The goal is an editable copy of that design, not the flat image with new copy ne
 3. In Figma, build ONE component that recreates the layout with auto layout, sized to the design's width in CSS px (image width / 2). Photo regions become rectangles; text becomes live text layers with component text properties; star ratings and simple icons become vectors or characters; solid backgrounds become fills. Use the design system's text styles and colours when they match closely; otherwise match the design's own values.
 4. Photos: call Figma's upload_assets with count 1 and push_image_to_figma for this block with original: false. That uploads the whole design image once. Apply its imageHash to each photo rectangle as an IMAGE fill with scaleMode "CROP" and imageTransform [[w/W, 0, x/W], [0, h/H, y/H]], where (x, y, w, h) is the photo box and (W, H) is the full image size from view_image. Delete the frame upload_assets created once the fills are in place.
 5. Compare your build with get_screenshot against the design and fix differences in layout, text, sizes and colours. Then call record_figma_placement.
-If the text is too small to read, say so and ask the user for the copy rather than guessing.`;
+If the text is too small to read, say so and ask the user for the copy rather than guessing.
+
+${MORE_INSTRUCTIONS}`;
 
 function text(data: unknown) {
   return { content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] };
@@ -118,6 +122,9 @@ const TOOLS = [
         status: { type: 'string', enum: ['approved', 'draft'], description: 'Generated assets start as drafts until a person approves them.' },
         format: { type: 'string', enum: ['photo', ...IMAGE_TABS.map((t) => t.id)], description: 'Images by what they are for, worked out from their size: photo, email-banner, linkedin-banner, linkedin-post, social-post, story, thumb, display.' },
         query: { type: 'string', description: 'Plain words, searched by meaning: "woman outdoors with a blue bag", "summer lifestyle", "logo on dark background". Best matches first.' },
+        since: { type: 'string', description: 'Only files added on or after this date or time (ISO), e.g. for "what’s new since Monday".' },
+        folder_id: { type: 'string', description: 'Only files in this folder (list_folders).' },
+        collection_id: { type: 'string', description: 'Only files in this smart collection (list_folders).' },
         limit: { type: 'number', minimum: 1, maximum: 200, default: 50 },
       },
       additionalProperties: false,
@@ -242,7 +249,7 @@ function figmaFile(w?: Workspace) {
   return w?.figma_file_key ? { file_key: w.figma_file_key, url: w.figma_file_url, name: w.figma_file_name || null } : null;
 }
 
-function publicAsset(a: AssetRow, ws?: Workspace) {
+export function publicAsset(a: AssetRow, ws?: Workspace) {
   const wsName = ws?.name;
   const out: Record<string, any> = {
     id: a.id,
@@ -350,10 +357,19 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const limit = Math.min(Math.max(Number(args.limit) || (name === 'search_products' ? 20 : 50), 1), 200);
       if (args.origin && !['uploaded', 'product_feed', 'generated'].includes(args.origin)) return toolError('origin must be uploaded, product_feed or generated.');
       if (args.status && !['approved', 'draft'].includes(args.status)) return toolError('status must be approved or draft.');
-      const opts = { kind: args.format ? 'image' : kind, origin: args.origin, status: args.status, limit: args.format ? 1000 : limit };
+      const narrow = !!(args.format || args.since || args.folder_id || args.collection_id);
+      const opts = { kind: args.format ? 'image' : kind, origin: args.origin, status: args.status, limit: narrow ? 1000 : limit };
       let rows = (args.query && ctx.repo.search ? await ctx.repo.search(ids, String(args.query), opts).catch(() => null) : null)
         ?? await ctx.repo.listAssets(ids, { ...opts, query: args.query ? String(args.query) : undefined });
-      if (args.format) rows = rows.filter((a) => tabOf(a) === args.format).slice(0, limit);
+      if (args.format) rows = rows.filter((a) => tabOf(a) === args.format);
+      if (args.since) { const t = Date.parse(String(args.since)); if (isNaN(t)) return toolError('since must be a date, e.g. 2026-10-05.'); rows = rows.filter((a) => Date.parse(a.created_at) >= t); }
+      if (args.folder_id) rows = rows.filter((a) => a.folder_id === args.folder_id);
+      if (args.collection_id) {
+        const m = ctx.db ? await collectionMembers(ctx, String(args.collection_id), ids) : { error: 'Smart collections aren’t available here.' };
+        if (!(m instanceof Set)) return toolError(m.error);
+        rows = rows.filter((a) => m.has(a.id));
+      }
+      if (narrow) rows = rows.slice(0, limit);
       const byId = Object.fromEntries(ws.map((w) => [w.id, w]));
       return text(rows.map((a) => publicAsset(a, byId[a.workspace_id])));
     }
@@ -613,7 +629,7 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       return text({ ok: true, asset: publicAsset(row, w.ws), next: 'Saved as a draft in Mise. A person approves it there before it counts as approved.' });
     }
     default:
-      return null;
+      return callMoreTool(name, args, ctx);
   }
 }
 
@@ -645,14 +661,14 @@ export async function handleMessage(msg: RpcMessage, ctx: Ctx): Promise<object |
         return reply({
           protocolVersion: SUPPORTED_VERSIONS.includes(asked) ? asked : SUPPORTED_VERSIONS[0],
           capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
-          serverInfo: { name: 'emailsy-cms', title: 'Mise', version: '0.2.0' },
+          serverInfo: { name: 'emailsy-cms', title: 'Mise', version: '0.3.0' },
           instructions: INSTRUCTIONS,
         });
       }
       case 'ping':
         return reply({});
       case 'tools/list':
-        return reply({ tools: TOOLS });
+        return reply({ tools: [...TOOLS, ...MORE_TOOLS] });
       case 'tools/call': {
         const name = msg.params?.name;
         const result = await callTool(name, msg.params?.arguments || {}, ctx);
