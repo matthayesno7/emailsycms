@@ -19,6 +19,10 @@ export const PRICE = {
   overage: 50,         // 50p per Studio design over the allowance
 };
 
+// Free trial on Pro, card up front. One per brand: a brand that has had a subscription before doesn't get another.
+export const TRIAL_DAYS = 7;
+export const trialDaysFor = (row: { subscription_status?: string | null } | null | undefined) => (row?.subscription_status ? 0 : TRIAL_DAYS);
+
 export const gbp = (pence: number) => `£${(pence / 100).toLocaleString('en-GB', { minimumFractionDigits: pence % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
 // Safety ceilings for the "unlimited" things, per brand per month. Generous enough that

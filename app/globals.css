@@ -1265,3 +1265,24 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .life-box .tip{margin:0}
 .life-box .row-inline{flex-wrap:wrap}
 .pro-pill{font-size:11px;font-weight:600;letter-spacing:.02em;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:6px}
+
+/* ---------- the upgrade pop-up ---------- */
+.upsell{display:flex;flex-direction:column;gap:12px}
+.upsell-brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;color:var(--ink)}
+.upsell-brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.upsell-brand .muted{font-weight:400;color:var(--ink-3)}
+.modal .upsell h2{margin:4px 0 0;font-size:22px}
+.upsell-lede{margin:0;color:var(--ink-body);line-height:1.55;font-size:15px}
+.upsell-card{border:1px solid var(--line-strong);background:var(--side);border-radius:14px;padding:16px 18px;margin-top:4px}
+.upsell-price{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px}
+.upsell-price b{font-family:var(--display);font-size:34px;line-height:1;color:var(--ink)}
+.upsell-price span{color:var(--ink-2)}
+.upsell-price .trial-pill{align-self:center;font-family:var(--mono);font-size:12px;background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:3px 8px}
+.upsell-sub{margin:8px 0 12px;font-size:13.5px;color:var(--ink-2)}
+.modal .upsell-list{list-style:none;margin:0;padding:12px 0 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.upsell-list li{position:relative;padding-left:24px;color:var(--ink);font-size:14.5px;line-height:1.4}
+.upsell-list li::before{content:"";position:absolute;left:2px;top:4px;width:10px;height:5px;border-left:2px solid var(--accent);border-bottom:2px solid var(--accent);transform:rotate(-45deg)}
+.upsell .primary.wide,.upsell .btn.wide{width:100%;min-height:46px}
+.upsell-fine{margin:-2px 0 0;font-size:12.5px;color:var(--ink-3);text-align:center;line-height:1.45}
+.upsell-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);background:var(--side);border-radius:12px;padding:10px 14px;margin:0 0 16px;font-size:14px;color:var(--ink-body)}
+.upsell-strip b{color:var(--ink)}

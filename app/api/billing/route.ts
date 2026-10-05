@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { whoFor } from '@/lib/billingAuth';
 import { billingRow, cancelNow, toBilling } from '@/lib/billing';
-import { designAllowance, overageDesigns, PRICE } from '@/lib/plans';
+import { designAllowance, overageDesigns, PRICE, TRIAL_DAYS, trialDaysFor } from '@/lib/plans';
 import { hasStripe } from '@/lib/stripe';
 
 // A brand's plan and this month's Studio designs.
@@ -27,6 +27,8 @@ export async function GET(request: Request) {
     billing,
     role: who.role,
     stripe: hasStripe(),
+    trial_days: trialDaysFor(row),          // upgrading this brand
+    trial_days_new_brand: TRIAL_DAYS,       // a new brand bought from here
     designs: {
       used, allowance, extra,
       extra_pence: extra * PRICE.overage,

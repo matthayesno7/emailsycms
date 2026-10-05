@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import { openUpgrade } from './Billing';
 
 type P = { search_enabled?: boolean; searchable?: number; search_waiting?: number; enabled: boolean; organised: number; waiting: number; failed: number; not_yet: number; paused?: number; total: number; cost_per_file_gbp: number; errors?: { id: string; name: string; ai_error: string }[] };
 
@@ -7,7 +8,7 @@ const nextMonth = () => { const d = new Date(); return new Date(d.getFullYear(),
 const gbp = (n: number) => (n < 1 ? `${Math.max(1, Math.round(n * 100))}p` : `£${n < 10 ? n.toFixed(2) : Math.round(n)}`);
 
 // Settings → Auto-organise: what's been organised, and the backfill for older files.
-export default function AutoOrganise({ ws, toast, onUpgrade }: { ws: string; toast: (m: string) => void; onUpgrade?: () => void }) {
+export default function AutoOrganise({ ws, toast, canUpgrade }: { ws: string; toast: (m: string) => void; canUpgrade?: boolean }) {
   const [p, setP] = useState<P | null>(null);
   const [busy, setBusy] = useState(false);
   const [usage, setUsage] = useState<{ kind: string; label: string; used: number; cap: number }[] | null>(null);
@@ -65,7 +66,7 @@ export default function AutoOrganise({ ws, toast, onUpgrade }: { ws: string; toa
       {!!p.paused && (
         <div className="limit-banner">
           <span>Free organises 500 files a month. Your other {p.paused.toLocaleString()} file{p.paused === 1 ? ' is' : 's are'} uploaded and ready to use, and will be organised from {nextMonth()}.</span>
-          {onUpgrade && <span className="acts"><button className="btn" type="button" onClick={onUpgrade}>Organise them now with Pro</button></span>}
+          {canUpgrade && <span className="acts"><button className="btn" type="button" onClick={() => openUpgrade({ reason: 'organise', count: p.paused })}>Organise them now with Pro</button></span>}
         </div>
       )}
       {p.not_yet > 0 && <p className="tip">About {gbp(p.not_yet * p.cost_per_file_gbp)} in Claude usage for {p.not_yet.toLocaleString()} files (roughly {gbp(1000 * p.cost_per_file_gbp)} per 1,000). It runs in the background at a steady pace.</p>}

@@ -27,7 +27,7 @@ import Sharing from './Sharing';
 import ShareDialog, { type ShareTarget } from './ShareDialog';
 import Review from './Review';
 import { reviewQueue } from '@/lib/review';
-import { PlanSettings, NewBrandPaywall } from './Billing';
+import { PlanSettings, UpgradeModal, openUpgrade, type UpgradeAsk } from './Billing';
 import { effectivePlan, mb, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, tooBig, type Plan } from '@/lib/plans';
 import { expiresSoon, isAvailable, lifecycleOf, LIFECYCLE } from '@/lib/lifecycle';
 
@@ -101,9 +101,16 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     supabase.from('workspace_billing').select('plan, subscription_status').eq('workspace_id', ws).maybeSingle().then(({ data }) => setPlan(effectivePlan(data)));
   }, [ws, page]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const on = (e: Event) => setLimitHit((e as CustomEvent).detail?.message || 'This brand has used its Studio designs for this month.');
+    const on = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      setLimitHit({ message: d.message || 'This brand has used its Studio designs for this month.', reason: d.reason });
+      // Free and out of designs: the upgrade pop-up, once per visit.
+      if (d.reason === 'allowance' && !shownDesignsUpsell.current) { shownDesignsUpsell.current = true; setUpgrade({ reason: 'designs' }); setModal('upgrade'); }
+    };
+    const up = (e: Event) => { setUpgrade((e as CustomEvent).detail || { reason: 'general' }); setModal('upgrade'); };
     window.addEventListener('mise:limit', on);
-    return () => window.removeEventListener('mise:limit', on);
+    window.addEventListener('mise:upgrade', up);
+    return () => { window.removeEventListener('mise:limit', on); window.removeEventListener('mise:upgrade', up); };
   }, []);
 
   // Coming back from connecting Box: open the import window on the Box browser.
@@ -117,9 +124,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     else setTimeout(() => toast(r === 'cancelled' ? 'Box wasn’t connected.' : 'Couldn’t connect Box. Try again.'), 300);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [settingsTab, setSettingsTab] = useState<'workspace' | 'plan' | 'organise' | 'members' | 'claude' | 'help'>('workspace');
-  const [paywall, setPaywall] = useState<string | null>(null);   // a new brand's name, when Free already covers one
-  const [limitHit, setLimitHit] = useState<string | null>(null);  // out of Studio designs this month
+  const [upgrade, setUpgrade] = useState<UpgradeAsk | null>(null);  // the upgrade pop-up, and why it opened
+  const [limitHit, setLimitHit] = useState<{ message: string; reason?: string } | null>(null);  // out of Studio designs this month
   const [plan, setPlan] = useState<Plan>('free');
+  const shownDesignsUpsell = useRef(false);
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
   const [wsOpen, setWsOpen] = useState(false);
@@ -426,6 +434,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const folderCounts = useMemo(() => { const m: Record<string, number> = {}; for (const i of items) if (i.folder_id) m[i.folder_id] = (m[i.folder_id] || 0) + 1; return m; }, [items]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
   const unavailable = useMemo(() => items.filter((i) => !isAvailable(i)).length, [items]);
+  const pausedCount = useMemo(() => items.filter((i) => i.ai_status === 'paused').length, [items]);
   // Review: what Mise did on its own that needs a person. It's the home whenever something's waiting.
   const toReview = useMemo(() => reviewQueue(items, kitRow).count, [items, kitRow]);
   const landed = useRef(false);
@@ -742,7 +751,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   async function createWorkspace(name: string, quiet = false) {
     const { data, error } = await supabase.rpc('create_workspace', { ws_name: name });
     // Free covers one brand you own; the next one starts on Pro, through checkout.
-    if (error && /FREE_BRAND_LIMIT/.test(error.message)) { setPaywall(name); setModal('paywall'); return null; }
+    if (error && /FREE_BRAND_LIMIT/.test(error.message)) { setUpgrade({ reason: 'brand', brand: name }); setModal('upgrade'); return null; }
     if (error || !data) { toast('Couldn’t create the workspace.'); return null; }
     await loadWorkspaces((data as any).id);
     setView('all'); setPage('library');
@@ -988,9 +997,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         <div className="content">
           {limitHit && (
             <div className="limit-banner" role="status">
-              <span>{limitHit}</span>
+              <span>{limitHit.message}</span>
               <span className="acts">
-                <button className="btn" type="button" onClick={() => { setLimitHit(null); openSettings('plan'); }}>See plans</button>
+                <button className="btn" type="button" onClick={() => { const r = limitHit.reason; setLimitHit(null); if (r === 'allowance') openUpgrade({ reason: 'designs' }); else openSettings('plan'); }}>{limitHit.reason === 'allowance' ? 'See Pro' : 'Raise the cap'}</button>
                 <button className="btn quiet" type="button" onClick={() => setLimitHit(null)}>Dismiss</button>
               </span>
             </div>
@@ -1033,7 +1042,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     else location.href = '/'; // no brands left: start fresh
                   }} />}
                 {settingsTab === 'plan' && <PlanSettings key={curWs.id} ws={curWs} toast={toast} />}
-                {settingsTab === 'organise' && <AutoOrganise ws={curWs.id} toast={toast} onUpgrade={plan === 'free' ? () => setSettingsTab('plan') : undefined} />}
+                {settingsTab === 'organise' && <AutoOrganise ws={curWs.id} toast={toast} canUpgrade={plan === 'free'} />}
                 {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
                 {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
@@ -1135,6 +1144,13 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 )}
               </div>}
 
+              {plan === 'free' && pausedCount > 0 && !q.trim() && (
+                <div className="upsell-strip" role="status">
+                  <span><b>{pausedCount.toLocaleString()} more file{pausedCount === 1 ? '' : 's'}</b> waiting to be organised · Free organises 500 a month</span>
+                  <button className="btn" type="button" onClick={() => openUpgrade({ reason: 'organise', count: pausedCount })}>Organise them now</button>
+                </div>
+              )}
+
               {q.trim() && (chips.length > 0 || understanding || sq.text !== sq.q) && (
                 <div className="qchips" aria-label="Search filters">
                   {understanding && <span className="qthinking">Reading your search…</span>}
@@ -1216,7 +1232,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onDelete={() => deleteAsset(openAsset)}
           pro={plan !== 'free'}
           replacements={items.filter((i) => i.kind === openAsset.kind && i.id !== openAsset.id && isAvailable(i)).map((i) => ({ id: i.id, name: i.name })).sort((a, b) => a.name.localeCompare(b.name))}
-          onUpgrade={() => { openEditor(null); openSettings('plan'); }}
+          onUpgrade={() => { openEditor(null); openUpgrade({ reason: 'lifecycle' }); }}
           usedIn={usedIn[openAsset.id] || []}
           onOpenBlock={(b) => showBlock(blockDraft(b))}
           onMakeBlock={() => useInBlock(openAsset)}
@@ -1285,9 +1301,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         />
       )}
 
-      {modal === 'paywall' && paywall && (
-        <Modal onClose={() => { setModal(null); setPaywall(null); }}>
-          <NewBrandPaywall name={paywall} toast={toast} onClose={() => { setModal(null); setPaywall(null); }} />
+      {modal === 'upgrade' && upgrade && curWs && (
+        <Modal onClose={() => { setModal(null); setUpgrade(null); }}>
+          <UpgradeModal ws={curWs} ask={upgrade} toast={toast} onClose={() => { setModal(null); setUpgrade(null); }} />
         </Modal>
       )}
       {modal === 'feedback' && <Feedback ws={curWs?.id} page={page === 'settings' ? `settings/${settingsTab}` : page} onClose={() => setModal(null)} toast={toast} />}
