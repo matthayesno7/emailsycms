@@ -70,7 +70,17 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     u.searchParams.delete('billing'); u.searchParams.delete('ws');
     history.replaceState({}, '', u);
     if (target) { setWs(target); try { localStorage.setItem('emailsy.ws', target); } catch {} }
-    if (b === 'upgraded') setTimeout(() => { toast('Welcome to Pro. It can take a few seconds to show.'); setSettingsTab('plan'); setPage('settings'); }, 300);
+    // Came from the pricing page with a website: carry on to the brand kit once checkout is done (or skipped).
+    let after: { site?: string; connect?: string; at?: number } | null = null;
+    try { after = JSON.parse(localStorage.getItem('mise.afterPay') || 'null'); localStorage.removeItem('mise.afterPay'); } catch {}
+    if (after && !(after.site && Date.now() - (after.at || 0) < 864e5)) after = null;
+    if (b === 'upgraded') setTimeout(() => {
+      toast('Welcome to Pro. It can take a few seconds to show.');
+      if (after) setSignup({ site: after.site, connect: after.connect }); else { setSettingsTab('plan'); setPage('settings'); }
+    }, 300);
+    if (b === 'cancelled') setTimeout(() => {
+      if (after) { toast('No problem: you’re on Free. Upgrade any time in Settings → Plan.'); setSignup({ site: after.site, connect: after.connect }); }
+    }, 300);
     if (b === 'new-brand') {
       setTimeout(() => toast('Setting up your new brand…'), 300);
       // The brand is created by Stripe's webhook: look for it for up to half a minute.
@@ -747,8 +757,24 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const it = signup;
     setSignup(null);
     if (it.plan) { try { localStorage.setItem('mise.plan', it.plan); } catch {} }
+    // From the pricing page's Pro button: straight to Stripe Checkout for this brand.
+    // A website to build the kit from waits until they're back (see the ?billing= handler).
+    if (it.plan && /pro/i.test(it.plan)) {
+      if (curWs.role !== 'owner') { openSettings('plan'); return; }
+      try { if (it.site) localStorage.setItem('mise.afterPay', JSON.stringify({ site: it.site, connect: it.connect, at: Date.now() })); } catch {}
+      toast('Taking you to secure checkout…');
+      fetch('/api/billing/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: curWs.id, interval: /year|annual/i.test(it.plan) ? 'year' : 'month' }) })
+        .then(async (r) => {
+          const j = await r.json().catch(() => ({}));
+          if (r.ok && j.url) { location.href = j.url; return; }
+          try { localStorage.removeItem('mise.afterPay'); } catch {}
+          toast(j.error || 'Couldn’t open checkout. Upgrade from here when you’re ready.');
+          if (it.site) setSignup({ site: it.site, connect: it.connect }); else openSettings('plan');
+        })
+        .catch(() => { toast('Couldn’t open checkout. Upgrade from here when you’re ready.'); openSettings('plan'); });
+      return;
+    }
     if (it.connect === 'claude' && !it.site) { openSettings('claude'); return; }
-    if (it.plan && /pro/i.test(it.plan) && !it.site) { openSettings('plan'); return; }
     if (!it.site) return;
     const host = (s?: string | null) => String(s || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase();
     const want = host(it.site);
