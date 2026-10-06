@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     billing,
     role: who.role,
     stripe: hasStripe(),
-    free: { files: files || 0, files_max: FREE_FILES, studio_used: !!row?.studio_free_run },
+    free: { files: files || 0, files_max: FREE_FILES, studio_used: !!row?.studio_free_run, studio_run: row?.studio_free_run || null },
     trial_days: trialDaysFor(row),          // upgrading this brand
     trial_days_new_brand: TRIAL_DAYS,       // a new brand bought from here
     designs: {

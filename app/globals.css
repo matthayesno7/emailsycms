@@ -834,6 +834,9 @@ video.ed-out{background:#000;max-height:100%}
 .selbar .primary{display:inline-flex;align-items:center;gap:6px}
 .scrim.top{z-index:60}
 .modal.top{z-index:61;width:min(540px,calc(100% - 32px))}
+/* The upgrade pop-up opens from anywhere (asset editor, Studio): above everything. */
+.scrim.upsell-scrim{z-index:70}
+.modal.upsell-modal{z-index:71}
 .sharedlg{display:flex;flex-direction:column;gap:14px}
 .sharedlg h2{margin:0}
 .sharedlg .opt{font-weight:400;color:var(--ink-3);font-size:12px;margin-left:4px}

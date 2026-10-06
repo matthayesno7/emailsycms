@@ -1319,8 +1319,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         />
       )}
 
+      {modal === 'upgrade' && upgrade && curWs && <div className="scrim upsell-scrim" onClick={() => { setModal(null); setUpgrade(null); }} />}
       {modal === 'upgrade' && upgrade && curWs && (
-        <Modal onClose={() => { setModal(null); setUpgrade(null); }}>
+        <Modal className="upsell-modal" onClose={() => { setModal(null); setUpgrade(null); }}>
           <UpgradeModal ws={curWs} ask={upgrade} toast={toast} onClose={() => { setModal(null); setUpgrade(null); }} />
         </Modal>
       )}

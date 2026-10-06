@@ -1,4 +1,6 @@
 'use client';
+import { runKey } from '@/lib/plans';
+import { openUpgrade } from './Billing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import Studio, { formatFor } from './Studio';
@@ -98,18 +100,30 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const pickedIdea = picked ? PROMPTS.find((p) => p.id === picked) : null;
   const pickedLive = !!pickedIdea && LIVE.has(MOCKS[pickedIdea.id]?.layout) && !pickedIdea.uses.some((u) => u === 'ai-image' || u === 'ai-video' || u === 'motion');
   const canDesign = !!live && !chosen?.video && (!picked || pickedLive);
+  // Free: one Studio run. A different brief after it opens the trial pop-up straight away,
+  // instead of starting designs that can't be made.
+  const [freeRun, setFreeRun] = useState<{ free: boolean; run: string | null }>({ free: false, run: null });
+  useEffect(() => {
+    fetch(`/api/billing?workspace_id=${ws.id}`).then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setFreeRun({ free: j.billing?.plan === 'free', run: j.free?.studio_run || null })).catch(() => {});
+  }, [ws.id]);
+  function startStudio(brief: string, size: { w: number; h: number }) {
+    const key = runKey(brief);
+    if (freeRun.free && freeRun.run && freeRun.run !== key) { openUpgrade({ reason: 'studio' }); return; }
+    if (freeRun.free && !freeRun.run) setFreeRun({ free: true, run: key });
+    setStudio({ brief, size });
+    window.scrollTo({ top: 0 });
+  }
   function design() {
     const brief = picked ? clean(ask) : [ask.trim(), chosen ? `Format: ${chosen.ask}.` : ''].filter(Boolean).join(' ');
     if (!brief) return;
     const size = pickedIdea ? { w: MOCKS[pickedIdea.id].size[0], h: MOCKS[pickedIdea.id].size[1] } : chosen && !chosen.video ? { w: chosen.size[0], h: chosen.size[1] } : formatFor(brief);
-    setStudio({ brief, size });
-    window.scrollTo({ top: 0 });
+    startStudio(brief, size);
   }
   function designIdea(id: string) {
     const p = PROMPTS.find((x) => x.id === id)!;
     const m = MOCKS[id];
-    setStudio({ brief: clean(fillPrompt(p.prompt, fill)), size: { w: m.size[0], h: m.size[1] } });
-    window.scrollTo({ top: 0 });
+    startStudio(clean(fillPrompt(p.prompt, fill)), { w: m.size[0], h: m.size[1] });
   }
 
   function usePrompt(id: string) {
@@ -135,7 +149,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
       <div className="create">
         {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
         <Studio ws={ws} userId={userId} supabase={supabase} brand={studioBrand} fonts={fonts} srcOf={srcOf}
-          brief={studio.brief} size={studio.size} onBrief={(brief, size) => setStudio({ brief, size })}
+          brief={studio.brief} size={studio.size} onBrief={(brief, size) => startStudio(brief, size)}
           onClose={() => setStudio(null)} onSaved={onSaved} onOpenAsset={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }} toast={toast} />
       </div>
     );

@@ -45,6 +45,15 @@ export function tooBig(f: { size: number; type?: string; name?: string }) {
   return f.size > max ? `${f.name || 'That file'} is ${mb(f.size)}. ${video ? 'Videos' : 'Images'} can be up to ${mb(max)}.` : null;
 }
 
+// A Studio "run" is one brief. The key is the same for the same words, so retries, extra sizes
+// and the page re-rendering never count as a second run.
+export function runKey(brief: string) {
+  const t = brief.toLowerCase().replace(/\s+/g, ' ').trim();
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) >>> 0;
+  return `r${h.toString(36)}`;
+}
+
 export const FREE_FILES = 50;
 // Files that count towards Free's 50: anything with a stored file, except email blocks.
 export const countsAsFile = (a: { storage_path?: string | null; kind?: string }) => !!a.storage_path && a.kind !== 'block';

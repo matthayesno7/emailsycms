@@ -5,9 +5,9 @@ import { BLOCK_TYPES } from '@/lib/blockTypes';
 import { Icon, Wire } from './icons';
 import type { Asset, Ws } from './Library';
 
-export function Modal({ children, onClose, wide }: { children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+export function Modal({ children, onClose, wide, className }: { children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string }) {
   return (
-    <div className={'modal' + (wide ? ' wide' : '')} role="dialog" aria-modal="true">
+    <div className={'modal' + (wide ? ' wide' : '') + (className ? ' ' + className : '')} role="dialog" aria-modal="true">
       <button className="x" type="button" aria-label="Close" onClick={onClose}><Icon.Close /></button>
       {children}
     </div>

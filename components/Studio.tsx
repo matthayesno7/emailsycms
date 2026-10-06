@@ -1,4 +1,5 @@
 'use client';
+import { runKey } from '@/lib/plans';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FORMATS, assetsUsed, type Spec } from '@/lib/design';
@@ -58,7 +59,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
   const [edit, setEdit] = useState(brief);
   const refineBox = useRef<HTMLInputElement>(null);
   const run = useRef(0);
-  const runId = useRef<string>(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now()));
+  const runId = useRef<string>(runKey(brief));
   const format = FORMATS.find((f) => f.w === size.w && f.h === size.h) || { id: 'custom', label: 'Custom', w: size.w, h: size.h, hint: '' };
 
   const patch = (k: string, p: Partial<Variant> | ((v: Variant) => Partial<Variant>)) =>
@@ -83,7 +84,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
   useEffect(() => {
     if (initial) return;
     const id = ++run.current;
-    runId.current = crypto.randomUUID(); // one brief = one run (its designs and extra sizes)
+    runId.current = runKey(brief); // one brief = one run (its designs, retries and extra sizes)
     const fresh: Variant[] = [0, 1, 2].map(() => ({ key: key(), size, status: 'loading', history: [] }));
     setVariants(fresh); setSel(null); setEdit(brief);
     fresh.forEach(async (v, i) => {
