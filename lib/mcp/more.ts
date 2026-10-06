@@ -737,7 +737,7 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toolError('That isn’t a valid email address.');
       const db = need(ctx);
       const { error } = await db.from('workspace_invites').upsert({ workspace_id: w.ws.id, email, role: ['admin', 'editor', 'contributor', 'viewer'].includes(args.role) ? args.role : 'editor', invited_by: ctx.userId, accepted_at: null }, { onConflict: 'workspace_id,email' });
-      if (error) return toolError(error.message);
+      if (error) return toolError(error.message.replace(/^ROLE: /, ''));
       const { error: ie } = await db.auth.admin.inviteUserByEmail(email, { redirectTo: link(ctx, 'login') });
       const existing = !!ie && /already|registered|exists/i.test(ie.message);
       if (ie && !existing) return toolError(ie.message);

@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { appUrl } from '@/lib/keys';
 
 // Invite a teammate to a brand with a role. Admins and owners only (row level security on the insert).
-import { isRole } from '@/lib/roles';
+import { isRole, roleError } from '@/lib/roles';
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const { error } = await supabase
     .from('workspace_invites')
     .upsert({ workspace_id: workspaceId, email, role, invited_by: user.id, accepted_at: null }, { onConflict: 'workspace_id,email' });
-  if (error) return Response.json({ error: 'Only admins and owners can invite people.' }, { status: 403 });
+  if (error) return Response.json({ error: roleError(error.message) || 'Only admins and owners can invite people.' }, { status: 403 });
 
   // New people get an invite email from Supabase; people who already have an account
   // see the workspace the next time they open the app.

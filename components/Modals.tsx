@@ -68,7 +68,7 @@ export function HelpFeed() {
   );
 }
 
-export function Members({ supabase, ws, userId, toast }: { supabase: SupabaseClient; ws: Ws; userId: string; toast: (m: string) => void }) {
+export function Members({ supabase, ws, userId, toast, enterprise = false }: { supabase: SupabaseClient; ws: Ws; userId: string; toast: (m: string) => void; enterprise?: boolean }) {
   const [members, setMembers] = useState<{ user_id: string; role: string; email: string }[]>([]);
   const [invites, setInvites] = useState<{ id: string; email: string; role: string }[]>([]);
   const [email, setEmail] = useState('');
@@ -94,7 +94,7 @@ export function Members({ supabase, ws, userId, toast }: { supabase: SupabaseCli
   async function invite(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const res = await fetch('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId: ws.id, email, role }) });
+    const res = await fetch('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId: ws.id, email, role: enterprise ? role : 'editor' }) });
     const json = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { toast(json.error || 'Couldn’t send the invite.'); return; }
@@ -121,7 +121,9 @@ export function Members({ supabase, ws, userId, toast }: { supabase: SupabaseCli
   }
 
   // Owners can set any role; admins any role below owner, and can't change an owner.
-  const choices = (current: string) => ROLES.filter((r) => owner || (r.id !== 'owner' && current !== 'owner'));
+  // Without Enterprise, brands have owners and editors.
+  const offered = enterprise ? ROLES : ROLES.filter((r) => r.id === 'owner' || r.id === 'editor');
+  const choices = (current: string) => offered.filter((r) => owner || (r.id !== 'owner' && current !== 'owner'));
   const editable = (m: { user_id: string; role: string }) => admin && m.user_id !== userId && (owner || m.role !== 'owner');
 
   return (
@@ -149,17 +151,21 @@ export function Members({ supabase, ws, userId, toast }: { supabase: SupabaseCli
       {admin ? (
         <form className="inline" onSubmit={invite}>
           <input className="in" type="email" required placeholder="teammate@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <select className="in role-pick" value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label="Role">
+          {enterprise && <select className="in role-pick" value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label="Role">
             {ROLES.filter((r) => r.id !== 'owner').map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-          </select>
+          </select>}
           <button className="primary" type="submit" disabled={busy}>{busy ? 'Sending…' : 'Invite'}</button>
         </form>
       ) : (
         <p className="tip">Only admins and owners can invite people to this brand.</p>
       )}
-      <dl className="role-key">
-        {ROLES.map((r) => <div key={r.id}><dt>{r.label}</dt><dd>{r.blurb}</dd></div>)}
-      </dl>
+      {enterprise ? (
+        <dl className="role-key">
+          {ROLES.map((r) => <div key={r.id}><dt>{r.label}</dt><dd>{r.blurb}</dd></div>)}
+        </dl>
+      ) : (
+        <p className="tip">Owners manage billing and the brand; editors do everything else. Admin, contributor and viewer roles, approvals by role and an activity log are on Enterprise. <a href="https://calendar.notion.so/meet/matthayes/3363f4yal" target="_blank" rel="noreferrer">Book a call</a></p>
+      )}
       <p className="tip">Everyone is free: Mise is priced per brand, not per person.</p>
     </>
   );

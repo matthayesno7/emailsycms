@@ -1,4 +1,6 @@
 -- Mise enterprise pack, part 1: roles and an audit log. Safe to run more than once.
+-- Both are Enterprise features: other brands keep owner and editor, and the activity log is recorded
+-- for every brand but only readable on Enterprise (so it's all there the day a brand upgrades).
 --
 -- Roles, per brand:
 --   owner        everything, including billing and deleting the brand
@@ -27,6 +29,23 @@ create or replace function public.can_manage(ws uuid)
 returns boolean language sql security definer stable set search_path = public as $$
   select coalesce(public.role_in(ws) in ('owner', 'admin', 'editor'), false);
 $$;
+create or replace function public.is_enterprise(ws uuid)
+returns boolean language sql security definer stable set search_path = public as $$
+  select public.plan_of(ws) = 'enterprise';
+$$;
+
+-- Admin, contributor and viewer roles are on Enterprise; other brands invite editors.
+create or replace function public.invite_role_guard()
+returns trigger language plpgsql as $$
+begin
+  if new.role <> 'editor' and not public.is_enterprise(new.workspace_id) then
+    raise exception 'ROLE: Admin, contributor and viewer roles are on Enterprise. Invite them as an editor.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists invites_00_roles on public.workspace_invites;
+create trigger invites_00_roles before insert or update of role on public.workspace_invites for each row execute function public.invite_role_guard();
+
 create or replace function public.can_add(ws uuid)
 returns boolean language sql security definer stable set search_path = public as $$
   select coalesce(public.role_in(ws) in ('owner', 'admin', 'editor', 'contributor'), false);
@@ -112,6 +131,7 @@ declare cur text;
 begin
   if p_role not in ('owner', 'admin', 'editor', 'contributor', 'viewer') then raise exception 'Unknown role'; end if;
   if not public.is_admin(p_ws) then raise exception 'ROLE: Only admins and owners change roles.'; end if;
+  if p_role not in ('owner', 'editor') and not public.is_enterprise(p_ws) then raise exception 'ROLE: Admin, contributor and viewer roles are on Enterprise.'; end if;
   select role into cur from public.workspace_members where workspace_id = p_ws and user_id = p_user;
   if cur is null then raise exception 'They aren’t a member of this brand.'; end if;
   if (cur = 'owner' or p_role = 'owner') and not public.is_owner(p_ws) then raise exception 'ROLE: Only an owner can make or change an owner.'; end if;
@@ -140,7 +160,7 @@ create table if not exists public.audit_log (
 create index if not exists audit_ws_at on public.audit_log (workspace_id, at desc);
 alter table public.audit_log enable row level security;
 drop policy if exists "audit: admins read" on public.audit_log;
-create policy "audit: admins read" on public.audit_log for select using (public.is_admin(workspace_id));
+create policy "audit: admins read" on public.audit_log for select using (public.is_admin(workspace_id) and public.is_enterprise(workspace_id));
 -- Written only by the triggers below and the server; nobody can edit or delete entries.
 
 create or replace function public.audit(p_ws uuid, p_action text, p_type text, p_id text, p_name text, p_details jsonb default '{}'::jsonb, p_actor uuid default null)

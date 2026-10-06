@@ -1058,7 +1058,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             <div className="settings-page">
               <div className="head"><h1>Settings</h1></div>
               <div className="seg tabs" role="tablist">
-                {([['workspace', 'Brand workspace'], ['plan', 'Plan & usage'], ['members', 'Team'], ...(can.admin(curWs.role) ? [['activity', 'Activity'] as const] : []), ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
+                {([['workspace', 'Brand workspace'], ['plan', 'Plan & usage'], ['members', 'Team'], ...(can.admin(curWs.role) && plan === 'enterprise' ? [['activity', 'Activity'] as const] : []), ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
                   <button key={k} type="button" role="tab" aria-pressed={settingsTab === k} onClick={() => setSettingsTab(k)}>{l}{k === 'claude' && !connected ? ' •' : ''}</button>
                 ))}
               </div>
@@ -1071,8 +1071,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     else location.href = '/'; // no brands left: start fresh
                   }} />}
                 {settingsTab === 'plan' && <PlanSettings key={curWs.id} ws={curWs} toast={toast} />}
-                {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} />}
-                {settingsTab === 'activity' && can.admin(curWs.role) && <Activity supabase={supabase} ws={curWs} />}
+                {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} enterprise={plan === 'enterprise'} />}
+                {settingsTab === 'activity' && can.admin(curWs.role) && plan === 'enterprise' && <Activity supabase={supabase} ws={curWs} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
                 {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
               </div>
