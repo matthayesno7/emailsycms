@@ -68,6 +68,12 @@ export default function Sharing({ supabase, ws, items, folders, collections, toa
         <button type="button" role="tab" aria-pressed={tab === 'links'} onClick={() => { setTab('links'); setEditing(null); }}>Links{shares?.filter((s) => live(s)).length ? ` · ${shares.filter((s) => live(s)).length}` : ''}</button>
       </div>
 
+      {free && (
+        <div className="upsell-strip" role="status">
+          <span><b>Your team can preview portals.</b> Publishing them and sharing links is on Pro.</span>
+          <button className="btn" type="button" onClick={() => openUpgrade({ reason: tab === 'links' ? 'share' : 'portal' })}>Start free trial</button>
+        </div>
+      )}
       {tab === 'portals' && (portals === null ? <p className="tip">Loading…</p> : cur ? (
         <PortalEditor key={cur.id} free={free} portal={cur} wsSlug={slug} origin={origin} folders={folders} collections={collections} items={items} events={events.filter((e) => e.portal_id === cur.id)} toast={toast}
           onBack={() => setEditing(null)}
@@ -86,7 +92,7 @@ export default function Sharing({ supabase, ws, items, folders, collections, toa
             const st = stats((e) => e.portal_id === p.id);
             return (
               <button key={p.id} type="button" className="portal-card" onClick={() => setEditing(p.id)}>
-                <div className="pc-top"><b>{p.name}</b><span className={'badge ' + (p.published ? 'on' : '')}>{p.published ? 'Live' : 'Unpublished'}</span></div>
+                <div className="pc-top"><b>{p.name}</b><span className={'badge ' + (p.published && !free ? 'on' : '')}>{p.published && !free ? 'Live' : free ? 'Preview only' : 'Unpublished'}</span></div>
                 <code>{origin.replace(/^https?:\/\//, '')}/p/{slug}/{p.slug}</code>
                 <div className="pc-stats"><span>{p.access === 'public' ? 'Public' : p.access === 'passcode' ? 'Passcode' : `Invite only (${p.allowlist?.length || 0})`}</span><span>{st.views} visits</span><span>{st.downloads} downloads</span><span className="muted">last 30 days</span></div>
               </button>
@@ -173,8 +179,10 @@ function PortalEditor({ free = false, portal, wsSlug, origin, folders, collectio
       <div className="pe-head">
         <button className="ghost" type="button" onClick={onBack}><Icon.Back />Portals</button>
         <span className="spacer" />
-        <a className="btn" href={url} target="_blank" rel="noreferrer">Open portal</a>
-        <button className="primary" type="button" onClick={async () => { try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { toast(url); } }}>Copy link</button>
+        <a className="btn" href={url} target="_blank" rel="noreferrer">{free ? 'Preview' : 'Open portal'}</a>
+        {free
+          ? <button className="primary" type="button" onClick={() => openUpgrade({ reason: 'portal' })}>Publish to share</button>
+          : <button className="primary" type="button" onClick={async () => { try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { toast(url); } }}>Copy link</button>}
       </div>
       <div className="pe-cols">
         <form className="settings" onSubmit={save}>

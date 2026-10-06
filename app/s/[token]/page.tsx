@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import PublicFrame from '@/components/public/PublicFrame';
 import Gallery, { Gate } from '@/components/public/Gallery';
+import { freeBrand } from '@/lib/billing';
 import { brandOf, isUnlocked, loadShare, logEvent, publicView, shareAssets, shareState, thumbUrls, visitor } from '@/lib/share';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,8 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
   const logo = await logoUrl(db, brand.kit?.logos?.primary);
   const frame = (children: React.ReactNode, preview?: string | null) => <PublicFrame kit={brand.kit} brandName={brand.name} logoUrl={logo} preview={preview}>{children}</PublicFrame>;
 
+  // Links from a brand on Free (e.g. after a trial ends) don't open for outsiders.
+  if (!v.member && state === 'live' && (await freeBrand(ws.id))) return frame(<div className="pub-gate"><h1>This link isn’t available right now</h1><p>Ask the person who shared it to turn it back on.</p></div>);
   if (state !== 'live' && !v.member) return frame(<div className="pub-gate"><h1>{state === 'expired' ? 'This link has expired' : 'This link has been turned off'}</h1><p>Ask the person who shared it for a new one.</p></div>);
   if (!v.member && !(await isUnlocked('s', share.id, share.passcode_hash))) return frame(<Gate shareRef={{ s: token }} mode="passcode" brandName={brand.name} />);
 

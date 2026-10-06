@@ -4,6 +4,7 @@
 // which assets it shares. Uses the service-role client, so everything is scoped by hand.
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { isAvailable } from './lifecycle';
+import { freeBrand } from './billing';
 import { cookies } from 'next/headers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from './supabase/admin';
@@ -116,7 +117,8 @@ export async function visitor(db: SupabaseClient, workspaceId: string) {
 // Can this visitor see the portal right now? 'ok', or what they need to do first.
 export async function portalAccess(portal: PortalRow, visitorEmail: string | null, member = false): Promise<'ok' | 'passcode' | 'signin' | 'denied' | 'unpublished'> {
   if (member) return 'ok';
-  if (!portal.published) return 'unpublished';
+  // Free brands can build a portal and preview it as a team; outsiders only see it once the brand is on Pro.
+  if (!portal.published || (await freeBrand(portal.workspace_id))) return 'unpublished';
   if (portal.access === 'passcode') return (await isUnlocked('p', portal.id, portal.passcode_hash)) ? 'ok' : 'passcode';
   if (portal.access === 'allowlist') return !visitorEmail ? 'signin' : allowed(portal.allowlist, visitorEmail) ? 'ok' : 'denied';
   return 'ok';
@@ -224,7 +226,7 @@ export async function publicContext(ref: { s?: string | null; p?: string | null 
     const r = await loadShare(ref.s);
     if (!r) return null;
     const v = await visitor(r.db, r.share.workspace_id);
-    if (!v.member && (shareState(r.share) !== 'live' || !(await isUnlocked('s', r.share.id, r.share.passcode_hash)))) return null;
+    if (!v.member && (shareState(r.share) !== 'live' || (await freeBrand(r.share.workspace_id)) || !(await isUnlocked('s', r.share.id, r.share.passcode_hash)))) return null;
     const assets = await shareAssets(r.db, r.share);
     return { db: r.db, workspace_id: r.share.workspace_id, share_id: r.share.id, portal_id: undefined as string | undefined, email: null as string | null, member: v.member, assets, allow_download: r.share.allow_download, formats: r.share.formats as Format[] };
   }
