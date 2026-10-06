@@ -2,7 +2,7 @@
 // transport. Each POST carries one message (or a batch) and gets a JSON reply.
 import { isAvailable, lifecycleForClaude } from '../lifecycle';
 import { MAX_IMAGE_BYTES, MAX_IMPORT_BYTES } from '../plans';
-import { ASPECTS, brandPrompt, generateImage, hasImageGen, type Aspect, type Ref } from '../imageGen';
+import { ASPECTS, PURPOSES, brandPrompt, designsFor, generateImages, hasImageGen, routeFor, type Aspect, type Purpose, type Ref } from '../imageGen';
 import { planOf } from '../billing';
 import { limitMessage, takeUsage } from '../usage';
 import { BLOCK_TYPES, isReadDesign } from '../blockTypes';
@@ -58,8 +58,8 @@ Where assets come from: each asset has an origin: uploaded (added by the team), 
 No longer available: an asset can be archived, expired (its licence or usage rights ran out) or obsolete (superseded, e.g. an old logo). list_assets leaves these out unless include_unavailable is true; get_asset marks them with availability, reason and use_instead. Never use an unavailable asset in new work: use its replacement (use_instead) or ask the user.
 
 Making things. Mise holds the brand and the source assets. Check get_brand_kit and whether the brand has a Figma file (list_workspaces → figma_file) and whether the Figma connector is available to you, then pick the route:
-- No Figma (no file, or no Figma connector): make new photography and finished single images with generate_image (Mise's own image model; pass the product photo in reference_asset_ids so the product stays exact). For layouts like email heroes and social posts with live text, suggest Mise Studio (Create → Describe it), which designs three on-brand options in seconds. Never tell the user they need Figma.
-- Video, voiceover and anything else Mise can't make itself: if the user has a media-generation connector (for example CreativeClaw), use it, passing the brand kit's imagery rules and Mise image URLs from get_asset as references, then save the finished file with add_generated_asset (its https URL). Quote the cost first if the connector charges credits. If there is no such connector and no Figma, say what's needed rather than guessing.
+- No Figma (no file, or no Figma connector): make new photography and finished single images with generate_image. Mise picks the right model for the job from purpose: product (a real product in a new scene; pass the product photo in reference_asset_ids so it stays exact), text (exact words on the image, hero shots; counts as 2 designs), quick (fast variations, up to 4 at once, no references). Leave it on auto when unsure. For layouts like email heroes and social posts with live text, suggest Mise Studio (Create → Describe it), which designs three on-brand options in seconds. Never tell the user they need Figma.
+- Video and audio: Mise doesn't make these yet. With Figma, use a Weave video model or export_video as above; otherwise say so plainly. Never send the user to another tool to make them.
 With Figma, the Figma connector does the making:
 - Designs (banners, social posts, ads, slides): build them in Figma from the brand kit and Mise assets (push_image_to_figma), headline as live text, then save the finished frame with add_generated_asset.
 - New imagery (a product in a new scene, a seasonal backdrop, a cut-out): use Figma's Weave models. weave_find_model (e.g. "nano banana 2" for images), pass the product photo's image_url from get_asset as the reference image, and describe the scene using the brand kit's imagery.style and do/don't rules. Never alter the product itself: say so in the prompt, and prefer compositing the real cut-out over a generated scene in Figma when the product must be exact. Weave runs cost the user credits: always quote the cost and get an explicit yes before running.
@@ -232,7 +232,7 @@ const TOOLS = [
   },
   {
     name: 'generate_image',
-    description: 'Make a new image with Mise’s own image model (no Figma needed) and save it to the library as a draft for the team to approve. Use it for new photography (a product in a new scene, a seasonal backdrop, lifestyle shots) and for finished single images when the user doesn’t use Figma. Pass the product or reference photos as reference_asset_ids: the product is kept exactly as it is. The brand kit’s imagery rules are added automatically. On Pro; counts as one Studio design.',
+    description: 'Make a new image with Mise’s own image model (no Figma needed) and save it to the library as a draft for the team to approve. Use it for new photography (a product in a new scene, a seasonal backdrop, lifestyle shots) and for finished single images when the user doesn’t use Figma. Pass the product or reference photos as reference_asset_ids: the product is kept exactly as it is. The brand kit’s imagery rules are added automatically. Mise uses a different model for each purpose. On Pro; each image counts as one Studio design (two for purpose text).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -240,6 +240,8 @@ const TOOLS = [
         prompt: { type: 'string', description: 'What to make: subject, setting, mood, framing. For a finished image with words on it, give the exact words.' },
         reference_asset_ids: { type: 'array', items: { type: 'string' }, description: 'Up to 4 Mise assets to work from: the product photo, a logo, or images whose look to follow.' },
         aspect_ratio: { type: 'string', enum: ['1:1', '4:5', '3:4', '2:3', '9:16', '16:9', '3:2', '4:3', '21:9'], description: 'Default 1:1. Email hero 2:1 → use 16:9 then crop; Instagram post 4:5; story 9:16.' },
+        purpose: { type: 'string', enum: [...PURPOSES], default: 'auto', description: 'Which model to use. product: a real product in a new scene, from reference photos (keeps the product exact). text: exact words on the image, or a high-end hero shot (sharper, slower; 2 designs). quick: fast, cheap variations to choose from, no references. auto: Mise decides.' },
+        count: { type: 'integer', minimum: 1, maximum: 4, default: 1, description: 'How many takes to make (each counts). Use 3–4 with purpose quick to explore options.' },
         name: { type: 'string', description: 'Name for the new asset.' },
         source_product_pid: { type: 'string', description: 'The product it shows, if any.' },
       },
@@ -604,8 +606,6 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       if (ctx.db && (await planOf(ctx.db, w.ws.id)).plan === 'free') return toolError('Making new images is on Pro. The brand’s owner can start a 7-day free trial in Mise → Settings → Plan & usage.');
       const prompt = String(args.prompt || '').trim().slice(0, 3000);
       if (!prompt) return toolError('Say what image to make.');
-      const take = await takeUsage(w.ws.id, 'design');
-      if (!take.ok) return toolError(limitMessage('design', take));
       // Reference images: the email-ready copy is plenty and keeps the request small.
       const refs: Ref[] = [];
       const refIds: string[] = [];
@@ -622,20 +622,30 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
       const product = args.source_product_pid ? (await ctx.repo.listAssets([w.ws.id], { kind: 'product', query: String(args.source_product_pid), limit: 20 })).find((h) => h.pid === String(args.source_product_pid)) || null : null;
       const full = brandPrompt(prompt, (kitRow?.kit as any) || null, { hasProduct: !!product || refs.length > 0 });
       const aspect = (ASPECTS as readonly string[]).includes(String(args.aspect_ratio)) ? (args.aspect_ratio as Aspect) : '1:1';
-      const out = await generateImage({ prompt: full, refs, aspect });
+      const count = Math.max(1, Math.min(4, Math.floor(Number(args.count) || 1)));
+      const route = routeFor((PURPOSES as readonly string[]).includes(String(args.purpose)) ? (args.purpose as Purpose) : 'auto', { prompt, refs: refs.length, aspect });
+      const designs = designsFor(route, count);
+      const take = await takeUsage(w.ws.id, 'design', designs);
+      if (!take.ok) return toolError(limitMessage('design', take));
+      const out = await generateImages({ prompt: full, refs: route.api === 'imagen' ? [] : refs, aspect, route, count });
       if ('error' in out) return toolError(out.error);
       const ext = out.mime.includes('png') ? 'png' : out.mime.includes('webp') ? 'webp' : 'jpg';
-      const path = `${w.ws.id}/generated/${crypto.randomUUID()}.${ext}`;
-      await ctx.repo.upload(path, out.buf, out.mime);
-      const size = imageSize(out.buf);
-      const row = await ctx.repo.insertAsset({
-        workspace_id: w.ws.id, kind: 'image', name: String(args.name || prompt).trim().slice(0, 120) || 'New image',
-        storage_path: path, mime: out.mime, bytes: out.buf.length, width: size?.w ?? null, height: size?.h ?? null,
-        origin: 'generated', status: 'draft', created_by: ctx.userId, fields: {},
-        provenance: { via: 'mise-image', prompt, model: out.model, aspect_ratio: aspect, source_product_pid: product?.pid || null, source_asset_ids: [...new Set([...(product ? [product.id] : []), ...refIds])], brand_kit_version: kitRow?.version ?? null, generated_at: new Date().toISOString() },
-        figma: null,
-      });
-      return text({ ok: true, asset: { ...publicAsset(row, w.ws), image_url: await ctx.repo.signedUrl(path) }, next: 'Saved as a draft in Mise for the team to approve. To try another take, call generate_image again with a changed prompt.' });
+      const base = String(args.name || prompt).trim().slice(0, 110) || 'New image';
+      const saved: Record<string, unknown>[] = [];
+      for (const [i, buf] of out.bufs.entries()) {
+        const path = `${w.ws.id}/generated/${crypto.randomUUID()}.${ext}`;
+        await ctx.repo.upload(path, buf, out.mime);
+        const size = imageSize(buf);
+        const row = await ctx.repo.insertAsset({
+          workspace_id: w.ws.id, kind: 'image', name: out.bufs.length > 1 ? `${base} (${i + 1})` : base,
+          storage_path: path, mime: out.mime, bytes: buf.length, width: size?.w ?? null, height: size?.h ?? null,
+          origin: 'generated', status: 'draft', created_by: ctx.userId, fields: {},
+          provenance: { via: 'mise-image', prompt, model: out.model, purpose: out.route.purpose, aspect_ratio: aspect, source_product_pid: product?.pid || null, source_asset_ids: [...new Set([...(product ? [product.id] : []), ...refIds])], brand_kit_version: kitRow?.version ?? null, generated_at: new Date().toISOString() },
+          figma: null,
+        });
+        saved.push({ ...publicAsset(row, w.ws), image_url: await ctx.repo.signedUrl(path) });
+      }
+      return text({ ok: true, model: out.model, purpose: out.route.purpose, designs_used: designs, assets: saved, next: 'Saved as drafts in Mise for the team to approve. To try another take, call generate_image again with a changed prompt; for exact words on the image use purpose text.' });
     }
     case 'add_generated_asset': {
       const w = await ownWorkspace(ctx, args.workspace_id);
