@@ -133,6 +133,19 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const shownDesignsUpsell = useRef(false);
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
+  // The Add menu opens to the left of its button; when the button has wrapped to the left edge,
+  // it opens to the right instead, so it never slides under the sidebar.
+  const addRef = useRef<HTMLDivElement>(null);
+  const [addLeft, setAddLeft] = useState(false);
+  const toggleAdd = () => {
+    const el = addRef.current;
+    if (!addOpen && el) {
+      const r = el.getBoundingClientRect();
+      const edge = (el.closest('main') as HTMLElement | null)?.getBoundingClientRect().left ?? 0;
+      setAddLeft(r.right - 300 < edge + 8);
+    }
+    setAddOpen(!addOpen);
+  };
   const [wsOpen, setWsOpen] = useState(false);
   const [connected, setConnected] = useState(true);
   const [q, setQ] = useState('');
@@ -1081,10 +1094,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 <span className="spacer" />
                 <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search: beach, blue bag, logo…" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /><kbd>/</kbd></label>
                 {q.trim() && <button className="btn quiet savesearch" type="button" title="Save this search as a smart collection" onClick={() => setCollForm({ name: q.trim().replace(/^./, (c) => c.toUpperCase()), rules: { text: q.trim(), ...(['image', 'logo', 'product', 'video'].includes(view) ? { kinds: [view] } : {}) } })}>Save search</button>}
-                <div className="addwrap">
-                  <button className="primary" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((o) => !o)}><Icon.Plus size={16} />Add</button>
+                <div className="addwrap" ref={addRef}>
+                  <button className="primary" type="button" aria-expanded={addOpen} onClick={toggleAdd}><Icon.Plus size={16} />Add</button>
                   {addOpen && (
-                    <div className="addmenu" role="menu" onClick={() => setAddOpen(false)}>
+                    <div className={'addmenu' + (addLeft ? ' left' : '')} role="menu" onClick={() => setAddOpen(false)}>
                       <button type="button" role="menuitem" onClick={() => fileImg.current?.click()}><Icon.Image /><span><b>Upload files</b><small>Images, logos, videos. Or drop them anywhere.</small></span></button>
                       <button type="button" role="menuitem" onClick={() => fileDir.current?.click()}><Icon.Folder /><span><b>Upload a folder</b><small>Keeps the folder’s name, like Dropbox</small></span></button>
                       <button type="button" role="menuitem" onClick={() => setModal('feeds')}><Icon.Table /><span><b>Add products</b><small>Connect Shopify, a feed link, or a CSV</small></span></button>

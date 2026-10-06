@@ -674,6 +674,7 @@ video.ed-out{background:#000;max-height:100%}
 .lib-head .primary{border-radius:999px}
 .addwrap{position:relative}
 .addmenu{position:absolute;right:0;top:calc(100% + 6px);width:300px;background:var(--bg);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;z-index:30}
+.addmenu.left{right:auto;left:0}
 .addmenu button{display:flex;gap:12px;align-items:flex-start;width:100%;border:0;background:none;text-align:left;padding:9px 10px;border-radius:10px}
 .addmenu button:hover{background:var(--hover)}
 .addmenu svg{width:19px;height:19px;color:var(--ink-2);flex:none;margin-top:2px}
