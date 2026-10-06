@@ -5,8 +5,8 @@
 export const COMPANY = {
   name: 'HW Tech Ltd',
   trading: 'Mise',
-  number: '[company number]',
-  address: '[registered office address]',
+  number: '15834771',
+  address: '86-90 Paul Street, London, England, EC2A 4NE',
   ico: '[ICO registration number]',
   email: 'hello@misedam.com',
   updated: '6 October 2026',
@@ -106,8 +106,8 @@ export const PRIVACY: Section[] = [
   ] },
   { h: 'Who we share it with', p: [
     'We use these providers to run Mise. They act on our instructions under contracts that protect your data:',
-    '- Supabase: database, file storage and sign-in ([region]).',
-    '- Railway: hosting the app ([region]).',
+    '- Supabase: database, file storage and sign-in (EU).',
+    '- Railway: hosting the app (EU).',
     '- Stripe: payments (UK, EU and US).',
     '- Resend: sending email (EU).',
     '- Anthropic: AI for organising files, brand kits and Studio designs (US).',
