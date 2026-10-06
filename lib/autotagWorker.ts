@@ -80,9 +80,11 @@ async function folderName(ctx: Ctx, id?: string | null) {
 
 // A URL Claude can fetch: the email-ready copy for big files, else the original.
 async function imageUrl(ctx: Ctx, a: any): Promise<{ url?: string; error?: string }> {
+  // The email-ready copy (max 1200px, compressed) is plenty to describe an image, and avoids
+  // Claude rejecting large originals (over 5 MB or 8000px, e.g. stock photos and phone pictures).
   const email = a.images?.email;
-  const big = (a.bytes || 0) > MAX_VISION_BYTES;
-  const path = big && email?.path ? email.path : a.storage_path;
+  const big = (a.bytes || 0) > MAX_VISION_BYTES || (a.width || 0) > 7900 || (a.height || 0) > 7900;
+  const path = email?.path ? email.path : a.storage_path;
   if (big && !email?.path) {
     // Supabase can shrink it on the fly when image transformations are on (Pro plan).
     const { data } = await ctx.db.storage.from('assets').createSignedUrl(a.storage_path, 900, { transform: { width: 1568, height: 1568, resize: 'contain' } });
@@ -127,7 +129,11 @@ async function tagOne(ctx: Ctx, a: any): Promise<'done' | 'failed' | 'limited' |
     if (res.status === 429 || res.status === 529) { await release(ctx, a); return 'limited'; }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      return fail(ctx, a, res.status === 400 && /image/i.test(body) ? 'Claude couldn’t read this image.' : `Claude returned ${res.status}.`, res.status === 400);
+      // Keep Claude's own reason, so Settings shows something useful.
+      let why = '';
+      try { why = JSON.parse(body)?.error?.message || ''; } catch {}
+      console.warn('[autotag]', a.id, res.status, why || body.slice(0, 200));
+      return fail(ctx, a, res.status === 400 && /image/i.test(body) ? `Claude couldn’t read this image${why ? `: ${why}` : '.'}` : `Claude returned ${res.status}${why ? `: ${why}` : '.'}`, res.status === 400);
     }
     const out = await res.json().catch(() => null);
     const text = String(out?.content?.find((c: any) => c.type === 'text')?.text || '');
