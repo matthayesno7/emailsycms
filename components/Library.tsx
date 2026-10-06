@@ -428,7 +428,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return () => { gone = true; clearTimeout(timer); };
   }, [ws, collSig, itemSig]); // eslint-disable-line react-hooks/exhaustive-deps
   const inFolder = useCallback((it: Asset) => (curColl ? matchesRules(it, curColl.rules, collHits[curColl.id]) : folder === 'all' || it.folder_id === folder), [folder, curColl, collHits]);
-  const dupes = useMemo(() => items.filter((i) => i.duplicate_of && !i.duplicate_ok).length, [items]);
+  // A product flagged as a copy of another product is a false alarm (similar product shots): ignore it.
+  const isDupe = useCallback((i: Asset) => !!i.duplicate_of && !i.duplicate_ok && !(i.kind === 'product' && items.find((x) => x.id === i.duplicate_of)?.kind === 'product'), [items]);
+  const dupes = useMemo(() => items.filter(isDupe).length, [items, isDupe]);
   const collCounts = useMemo(() => Object.fromEntries(collections.map((c) => [c.id, items.filter((i) => matchesRules(i, c.rules, collHits[c.id])).length])), [collections, items, collHits]);
   const suggestions = useMemo(() => suggestCollections(items, collections), [items, collections]);
   const hay = useMemo(() => new Map(items.map((i) => [i.id, haystack(i)])), [items]);
@@ -489,7 +491,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const s = q.trim().toLowerCase();
     const o = showOrigins ? origin : 'any';
     // Archived, expired and obsolete files only show under "No longer available".
-    const keep = (it: Asset) => inView(it) && (o === 'unavailable' ? !isAvailable(it) : isAvailable(it) && (o === 'any' || (o === 'draft' ? it.status === 'draft' : o === 'dupes' ? !!it.duplicate_of && !it.duplicate_ok : originOf(it) === o)));
+    const keep = (it: Asset) => inView(it) && (o === 'unavailable' ? !isAvailable(it) : isAvailable(it) && (o === 'any' || (o === 'draft' ? it.status === 'draft' : o === 'dupes' ? isDupe(it) : originOf(it) === o)));
     if (s && hits && hits.key === curKey) {
       // Best matches first, then anything else whose words match (e.g. not made searchable yet).
       const ranked = hits.ids.map((id) => byId.get(id)).filter((it): it is Asset => !!it && keep(it));
@@ -498,7 +500,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       return [...ranked, ...items.filter((it) => !seen.has(it.id) && keep(it) && matchesQuery(it, s, hay.get(it.id)))];
     }
     return items.filter((it) => keep(it) && (!s || matchesQuery(it, s, hay.get(it.id))));
-  }, [items, inView, q, origin, showOrigins, hay, hits, curKey, byId, chips.length]);
+  }, [items, inView, q, origin, showOrigins, hay, hits, curKey, byId, chips.length, isDupe]);
 
   async function copyTile(it: Asset) {
     const u = emailSrcOf(it);
@@ -1255,7 +1257,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           figmaUrl={curWs?.figma_file_url}
           product={openAsset.product_id ? (() => { const p = itemById(openAsset.product_id); return p ? { id: p.id, name: p.name } : null; })() : null}
           suggested={openAsset.ai?.product?.id && !openAsset.product_id ? (() => { const p = itemById(openAsset.ai.product.id); return p ? { id: p.id, name: p.name } : null; })() : null}
-          duplicate={openAsset.duplicate_of ? (() => { const d = itemById(openAsset.duplicate_of); return d ? { id: d.id, name: d.name } : null; })() : null}
+          duplicate={isDupe(openAsset) ? (() => { const d = itemById(openAsset.duplicate_of); return d ? { id: d.id, name: d.name } : null; })() : null}
           onOpenAsset={(id) => { const a = itemById(id); if (!a) return; if (a.kind === 'product') openProduct(a); else openEditor(id); }}
           onRetag={async () => { if (await patchAsset(openAsset.id, { ai_status: 'pending', ai_attempts: 0, ai_error: null })) { kickTag(); toast('Organising…'); } }}
           supabase={supabase}
@@ -1496,9 +1498,9 @@ function Tile({ it, src, urls, used = 0, onOpen, onCopy }: { it: Asset; src: str
         )}
         {src && !/svg/.test(it.mime || '') && <CopyBtn onCopy={onCopy} />}
         {it.status === 'draft' && <span className="tag draft">To review</span>}
-        {(it.duplicate_of && !it.duplicate_ok) || it.on_brand === false ? (
+        {(it.duplicate_of && !it.duplicate_ok && it.kind !== 'product') || it.on_brand === false ? (
           <span className="flags">
-            {it.duplicate_of && !it.duplicate_ok && <span className="tag dup" title="Looks like a copy of another file">Duplicate?</span>}
+            {it.duplicate_of && !it.duplicate_ok && it.kind !== 'product' && <span className="tag dup" title="Looks like a copy of another file">Duplicate?</span>}
             {it.on_brand === false && <span className="tag offbrand" title={it.on_brand_reason || 'Doesn’t match the brand’s imagery rules'}>Off-brand</span>}
           </span>
         ) : null}

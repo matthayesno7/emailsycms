@@ -39,12 +39,14 @@ export const DUP_BITS = 5;
 const flat = (h: string) => /^(0+|f+)$/.test(h);
 
 // The earliest-added asset this hash matches, if any.
-export function findDuplicate<T extends { id: string; phash?: string | null; created_at?: string; kind?: string }>(hash: string, items: T[], self?: { id?: string; created_at?: string }) {
+export function findDuplicate<T extends { id: string; phash?: string | null; created_at?: string; kind?: string }>(hash: string, items: T[], self?: { id?: string; created_at?: string; kind?: string }) {
   if (!hash || flat(hash)) return null;
   let best: T | null = null;
   for (const o of items) {
     if (!o.phash || o.phash === '-' || o.id === self?.id || o.kind === 'block') continue;
     if (self?.created_at && o.created_at && o.created_at > self.created_at) continue;
+    // Different products shot the same way (same angle, white background) look alike: not copies.
+    if (self?.kind === 'product' && o.kind === 'product') continue;
     if (hamming(hash, o.phash) <= DUP_BITS && (!best || String(o.created_at) < String(best.created_at))) best = o;
   }
   return best;

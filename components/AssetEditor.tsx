@@ -2,7 +2,9 @@
 import { openInClaude } from '@/lib/openClaude';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { DEFAULT_CTA } from '@/lib/products';
+import { DEFAULT_CTA, productAsBlock } from '@/lib/products';
+import { BLOCK_TYPES } from '@/lib/blockTypes';
+import { FitPreview, Preview } from './BlockEditor';
 import { loadImg } from '@/lib/images';
 import { exportAs, type TeamPreset } from '@/lib/imageEdit';
 import type { BrandKit } from '@/lib/brandKit';
@@ -67,6 +69,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
     setEditingRaw(v);
   };
   const [zoom, setZoom] = useState<'fit' | '1x'>('fit');
+  const [pview, setPview] = useState<'card' | 'photo'>('card'); // products: the email card, or just the photo
   const [pmenu, setPmenu] = useState<{ x: number; y: number; left: boolean; up: boolean } | null>(null); // click the picture: its actions, where you clicked
   const [picking, setPicking] = useState(false); // choosing the focal point: only then is the picture clickable and the marker shown
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
@@ -232,11 +235,17 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         <div className="ed-body">
           <section className="ed-canvas" aria-label="Canvas">
             <div className="ed-tools">
+              {isProduct && (
+                <div className="seg" role="group" aria-label="Show">
+                  <button type="button" aria-pressed={pview === 'card'} onClick={() => setPview('card')}>Product card</button>
+                  <button type="button" aria-pressed={pview === 'photo'} onClick={() => setPview('photo')} disabled={!src}>Photo</button>
+                </div>
+              )}
               {it.kind === 'image' && src && !isVideo && (picking
                 ? <><span className="tip">Click the part of the picture that must stay in view when it’s cropped.</span><button type="button" className="btn quiet sm-btn" onClick={() => setPicking(false)}>Done</button></>
                 : <button type="button" className="btn quiet sm-btn" onClick={() => { setZoom('fit'); setPicking(true); }} title="The part Mise keeps in view whenever it crops this image">Focal point</button>)}
               <span className="spacer" />
-              {!isVideo && src && (
+              {!isVideo && src && !(isProduct && pview === 'card') && (
                 <div className="seg" role="group" aria-label="Zoom">
                   <button type="button" aria-pressed={zoom === 'fit'} onClick={() => setZoom('fit')}>Fit</button>
                   <button type="button" aria-pressed={zoom === '1x'} onClick={() => setZoom('1x')}>100%</button>
@@ -246,6 +255,12 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
             <div className={'ed-stage' + (zoom === '1x' ? ' actual' : '') + (it.kind !== 'image' ? ' light' : '')}>
               {isVideo && src ? (
                 <video className="ed-out" src={src} controls playsInline autoPlay muted loop />
+              ) : isProduct && pview === 'card' ? (
+                <button type="button" className="pe-card pv-card" onClick={startEdit} title="Edit the product card">
+                  <FitPreview width={300} fitHeight={false}>
+                    <Preview b={productAsBlock(it)} bt={BLOCK_TYPES.product.fields} slotSrc={() => src || undefined} />
+                  </FitPreview>
+                </button>
               ) : !src ? (
                 <p className="tip">No image yet.{it.pid ? <> Drop <code>{it.pid}.jpg</code> (or .png) onto the library and it attaches to this product.</> : null}</p>
               ) : (
@@ -276,7 +291,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                   {picking && <i className="ed-focus" style={{ left: `${focus.x * 100}%`, top: `${focus.y * 100}%` }} />}
                 </div>
               )}
-              {src && !isVideo && <span className="hint">Copy image, then <kbd>⌘</kbd> <kbd>V</kbd> in Figma, or <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>R</kbd> on a selected layer to replace its image</span>}
+              {isProduct && pview === 'card' ? <span className="hint">How it looks in an email, with your brand kit. Click it to edit.</span>
+                : src && !isVideo && <span className="hint">Copy image, then <kbd>⌘</kbd> <kbd>V</kbd> in Figma, or <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>R</kbd> on a selected layer to replace its image</span>}
             </div>
           </section>
 
@@ -290,6 +306,23 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 <p className="tip">{[it.provenance?.model, it.provenance?.style, it.provenance?.source_product_pid && `from product ${it.provenance.source_product_pid}`, it.provenance?.brand_kit_version && `brand kit v${it.provenance.brand_kit_version}`].filter(Boolean).join(' · ')}</p>
                 {madeIn === 'create' && canEdit && <p className="tip">Made in Create, so it’s edited here: <button type="button" className="linkish" onClick={() => setEditing('design')}>change the words, photos or logo</button>.</p>}
                 {madeIn === 'figma' && <p className="tip">Made in Figma, so it’s edited in Figma: <button type="button" className="linkish" onClick={() => setEditing('figma')}>say what to change</button> and Claude does it there.</p>}
+              </div>
+            )}
+
+            {it.kind === 'product' && (
+              <div className="ed-sec">
+                <div className="label">Product</div>
+                <div className="fields">
+                  <ProductField label="Label" value={it.fields?.eyebrow || ''} placeholder="e.g. New in" onSave={(v) => saveCopy('eyebrow', v)} onCopy={copyText} />
+                  <ProductField label="Description" long value={it.fields?.description || ''} placeholder="Short description for email" onSave={(v) => saveCopy('description', v)} onCopy={copyText} />
+                  <ProductField label="Alt text" long value={it.fields?.alt || ''} placeholder="Describe the product image" onSave={(v) => saveCopy('alt', v)} onCopy={copyText} />
+                  <ProductField label="Button" value={it.fields?.cta ?? DEFAULT_CTA} placeholder="No button" onSave={(v) => saveCopy('cta', v)} onCopy={copyText} />
+                  {([['Price', 'price'], ['Link', 'link'], ['PID', 'pid']] as [string, string][]).map(([label, f]) => (
+                    <ProductField key={f} label={label} mono value={it[f] || ''} onSave={async (v) => { if (await onPatch({ [f]: v || null })) toast('Saved'); }} onCopy={copyText} />
+                  ))}
+                </div>
+                {it.link && <a className="btn quiet pv-site" href={it.link} target="_blank" rel="noreferrer">View on the website ↗</a>}
+                <p className="tip">Name, label, description and button are yours: a feed sync won’t overwrite them once edited. Price, link and image always follow the feed.</p>
               </div>
             )}
 
@@ -339,22 +372,6 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 <div className="fields">
                   <ProductField label="Alt" long value={it.fields?.alt || ''} placeholder="Describe the image for people who can’t see it" onSave={async (v) => { if (await onPatch({ fields: { ...(it.fields || {}), alt: v } })) toast('Saved'); }} onCopy={copyText} />
                 </div>
-              </div>
-            )}
-
-            {it.kind === 'product' && (
-              <div className="ed-sec">
-                <div className="label">Product</div>
-                <div className="fields">
-                  <ProductField label="Label" value={it.fields?.eyebrow || ''} placeholder="e.g. New in" onSave={(v) => saveCopy('eyebrow', v)} onCopy={copyText} />
-                  <ProductField label="Description" long value={it.fields?.description || ''} placeholder="Short description for email" onSave={(v) => saveCopy('description', v)} onCopy={copyText} />
-                  <ProductField label="Alt text" long value={it.fields?.alt || ''} placeholder="Describe the product image" onSave={(v) => saveCopy('alt', v)} onCopy={copyText} />
-                  <ProductField label="Button" value={it.fields?.cta ?? DEFAULT_CTA} placeholder="No button" onSave={(v) => saveCopy('cta', v)} onCopy={copyText} />
-                  {([['Price', 'price'], ['Link', 'link'], ['PID', 'pid']] as [string, string][]).map(([label, f]) => (
-                    <ProductField key={f} label={label} mono value={it[f] || ''} onSave={async (v) => { if (await onPatch({ [f]: v || null })) toast('Saved'); }} onCopy={copyText} />
-                  ))}
-                </div>
-                <p className="tip">Name, label, description and button are yours: a feed sync won’t overwrite them once edited. Price, link and image always follow the feed.</p>
               </div>
             )}
 
