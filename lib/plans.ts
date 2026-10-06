@@ -20,9 +20,10 @@ export const PRICE = {
   overage: 50,         // 50p per Studio design over the allowance
 };
 
-// Free trial on Pro, card up front. One per brand: a brand that has had a subscription before doesn't get another.
-export const TRIAL_DAYS = 7;
-export const trialDaysFor = (row: { subscription_status?: string | null } | null | undefined) => (row?.subscription_status ? 0 : TRIAL_DAYS);
+// No trial: Free is how people try Mise, and Pro is charged from day one. (Set above 0 to bring a
+// card-up-front trial back; it's offered once per brand.)
+export const TRIAL_DAYS = 0;
+export const trialDaysFor = (row: { subscription_status?: string | null } | null | undefined) => (row?.subscription_status || !TRIAL_DAYS ? 0 : TRIAL_DAYS);
 
 export const gbp = (pence: number) => `£${(pence / 100).toLocaleString('en-GB', { minimumFractionDigits: pence % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 

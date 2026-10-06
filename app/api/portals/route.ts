@@ -81,7 +81,7 @@ export async function PATCH(request: Request) {
   const m = await member(p.workspace_id);
   if (m.error) return m.error;
   const f = await fields(db, p.workspace_id, b);
-  if (f.published && (await freeBrand(p.workspace_id))) return Response.json({ error: 'Publishing your portal is on Pro. Start your 7-day free trial to share it.', code: 'upgrade', reason: 'portal' }, { status: 402 });
+  if (f.published && (await freeBrand(p.workspace_id))) return Response.json({ error: 'Publishing your portal is on Pro. Upgrade to share it.', code: 'upgrade', reason: 'portal' }, { status: 402 });
   if ((f.access || p.access) === 'passcode' && !('passcode_hash' in f ? f.passcode_hash : p.passcode_hash)) return Response.json({ error: 'Set a passcode, or choose another kind of access.' }, { status: 400 });
   if (f.slug) f.slug = await freeSlug(db, p.workspace_id, f.slug, p.id);
   const { data, error } = await db.from('portals').update(f).eq('id', p.id).select('*').single();

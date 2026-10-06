@@ -71,7 +71,7 @@ export default function Sharing({ supabase, ws, items, folders, collections, toa
       {free && (
         <div className="upsell-strip" role="status">
           <span><b>Your team can preview portals.</b> Publishing them and sharing links is on Pro.</span>
-          <button className="btn" type="button" onClick={() => openUpgrade({ reason: tab === 'links' ? 'share' : 'portal' })}>Start free trial</button>
+          <button className="btn" type="button" onClick={() => openUpgrade({ reason: tab === 'links' ? 'share' : 'portal' })}>Upgrade to Pro</button>
         </div>
       )}
       {tab === 'portals' && (portals === null ? <p className="tip">Loading…</p> : cur ? (

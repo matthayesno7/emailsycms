@@ -72,7 +72,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         // Out of Studio designs for the month: the app shows the plan banner.
-        // Free: one Studio run, and no changing designs. The app opens the trial pop-up.
+        // Free: one Studio run, and no changing designs. The app opens the upgrade pop-up.
         if (json.code === 'upgrade') window.dispatchEvent(new CustomEvent('mise:upgrade', { detail: { reason: json.reason } }));
         if (json.code === 'limit') window.dispatchEvent(new CustomEvent('mise:limit', { detail: { workspace_id: ws.id, message: json.error, reason: json.reason } }));
         return { error: json.error || 'Something went wrong.' };

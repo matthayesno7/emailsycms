@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   if (!ws) return Response.json({ error: 'Workspace not found.' }, { status: 404 });
   const m = await member(ws);
   if (m.error) return m.error;
-  if (await freeBrand(ws)) return Response.json({ error: 'Sharing is on Pro. Start your 7-day free trial to share.', code: 'upgrade', reason: 'share' }, { status: 402 });
+  if (await freeBrand(ws)) return Response.json({ error: 'Sharing is on Pro. Upgrade to share.', code: 'upgrade', reason: 'share' }, { status: 402 });
   const kind = ['assets', 'folder', 'collection'].includes(b?.kind) ? b.kind : 'assets';
   const db = createAdminClient();
   const row: Record<string, any> = {

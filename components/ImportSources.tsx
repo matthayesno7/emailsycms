@@ -46,7 +46,7 @@ export default function ImportSources({ ws, folderId, folderName, onDone, toast,
     const p = { source, total: files.length, done: 0, added: 0, skipped: 0, failed: 0, to: extra.folder_name || folderName || undefined };
     setProgress({ ...p });
     let landed: string | null | undefined = undefined;
-    let held = 0; // Free's 50 files reached: stop and offer the trial
+    let held = 0; // Free's 50 files reached: stop and offer Pro
     for (let i = 0; i < files.length; i += 6) {
       if (held) { held += Math.min(6, files.length - i); continue; }
       const res = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws, folder_id: folderId, ...extra, files: files.slice(i, i + 6) }) }).catch(() => null);

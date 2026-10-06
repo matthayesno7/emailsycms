@@ -43,7 +43,7 @@ export async function importFile(db: SupabaseClient, o: {
   }).select('id').single();
   if (error) {
     await db.storage.from('assets').remove([storagePath]).catch(() => {});
-    return { error: /FREE_FILE_LIMIT/.test(error.message) ? 'FREE_FILE_LIMIT: Free includes 50 files. Start your free Pro trial to add more.' : error.message };
+    return { error: /FREE_FILE_LIMIT/.test(error.message) ? 'FREE_FILE_LIMIT: Free includes 50 files. Upgrade to Pro to add more.' : error.message };
   }
   return { id: data.id };
 }

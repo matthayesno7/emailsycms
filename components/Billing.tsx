@@ -192,7 +192,7 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     fetch(`/api/billing?workspace_id=${ws.id}`).then((r) => (r.ok ? r.json() : null))
-      .then((j) => setInfo(j ? { role: j.role, stripe: j.stripe, trial_days: ask.reason === 'brand' ? j.trial_days_new_brand ?? 7 : j.trial_days ?? 0, plan: j.billing?.plan } : { role: null, stripe: false, trial_days: 0, plan: 'free' }))
+      .then((j) => setInfo(j ? { role: j.role, stripe: j.stripe, trial_days: ask.reason === 'brand' ? j.trial_days_new_brand ?? 0 : j.trial_days ?? 0, plan: j.billing?.plan } : { role: null, stripe: false, trial_days: 0, plan: 'free' }))
       .catch(() => setInfo({ role: null, stripe: false, trial_days: 0, plan: 'free' }));
   }, [ws.id, ask.reason]);
   const t = pitch(ask, ws.name);
@@ -229,7 +229,7 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
         : canBuy ? (
           <>
             <button className="primary wide" type="button" disabled={busy} onClick={start}>{busy ? 'Opening checkout…' : trial ? `Start ${trial}-day free trial` : 'Upgrade to Pro'}</button>
-            <p className="upsell-fine">{trial ? `You won’t be charged today. After ${trial} days it’s ${interval === 'year' ? `${gbp(PRICE.year)} a year` : `${gbp(PRICE.month)} a month`} unless you cancel; cancel and you’re back on Free with all your files.` : 'Secure checkout with Stripe.'} By continuing you agree to the <a href="/terms" target="_blank">Terms</a>.</p>
+            <p className="upsell-fine">{trial ? `You won’t be charged today. After ${trial} days it’s ${interval === 'year' ? `${gbp(PRICE.year)} a year` : `${gbp(PRICE.month)} a month`} unless you cancel; cancel and you’re back on Free with all your files.` : `Secure checkout with Stripe. ${interval === 'year' ? 'Billed yearly' : 'Billed monthly'}; cancel any time and you’re back on Free with all your files.`} By continuing you agree to the <a href="/terms" target="_blank">Terms</a>.</p>
           </>
         ) : !info.stripe ? <p className="tip">Billing isn’t switched on yet.</p>
         : info.plan !== 'free' && !newBrand ? <p className="tip">{ws.name} is already on Pro.</p>

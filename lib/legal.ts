@@ -26,11 +26,10 @@ export const TERMS: Section[] = [
     'You need an account to use Mise. Keep your sign-in secure and tell us straight away if you think someone else has access. You are responsible for what happens in your account and in the brands you own, including what your teammates do.',
     'Each brand (workspace) has one or more owners. Owners control the brand’s plan, billing, members and settings.',
   ] },
-  { h: 'Plans, trials and payment', p: [
+  { h: 'Plans and payment', p: [
     'Free: you can try Mise without a card, within the limits shown in the app (currently a brand kit, up to 50 files and one Studio run per brand). We may change what Free includes.',
-    'Pro: £149 a month or £1,490 a year per brand, plus VAT where it applies. Pro brands get 200 Studio designs a month; each design beyond that costs 50p, up to a monthly cap the brand’s owner sets, and is billed in arrears on the next invoice.',
-    'Free trial: the first time a brand moves to Pro you can start a 7-day free trial. We take card details at the start. Unless you cancel before the trial ends, the subscription starts automatically and you are charged.',
-    'Subscriptions renew automatically at the end of each month or year until cancelled. You can cancel at any time in Settings → Plan → Manage billing; the brand stays on Pro until the end of the period you have paid for, then returns to Free. We do not refund part periods unless the law requires it.',
+    'Pro: £149 a month or £1,490 a year per brand, plus VAT where it applies, charged when you upgrade. Pro brands get 200 Studio designs a month; each design beyond that costs 50p, up to a monthly cap the brand’s owner sets, and is billed in arrears on the next invoice.',
+        'Subscriptions renew automatically at the end of each month or year until cancelled. You can cancel at any time in Settings → Plan → Manage billing; the brand stays on Pro until the end of the period you have paid for, then returns to Free. We do not refund part periods unless the law requires it.',
     'Payments are processed by Stripe. If a payment fails we will retry it, and we may move the brand to Free if it remains unpaid.',
     'We may change prices with at least 30 days’ notice by email. A change takes effect from your next renewal after the notice period; you can cancel before then.',
   ] },

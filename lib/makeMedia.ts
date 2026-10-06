@@ -13,7 +13,7 @@ export type Fail = { error: string; code?: 'off' | 'upgrade' | 'limit' | 'bad'; 
 const fail = (error: string, code: Fail['code'], status: number): Fail => ({ error, code, status });
 
 async function gate(db: any, wsId: string, what: string): Promise<Fail | null> {
-  if (db && (await planOf(db, wsId)).plan === 'free') return fail(`${what} is on Pro. Start your 7-day free trial in Settings › Plan & usage.`, 'upgrade', 402);
+  if (db && (await planOf(db, wsId)).plan === 'free') return fail(`${what} is on Pro. Upgrade in Settings › Plan & usage.`, 'upgrade', 402);
   return null;
 }
 

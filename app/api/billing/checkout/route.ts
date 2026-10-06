@@ -43,7 +43,7 @@ export async function POST(request: Request) {
         customer: c.id,
         client_reference_id: who.user.id,
         metadata: { kind: 'new_brand', brand_name: newBrand, user_id: who.user.id },
-        subscription_data: { metadata: { kind: 'new_brand', user_id: who.user.id }, trial_period_days: TRIAL_DAYS },
+        subscription_data: { metadata: { kind: 'new_brand', user_id: who.user.id }, ...(TRIAL_DAYS ? { trial_period_days: TRIAL_DAYS } : {}) },
         payment_method_collection: 'always',
         success_url: `${origin}/?billing=new-brand`,
         cancel_url: `${origin}/?billing=cancelled`,
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       customer,
       client_reference_id: who.user.id,
       metadata: { kind: 'upgrade', workspace_id: who.ws.id, user_id: who.user.id },
-      // Free trial (card up front) the first time a brand goes Pro.
+      // A trial only when TRIAL_DAYS is set (it's off: Free is the way to try).
       subscription_data: { metadata: { workspace_id: who.ws.id }, ...(trialDaysFor(row) ? { trial_period_days: trialDaysFor(row) } : {}) },
       payment_method_collection: 'always',
       success_url: `${origin}/?billing=upgraded&ws=${who.ws.id}`,

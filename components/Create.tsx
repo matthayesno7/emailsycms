@@ -157,7 +157,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     }
   }
   function openMade(id: string) { const a = items.find((i) => i.id === id); if (a) onOpen(a); else { onSaved(); onReview(); } }
-  // Free: one Studio run. A different brief after it opens the trial pop-up straight away,
+  // Free: one Studio run. A different brief after it opens the upgrade pop-up straight away,
   // instead of starting designs that can't be made.
   const [freeRun, setFreeRun] = useState<{ free: boolean; run: string | null }>({ free: false, run: null });
   useEffect(() => {

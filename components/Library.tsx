@@ -647,7 +647,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     for (const f of list.filter((f) => /\.csv$/i.test(f.name) || f.type === 'text/csv')) await importFeed(f);
     let vids = list.filter((f) => /^video\/(mp4|webm|quicktime)/.test(f.type));
     let imgs = list.filter((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name));
-    // Free: up to 50 files. Add what fits, then offer the trial for the rest.
+    // Free: up to 50 files. Add what fits, then offer Pro for the rest.
     let held = 0;
     if (plan === 'free' && view !== 'block') {
       const room = Math.max(0, FREE_FILES - fileCount);
@@ -937,7 +937,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const ownFiles = items.some((a) => a.kind !== 'block' && a.provenance?.via !== 'brand_kit');
   const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); };
   const library = (k: string, o = 'any') => { setView(k); setOrigin(o); go('library'); };
-  // Free is a taster: sharing is on Pro, so asking to share opens the trial pop-up instead.
+  // Free is a taster: sharing is on Pro, so asking to share opens the upgrade pop-up instead.
   useEffect(() => {
     if (shareTarget && plan === 'free') { setShareTarget(null); openUpgrade({ reason: 'share' }); }
   }, [shareTarget, plan]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1163,9 +1163,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               {plan === 'free' && fileCount >= FREE_FILES - 10 && !q.trim() && (
                 <div className="upsell-strip" role="status">
                   <span>{fileCount >= FREE_FILES
-                    ? <><b>Your {FREE_FILES} free files are in.</b> Start your free trial to add the rest of your library.</>
+                    ? <><b>Your {FREE_FILES} free files are in.</b> Upgrade to Pro to add the rest of your library.</>
                     : <><b>{fileCount} of {FREE_FILES}</b> free files used.</>}</span>
-                  <button className="btn" type="button" onClick={() => openUpgrade({ reason: 'files' })}>Start free trial</button>
+                  <button className="btn" type="button" onClick={() => openUpgrade({ reason: 'files' })}>Upgrade to Pro</button>
                 </div>
               )}
 
