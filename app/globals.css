@@ -1400,3 +1400,18 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .mk-tile:hover{border-color:var(--ink-3)}
 .mk-actions{display:flex;align-items:center;gap:10px}
 @media (max-width:640px){.mk-head{flex-wrap:wrap}.mk-prompt{white-space:normal}}
+
+/* Assets: live "organising" strip */
+.lsync{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;padding:9px 14px;margin:0 0 14px;background:var(--bg);font-size:13.5px;color:var(--ink-2)}
+.lsync b{color:var(--ink);font-weight:600}
+.lsync .bad{color:var(--danger,#b4231a)}
+.lsync-text{flex:1;min-width:200px}
+.lsync-dot{width:8px;height:8px;border-radius:50%;background:#c98a1e;flex:none}
+.lsync.on .lsync-dot{background:var(--accent);animation:lsync-pulse 1.4s ease-in-out infinite}
+.lsync.done .lsync-dot{background:#2f8a4c}
+.lsync-meter{width:140px;height:5px;border-radius:999px;background:var(--surface);overflow:hidden;flex:none}
+.lsync-meter i{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .6s ease}
+.lsync.done .lsync-meter i{background:#2f8a4c}
+@keyframes lsync-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.lsync.on .lsync-dot{animation:none}.lsync-meter i{transition:none}}
+@media (max-width:640px){.lsync-meter{width:100%;order:5}}

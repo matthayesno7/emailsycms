@@ -95,6 +95,21 @@ async function imageUrl(ctx: Ctx, a: any): Promise<{ url?: string; error?: strin
   return data?.signedUrl ? { url: data.signedUrl } : { error: 'Couldn’t read the file.' };
 }
 
+// The image as base64 for Claude (JPEG, PNG, GIF or WebP, up to 5 MB).
+async function inlineImage(url: string): Promise<{ type: string; data: string } | null> {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const type = (r.headers.get('content-type') || '').split(';')[0].trim();
+    if (!/^image\/(jpeg|png|gif|webp)$/.test(type)) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > 5_000_000) return null;
+    return { type, data: buf.toString('base64') };
+  } catch {
+    return null;
+  }
+}
+
 async function tagOne(ctx: Ctx, a: any): Promise<'done' | 'failed' | 'limited' | 'paused'> {
   try {
     const kit = await kitFor(ctx, a.workspace_id);
@@ -117,15 +132,24 @@ async function tagOne(ctx: Ctx, a: any): Promise<'done' | 'failed' | 'limited' |
     if (!take.ok) return fail(ctx, a, limitMessage('tag'), true);
     const products = a.kind === 'product' ? [] : shortlist(await productsFor(ctx, a.workspace_id), a.name, folder);
     const input = { name: a.name, kind: a.kind, folder, kit, products };
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const ask = (source: Record<string, string>) => fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: TAG_MODEL,
         max_tokens: 700,
-        messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'url', url: src.url } }, { type: 'text', text: tagPrompt(input) }] }],
+        messages: [{ role: 'user', content: [{ type: 'image', source }, { type: 'text', text: tagPrompt(input) }] }],
       }),
     });
+    let res = await ask({ type: 'url', url: src.url! });
+    // Claude sometimes can't fetch a storage link ("Unable to download the file"): send the image itself instead.
+    if (res.status === 400) {
+      const body = await res.clone().text().catch(() => '');
+      if (/download|fetch|url/i.test(body)) {
+        const inline = await inlineImage(src.url!);
+        if (inline) res = await ask({ type: 'base64', media_type: inline.type, data: inline.data });
+      }
+    }
     if (res.status === 429 || res.status === 529) { await release(ctx, a); return 'limited'; }
     if (!res.ok) {
       const body = await res.text().catch(() => '');

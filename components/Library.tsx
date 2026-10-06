@@ -28,6 +28,7 @@ import ShareDialog, { type ShareTarget } from './ShareDialog';
 import Review from './Review';
 import { reviewQueue } from '@/lib/review';
 import { PlanSettings, UpgradeModal, openUpgrade, type UpgradeAsk } from './Billing';
+import LibrarySync from './LibrarySync';
 import { countsAsFile, effectivePlan, FREE_FILES, freeLimitOf, mb, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, tooBig, type Plan } from '@/lib/plans';
 import { expiresSoon, isAvailable, lifecycleOf, LIFECYCLE } from '@/lib/lifecycle';
 
@@ -1159,6 +1160,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   </select>
                 )}
               </div>}
+
+              {!q.trim() && <LibrarySync ws={ws} nudge={items.length} onProgress={() => loadAssets(ws)} onDetails={() => openSettings('plan')} toast={toast} />}
 
               {plan === 'free' && fileCount >= FREE_FILES - 10 && !q.trim() && (
                 <div className="upsell-strip" role="status">
