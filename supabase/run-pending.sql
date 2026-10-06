@@ -690,7 +690,7 @@ begin
   r := public.role_in(coalesce(new.workspace_id, old.workspace_id));
   if r is null then return coalesce(new, old); end if; -- row level security already decides
   if r in ('owner', 'admin', 'editor') then return coalesce(new, old); end if;
-  if tg_op = 'UPDATE' and (to_jsonb(new) - '{phash,duplicate_of,updated_at}'::text[]) = (to_jsonb(old) - '{phash,duplicate_of,updated_at}'::text[]) then return new; end if;
+  if tg_op = 'UPDATE' and (to_jsonb(new) - '{phash,duplicate_of,updated_at,search}'::text[]) = (to_jsonb(old) - '{phash,duplicate_of,updated_at,search}'::text[]) then return new; end if;
   if r = 'viewer' then raise exception 'ROLE: Viewers can look and download, not change files. Ask an admin for edit access.'; end if;
   -- contributor
   if tg_op = 'INSERT' then new.status := 'draft'; return new; end if;

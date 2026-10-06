@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { whoFor } from '@/lib/billingAuth';
 import { billingRow, ensureCustomer, proLineItems } from '@/lib/billing';
-import { currencyOf, effectivePlan, isCurrency, TRIAL_DAYS, trialDaysFor, type Interval } from '@/lib/plans';
+import { currencyOf, effectivePlan, TRIAL_DAYS, trialDaysFor, type Interval } from '@/lib/plans';
 import { hasStripe, stripe } from '@/lib/stripe';
 import { publicOrigin } from '@/lib/origin';
 
@@ -22,19 +22,20 @@ export async function POST(request: Request) {
   const origin = publicOrigin(request);
   const db = createAdminClient();
   const tax = process.env.STRIPE_TAX === '1';
-  // The currency the person was shown (GBP in the UK, USD elsewhere). The prices carry both.
-  const currency = isCurrency(b?.currency) ? b.currency : currencyOf(request.headers);
+  // Prices are shown in US dollars. Checkout charges USD, except in the UK, where Stripe shows the
+  // price in pounds (the same prices carry both currencies).
+  const uk = currencyOf(request.headers) === 'gbp';
 
   const common = {
     mode: 'subscription',
-    currency,
+    ...(uk ? {} : { currency: 'usd' }),
     line_items: proLineItems(interval),
     allow_promotion_codes: 'true',
     billing_address_collection: 'required',
     tax_id_collection: { enabled: 'true' },
     customer_update: { address: 'auto', name: 'auto' },
     ...(tax ? { automatic_tax: { enabled: 'true' } } : {}),
-    locale: currency === 'gbp' ? 'en-GB' : 'auto',
+    locale: uk ? 'en-GB' : 'auto',
   };
 
   try {

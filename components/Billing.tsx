@@ -62,7 +62,7 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
   const owner = s.role === 'owner';
   const pro = b.plan !== 'free';
   const d = s.designs;
-  const cur: Currency = s.currency || 'gbp';
+  const cur: Currency = s.currency || 'usd';
   const P = PRICES[cur];
   const fmt = (m: number) => money(m, cur);
   const pc = d.allowance ? Math.min(100, Math.round((Math.min(d.used, d.allowance) / d.allowance) * 100)) : 100;
@@ -128,7 +128,7 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
             : (
               <div className="plan-actions">
                 <button className="primary" type="button" onClick={() => openUpgrade({ reason: 'general' })}>{s.trial_days ? `Start ${s.trial_days}-day free trial` : `Upgrade ${ws.name}`}</button>
-                <p className="tip">or {fmt(P.year)} a year (2 months free). Plus {cur === 'gbp' ? 'VAT' : 'any sales tax'}. Cancel any time.</p>
+                <p className="tip">or {fmt(P.year)} a year (2 months free). Plus applicable taxes. Cancel any time.</p>
               </div>
             )}
         </section>
@@ -196,10 +196,10 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     fetch(`/api/billing?workspace_id=${ws.id}`).then((r) => (r.ok ? r.json() : null))
-      .then((j) => setInfo(j ? { role: j.role, stripe: j.stripe, trial_days: ask.reason === 'brand' ? j.trial_days_new_brand ?? 0 : j.trial_days ?? 0, plan: j.billing?.plan, currency: j.currency || 'gbp' } : { role: null, stripe: false, trial_days: 0, plan: 'free', currency: 'gbp' }))
-      .catch(() => setInfo({ role: null, stripe: false, trial_days: 0, plan: 'free', currency: 'gbp' }));
+      .then((j) => setInfo(j ? { role: j.role, stripe: j.stripe, trial_days: ask.reason === 'brand' ? j.trial_days_new_brand ?? 0 : j.trial_days ?? 0, plan: j.billing?.plan, currency: j.currency || 'usd' } : { role: null, stripe: false, trial_days: 0, plan: 'free', currency: 'usd' }))
+      .catch(() => setInfo({ role: null, stripe: false, trial_days: 0, plan: 'free', currency: 'usd' }));
   }, [ws.id, ask.reason]);
-  const cur: Currency = info?.currency || 'gbp';
+  const cur: Currency = info?.currency || 'usd';
   const P = PRICES[cur];
   const fmt = (m: number) => money(m, cur);
   const t = pitch(ask, ws.name, cur);
@@ -225,7 +225,7 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
           {trial > 0 && <span className="trial-pill">{trial}-day free trial</span>}
         </div>
         <p className="upsell-sub">
-          {newBrand ? `For ${ask.brand || 'your new brand'}` : `For ${ws.name}`} · plus {cur === 'gbp' ? 'VAT' : 'any sales tax'} · cancel any time ·{' '}
+          {newBrand ? `For ${ask.brand || 'your new brand'}` : `For ${ws.name}`} · plus applicable taxes · cancel any time ·{' '}
           <button type="button" className="linkish" onClick={() => setPeriod(interval === 'year' ? 'month' : 'year')}>
             {interval === 'year' ? `or ${fmt(P.month)} a month` : `or ${fmt(P.year)} a year (2 months free)`}
           </button>
