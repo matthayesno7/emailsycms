@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { designAllowance, FREE_FILES, gbp, PRICE, type Billing, type Interval } from '@/lib/plans';
 import type { Ws } from './Library';
+import AutoOrganise from './AutoOrganise';
 
 type State = {
   billing: Billing; role: string | null; stripe: boolean; trial_days: number;
@@ -28,6 +29,17 @@ const PRO_ADDS = [
   'Licence expiry dates, with expired files blocked automatically',
   'Mark files obsolete and point people to the replacement',
 ];
+
+function Meter({ label, used, max }: { label: string; used: number; max: number }) {
+  const pc = max ? Math.min(100, Math.round((used / max) * 100)) : 100;
+  return (
+    <div className={'usage-row' + (pc >= 100 ? ' full' : pc >= 80 ? ' near' : '')}>
+      <span>{label}</span>
+      <span className="usage-meter" aria-label={`${used} of ${max}`}><i style={{ width: `${pc}%` }} /></span>
+      <span className="state">{Math.min(used, max).toLocaleString()} of {max.toLocaleString()}</span>
+    </div>
+  );
+}
 
 const priceLine = (i: Interval) => (i === 'year' ? `${gbp(PRICE.year)} a year per brand` : `${gbp(PRICE.month)} a month per brand`);
 
@@ -66,16 +78,16 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
 
   return (
     <div className="settings plan">
-      <h2>Plan</h2>
+      <h2>Plan & usage</h2>
 
-      <div className="plan-card">
+      <section className="plan-card">
         <div className="plan-head">
           <div>
-            <div className="plan-name">{ws.name} is on <b>{pro ? 'Pro' : 'Free'}</b></div>
+            <div className="plan-name">{ws.name} is on <b>{pro ? 'Pro' : 'Free'}</b>{pro && b.status === 'trialing' && <span className="trial-tag">Trial</span>}</div>
             <p className="tip">
               {pro
-                ? <>{b.interval === 'year' ? priceLine('year') : priceLine('month')}{b.current_period_end ? (b.cancel_at_period_end ? ` · ends ${day(b.current_period_end)}` : ` · renews ${day(b.current_period_end)}`) : ''}{b.status === 'past_due' ? ' · payment failed, Stripe is retrying' : ''}</>
-                : `Try Mise free: your brand kit, up to ${s.free.files_max} files and one Studio run. No card needed.`}
+                ? <>{b.interval === 'year' ? priceLine('year') : priceLine('month')}{b.current_period_end ? (b.cancel_at_period_end ? ` · ends ${day(b.current_period_end)}` : b.status === 'trialing' ? ` · trial ends ${day(b.current_period_end)}` : ` · renews ${day(b.current_period_end)}`) : ''}{b.status === 'past_due' ? ' · payment failed, Stripe is retrying' : ''}</>
+                : 'A taster of Mise: your brand kit, up to 50 files and one Studio run. No card needed.'}
             </p>
           </div>
           {pro && owner && s.stripe && b.has_customer && (
@@ -83,65 +95,63 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
           )}
         </div>
 
-        {!pro ? (
-          <div className="plan-usage">
-            <div className="ao-urow">
-              <span>Files</span>
-              <div className="ao-meter small" aria-label={`${s.free.files} of ${s.free.files_max} free files`}><i style={{ width: `${Math.min(100, Math.round((s.free.files / s.free.files_max) * 100))}%` }} /></div>
-              <span className="muted">{Math.min(s.free.files, s.free.files_max)} of {s.free.files_max}</span>
-            </div>
-            <div className="ao-urow">
-              <span>Studio run</span><span />
-              <span className="muted">{s.free.studio_used ? 'Used' : 'Not used yet'}</span>
-            </div>
-            <p className="tip">Sharing, editing, more files and more Studio are on Pro.</p>
-          </div>
-        ) : (
-        <div className="plan-usage">
-          <div className="ao-urow">
-            <span>Studio designs this month</span>
-            <div className="ao-meter small" aria-label={`${pc}% of the allowance used`}><i style={{ width: `${pc}%` }} /></div>
-            <span className="muted">{Math.min(d.used, d.allowance)} of {d.allowance}</span>
-          </div>
-          {pro && d.extra > 0 && <p className="tip">Plus <b>{d.extra}</b> extra design{d.extra === 1 ? '' : 's'} ({gbp(d.extra_pence)}), on the next invoice.</p>}
-          <p className="tip">Resets on {day(d.resets)}. Files, storage, organising and search are unlimited.</p>
+        <div className="usage-grid">
+          {!pro ? (
+            <>
+              <Meter label="Files" used={s.free.files} max={s.free.files_max} />
+              <div className="usage-row"><span>Studio run</span><span className={'state ' + (s.free.studio_used ? 'used' : 'ok')}>{s.free.studio_used ? 'Used' : 'Available'}</span></div>
+              <div className="usage-row"><span>Sharing and editing</span><span className="state locked">On Pro</span></div>
+            </>
+          ) : (
+            <>
+              <div className="usage-row"><span>Files</span><span className="state ok">{s.free.files.toLocaleString()} · unlimited</span></div>
+              <Meter label="Studio designs this month" used={Math.min(d.used, d.allowance)} max={d.allowance} />
+              {d.extra > 0 && <div className="usage-row"><span>Extra designs</span><span className="state">{d.extra} · {gbp(d.extra_pence)} on the next invoice</span></div>}
+            </>
+          )}
         </div>
-        )}
-      </div>
-
-      {pro && (
-        <form className="bf" onSubmit={saveCap}>
-          <div className="bl"><label htmlFor="cap">Monthly cap for extra designs</label></div>
-          <div className="row-inline">
-            <span className="prefix">£</span>
-            <input id="cap" className="in short" type="number" min={0} max={10000} step={1} value={cap} disabled={!owner} onChange={(e) => setCap(e.target.value)} />
-            {owner && <button className="btn" type="submit" disabled={busy}>Save</button>}
-          </div>
-          <p className="tip">After {d.allowance} designs, each extra one is {gbp(PRICE.overage)}. Studio pauses when this cap is reached; £0 switches extras off. {d.extra_left > 0 ? `${d.extra_left} more extra designs fit this month.` : ''}</p>
-        </form>
-      )}
+        {pro && <p className="tip">Studio designs reset on {day(d.resets)}.</p>}
+      </section>
 
       {!pro && (
-        <div className="plan-upgrade">
-          <h3>Pro</h3>
-          <ul>{PRO_ADDS.map((t) => <li key={t}>{t}</li>)}</ul>
+        <section className="plan-upgrade">
+          <div className="pu-head">
+            <h3>Pro</h3>
+            <span className="pu-price"><b>{gbp(PRICE.month)}</b> / month per brand{s.trial_days ? <span className="trial-pill">{s.trial_days}-day free trial</span> : null}</span>
+          </div>
+          <ul className="upsell-list">{PRO_ADDS.map((t) => <li key={t}>{t}</li>)}</ul>
           {!s.stripe ? <p className="tip">Billing isn’t switched on yet.</p>
             : !owner ? <p className="tip">Ask an owner of {ws.name} to upgrade it.</p>
             : (
               <div className="plan-actions">
                 <button className="primary" type="button" onClick={() => openUpgrade({ reason: 'general' })}>{s.trial_days ? `Start ${s.trial_days}-day free trial` : `Upgrade ${ws.name}`}</button>
-                <p className="tip">{priceLine('month')} or {gbp(PRICE.year)} a year, plus VAT. Cancel any time.</p>
+                <p className="tip">or {gbp(PRICE.year)} a year (2 months free). Plus VAT. Cancel any time.</p>
               </div>
             )}
-        </div>
+        </section>
       )}
+
+      {pro && (
+        <form className="plan-sec" onSubmit={saveCap}>
+          <h3>Extra Studio designs</h3>
+          <div className="row-inline">
+            <label htmlFor="cap" className="tip">Monthly cap</label>
+            <span className="prefix">£</span>
+            <input id="cap" className="in short" type="number" min={0} max={10000} step={1} value={cap} disabled={!owner} onChange={(e) => setCap(e.target.value)} />
+            {owner && <button className="btn" type="submit" disabled={busy}>Save</button>}
+          </div>
+          <p className="tip">After {d.allowance} designs a month, each extra one is {gbp(PRICE.overage)}. Studio pauses at the cap; £0 switches extras off.{d.extra_left > 0 ? ` ${d.extra_left} more fit this month.` : ''}</p>
+        </form>
+      )}
+
+      <AutoOrganise ws={ws.id} toast={toast} />
     </div>
   );
 }
 
 // ---------- the upgrade pop-up ----------
 // One plan, one button, opened right where the free plan holds something back.
-export type UpgradeReason = 'files' | 'studio' | 'share' | 'edit' | 'organise' | 'designs' | 'lifecycle' | 'brand' | 'general';
+export type UpgradeReason = 'portal' | 'files' | 'studio' | 'share' | 'edit' | 'organise' | 'designs' | 'lifecycle' | 'brand' | 'general';
 export type UpgradeAsk = { reason: UpgradeReason; count?: number; brand?: string };
 
 // Anything in the app can ask for it: the app shell listens and opens the pop-up.
@@ -155,6 +165,7 @@ function pitch(ask: UpgradeAsk, wsName: string) {
   switch (ask.reason) {
     case 'files': return { h: 'Bring in the rest of your library', p: `You’ve tried Mise with ${FREE_FILES} files${ask.count ? `; ${ask.count.toLocaleString()} more ${ask.count === 1 ? 'is' : 'are'} waiting to come in` : ''}. Pro takes your whole library, every file organised and searchable the moment it’s added.` };
     case 'studio': return { h: 'Keep creating', p: `That was your free Studio run. Pro gives you ${designAllowance('pro')} designs a month, on brand every time, then ${gbp(PRICE.overage)} each up to a cap you set.` };
+    case 'portal': return { h: 'Publish your brand portal', p: 'Your portal is built and styled from your brand kit. Publish it to give agencies, retailers and partners one place for your logos, images and guidelines, and see who downloads what.' };
     case 'share': return { h: 'Share with your team, agencies and retailers', p: 'Send links to files, folders and collections, and publish a brand portal styled from your brand kit. See who viewed and downloaded what.' };
     case 'edit': return { h: 'Edit without leaving Mise', p: 'Crop, resize and retouch photos, change Studio designs, ask Claude to edit in Figma, and restore any earlier version.' };
     case 'organise': return { h: 'Organise your whole library today', p: `${ask.count ? `${ask.count.toLocaleString()} file${ask.count === 1 ? ' is' : 's are'}` : 'Some files are'} uploaded but waiting to be organised. On Pro, every file is tagged, described and searchable the moment it’s added. On Free, they carry on from ${nextFirst()}.` };

@@ -123,7 +123,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (r === 'connected') { setBoxReturn(true); setModal('import'); }
     else setTimeout(() => toast(r === 'cancelled' ? 'Box wasn’t connected.' : 'Couldn’t connect Box. Try again.'), 300);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [settingsTab, setSettingsTab] = useState<'workspace' | 'plan' | 'organise' | 'members' | 'claude' | 'help'>('workspace');
+  const [settingsTab, setSettingsTab] = useState<'workspace' | 'plan' | 'members' | 'claude' | 'help'>('workspace');
   const [upgrade, setUpgrade] = useState<UpgradeAsk | null>(null);  // the upgrade pop-up, and why it opened
   const [limitHit, setLimitHit] = useState<{ message: string; reason?: string } | null>(null);  // out of Studio designs this month
   const [plan, setPlan] = useState<Plan>('free');
@@ -1046,7 +1046,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             <div className="settings-page">
               <div className="head"><h1>Settings</h1></div>
               <div className="seg tabs" role="tablist">
-                {([['workspace', 'Brand workspace'], ['plan', 'Plan'], ['organise', 'Auto-organise'], ['members', 'Team'], ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
+                {([['workspace', 'Brand workspace'], ['plan', 'Plan & usage'], ['members', 'Team'], ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
                   <button key={k} type="button" role="tab" aria-pressed={settingsTab === k} onClick={() => setSettingsTab(k)}>{l}{k === 'claude' && !connected ? ' •' : ''}</button>
                 ))}
               </div>
@@ -1059,14 +1059,13 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     else location.href = '/'; // no brands left: start fresh
                   }} />}
                 {settingsTab === 'plan' && <PlanSettings key={curWs.id} ws={curWs} toast={toast} />}
-                {settingsTab === 'organise' && <AutoOrganise ws={curWs.id} toast={toast} canUpgrade={plan === 'free'} />}
                 {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
                 {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
               </div>
             </div>
           ) : page === 'sharing' && curWs ? (
-            <Sharing key={curWs.id} supabase={supabase} ws={curWs} items={items} folders={folders} collections={collections.map((c) => ({ id: c.id, name: c.name }))} toast={toast} />
+            <Sharing key={curWs.id} free={plan === 'free'} supabase={supabase} ws={curWs} items={items} folders={folders} collections={collections.map((c) => ({ id: c.id, name: c.name }))} toast={toast} />
           ) : page === 'brand' && curWs ? (
             ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); loadWorkspaces(ws); }}
               autoSite={autoSite}

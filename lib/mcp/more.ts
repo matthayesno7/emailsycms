@@ -621,7 +621,8 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
     case 'save_portal': {
       const w = await workspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
-      { const locked = await proOnly(ctx, w.ws.id, 'share'); if (locked) return toolError(locked); }
+      // Free: the portal can be built and previewed by the team; publishing it is on Pro.
+      if (args.published === true && (await proOnly(ctx, w.ws.id, 'share'))) return toolError('The portal can be set up on Free, but publishing it is on Pro. Save it without published: true, and the brand’s owner can start a 7-day free trial in Mise → Settings → Plan to publish.');
       const db = need(ctx);
       const f: Record<string, any> = {};
       if (typeof args.name === 'string') f.name = args.name.trim().slice(0, 80) || 'Brand portal';

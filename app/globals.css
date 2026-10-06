@@ -1288,3 +1288,39 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .upsell-strip b{color:var(--ink)}
 
 .ao-done{margin:4px 0 0;padding:12px 14px;border-radius:10px;background:var(--surface);color:var(--ink);font-size:14.5px}
+
+.portal-locked{display:flex;flex-direction:column;align-items:flex-start;gap:10px;border:1px dashed var(--line-strong);border-radius:12px;padding:12px 14px;background:var(--side)}
+.portal-locked .tip{margin:0}
+
+/* ---------- Settings → Plan & usage ---------- */
+.settings.plan{gap:18px}
+.plan-card{gap:12px}
+.plan-name{display:flex;align-items:center;gap:8px}
+.trial-tag{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.usage-grid{display:flex;flex-direction:column;border-top:1px solid var(--line);padding-top:4px}
+.usage-row{display:grid;grid-template-columns:minmax(150px,1.1fr) 2fr minmax(110px,auto);align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid var(--line-soft);font-size:14px;color:var(--ink)}
+.usage-row:last-child{border-bottom:0}
+.usage-row>span:first-child{color:var(--ink-body)}
+.usage-row .state{grid-column:3;justify-self:end;color:var(--ink-2);font-variant-numeric:tabular-nums;font-size:13.5px}
+.usage-row .state.ok{color:var(--success)}
+.usage-row .state.used{color:var(--ink-3)}
+.usage-row .state.locked{color:var(--accent);font-weight:500}
+.usage-meter{display:block;height:6px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.usage-meter i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.usage-row.near .usage-meter i{background:#c98a1b}
+.usage-row.full .usage-meter i{background:#b23b3b}
+.plan-upgrade .pu-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.plan-upgrade .pu-head h3{margin:0}
+.pu-price{display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:14px}
+.pu-price b{font-family:var(--display);font-size:22px;color:var(--ink)}
+.pu-price .trial-pill{font-family:var(--mono);font-size:11.5px;background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:2px 7px}
+.plan-upgrade .upsell-list{list-style:none;margin:0 0 14px;padding:0;display:flex;flex-direction:column;gap:7px}
+.plan-sec{border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px}
+.plan-sec h3{margin:0;font-size:15px}
+.plan-sec .tip{margin:0}
+.lib-status{display:flex;gap:10px;align-items:baseline;font-size:14.5px;color:var(--ink)}
+.lib-status b{font-weight:600}
+.lib-status .muted{color:var(--ink-2)}
+.lib-dot{flex:none;width:8px;height:8px;border-radius:50%;background:#c98a1b;transform:translateY(-1px)}
+.lib-dot.ok{background:var(--success)}
+@media (max-width:640px){.usage-row{grid-template-columns:1fr auto}.usage-row .usage-meter{grid-column:1 / -1;grid-row:2}.usage-row .state{grid-column:2;grid-row:1}}

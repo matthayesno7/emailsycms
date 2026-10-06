@@ -12,7 +12,8 @@ const FORMATS: [string, string][] = [['original', 'Original'], ['web', 'Web (200
 const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 // Sharing: brand portals (public pages styled from the brand kit) and every share link.
-export default function Sharing({ supabase, ws, items, folders, collections, toast }: {
+export default function Sharing({ supabase, ws, items, folders, collections, toast, free = false }: {
+  free?: boolean; // Free: portals can be built and previewed; publishing and links are on Pro
   supabase: SupabaseClient;
   ws: Ws;
   items: Asset[];
@@ -49,12 +50,11 @@ export default function Sharing({ supabase, ws, items, folders, collections, toa
     const r = await fetch('/api/portals', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, name: `${ws.name} brand portal`, slug: 'brand' }) }).catch(() => null);
     const j = r ? await r.json().catch(() => null) : null;
     setBusy(false);
-    if (j?.code === 'upgrade') { openUpgrade({ reason: 'share' }); return; }
     if (!r?.ok || !j?.portal) { toast(j?.error || 'Couldn’t create the portal.'); return; }
     setPortals((ps) => [...(ps || []), j.portal]);
     if (j.ws_slug) setSlug(j.ws_slug);
     setEditing(j.portal.id);
-    toast('Your portal is live, styled from your brand kit');
+    toast(free ? 'Your portal is ready to preview, styled from your brand kit' : 'Your portal is live, styled from your brand kit');
   }
 
   const cur = portals?.find((p) => p.id === editing) || null;
@@ -69,7 +69,7 @@ export default function Sharing({ supabase, ws, items, folders, collections, toa
       </div>
 
       {tab === 'portals' && (portals === null ? <p className="tip">Loading…</p> : cur ? (
-        <PortalEditor key={cur.id} portal={cur} wsSlug={slug} origin={origin} folders={folders} collections={collections} items={items} events={events.filter((e) => e.portal_id === cur.id)} toast={toast}
+        <PortalEditor key={cur.id} free={free} portal={cur} wsSlug={slug} origin={origin} folders={folders} collections={collections} items={items} events={events.filter((e) => e.portal_id === cur.id)} toast={toast}
           onBack={() => setEditing(null)}
           onSaved={(p) => setPortals((ps) => (ps || []).map((x) => (x.id === p.id ? p : x)))}
           onDelete={async () => { const { error } = await supabase.from('portals').delete().eq('id', cur.id); if (error) { toast('Couldn’t delete it.'); return; } setPortals((ps) => (ps || []).filter((x) => x.id !== cur.id)); setEditing(null); toast('Portal deleted'); }} />
@@ -126,7 +126,8 @@ function BrandAddress({ supabase, ws, slug, origin, onChange, toast }: { supabas
   );
 }
 
-function PortalEditor({ portal, wsSlug, origin, folders, collections, items, events, toast, onBack, onSaved, onDelete }: {
+function PortalEditor({ free = false, portal, wsSlug, origin, folders, collections, items, events, toast, onBack, onSaved, onDelete }: {
+  free?: boolean;
   portal: Portal; wsSlug: string; origin: string;
   folders: { id: string; name: string }[]; collections: { id: string; name: string }[]; items: Asset[]; events: Ev[];
   toast: (m: string) => void; onBack: () => void; onSaved: (p: Portal) => void; onDelete: () => void;
@@ -152,6 +153,7 @@ function PortalEditor({ portal, wsSlug, origin, folders, collections, items, eve
     const r = await fetch('/api/portals', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
     const j = r ? await r.json().catch(() => null) : null;
     setBusy(false);
+    if (j?.code === 'upgrade') { openUpgrade({ reason: 'portal' }); return; }
     if (!r?.ok || !j?.portal) { toast(j?.error || 'Couldn’t save.'); return; }
     onSaved({ ...j.portal, passcode_hash: j.portal.has_passcode ? 'set' : null });
     set('passcode', '');
@@ -210,7 +212,14 @@ function PortalEditor({ portal, wsSlug, origin, folders, collections, items, eve
           {f.allow_download && <div className="chips">{FORMATS.map(([k, l]) => <button key={k} type="button" className="chip" aria-pressed={f.formats.includes(k)} onClick={() => toggle('formats', k)}>{l}</button>)}</div>}
 
           <h3>Status</h3>
-          <label className="toggle"><input type="checkbox" checked={f.published} onChange={(e) => set('published', e.target.checked)} /> Published (turn off to hide it without deleting)</label>
+          {free ? (
+            <div className="portal-locked">
+              <p className="tip"><b>Not published yet.</b> Your team can preview it now. Publish it to share it with agencies, retailers and partners.</p>
+              <button className="primary" type="button" onClick={() => openUpgrade({ reason: 'portal' })}>Publish portal</button>
+            </div>
+          ) : (
+            <label className="toggle"><input type="checkbox" checked={f.published} onChange={(e) => set('published', e.target.checked)} /> Published (turn off to hide it without deleting)</label>
+          )}
 
           <div className="actions">
             {confirmDel ? <><span className="tip">Delete this portal?</span><button className="btn" type="button" onClick={onDelete}>Delete</button><button className="btn quiet" type="button" onClick={() => setConfirmDel(false)}>Keep</button></>

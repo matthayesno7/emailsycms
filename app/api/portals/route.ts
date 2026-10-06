@@ -60,9 +60,10 @@ export async function POST(request: Request) {
   if (!ws) return Response.json({ error: 'Workspace not found.' }, { status: 404 });
   const m = await member(ws);
   if (m.error) return m.error;
-  if (await freeBrand(ws)) return Response.json({ error: 'Sharing is on Pro. Start your 7-day free trial to share.', code: 'upgrade', reason: 'share' }, { status: 402 });
   const db = createAdminClient();
   const f = await fields(db, ws, { name: b.name || 'Brand portal', slug: b.slug || b.name || 'brand', ...b });
+  // Free: build and preview the portal; publishing it (sharing it) is on Pro.
+  if (await freeBrand(ws)) f.published = false;
   if (f.access === 'passcode' && !f.passcode_hash) return Response.json({ error: 'Set a passcode, or choose another kind of access.' }, { status: 400 });
   f.slug = await freeSlug(db, ws, f.slug);
   const { data, error } = await db.from('portals').insert({ workspace_id: ws, created_by: m.user.id, ...f }).select('*').single();
@@ -79,8 +80,8 @@ export async function PATCH(request: Request) {
   if (!p) return Response.json({ error: 'Portal not found.' }, { status: 404 });
   const m = await member(p.workspace_id);
   if (m.error) return m.error;
-  if (await freeBrand(p.workspace_id)) return Response.json({ error: 'Sharing is on Pro. Start your 7-day free trial to share.', code: 'upgrade', reason: 'share' }, { status: 402 });
   const f = await fields(db, p.workspace_id, b);
+  if (f.published && (await freeBrand(p.workspace_id))) return Response.json({ error: 'Publishing your portal is on Pro. Start your 7-day free trial to share it.', code: 'upgrade', reason: 'portal' }, { status: 402 });
   if ((f.access || p.access) === 'passcode' && !('passcode_hash' in f ? f.passcode_hash : p.passcode_hash)) return Response.json({ error: 'Set a passcode, or choose another kind of access.' }, { status: 400 });
   if (f.slug) f.slug = await freeSlug(db, p.workspace_id, f.slug, p.id);
   const { data, error } = await db.from('portals').update(f).eq('id', p.id).select('*').single();
