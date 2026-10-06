@@ -99,6 +99,7 @@ export default function LoginPage() {
             <button className="primary wide" type="submit" disabled={state === 'sending'}>
               {state === 'sending' ? 'Sending…' : 'Email me a link'}
             </button>
+            <p className="auth-legal">By continuing you agree to the <a href="/terms" target="_blank">Terms</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
           </form>
         )}
       </div>

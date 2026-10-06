@@ -228,7 +228,7 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
         : canBuy ? (
           <>
             <button className="primary wide" type="button" disabled={busy} onClick={start}>{busy ? 'Opening checkout…' : trial ? `Start ${trial}-day free trial` : 'Upgrade to Pro'}</button>
-            <p className="upsell-fine">{trial ? `You won’t be charged today. After ${trial} days it’s ${interval === 'year' ? `${gbp(PRICE.year)} a year` : `${gbp(PRICE.month)} a month`} unless you cancel; cancel and you’re back on Free with all your files.` : 'Secure checkout with Stripe.'}</p>
+            <p className="upsell-fine">{trial ? `You won’t be charged today. After ${trial} days it’s ${interval === 'year' ? `${gbp(PRICE.year)} a year` : `${gbp(PRICE.month)} a month`} unless you cancel; cancel and you’re back on Free with all your files.` : 'Secure checkout with Stripe.'} By continuing you agree to the <a href="/terms" target="_blank">Terms</a>.</p>
           </>
         ) : !info.stripe ? <p className="tip">Billing isn’t switched on yet.</p>
         : info.plan !== 'free' && !newBrand ? <p className="tip">{ws.name} is already on Pro.</p>

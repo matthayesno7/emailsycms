@@ -1324,3 +1324,17 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .lib-dot{flex:none;width:8px;height:8px;border-radius:50%;background:#c98a1b;transform:translateY(-1px)}
 .lib-dot.ok{background:var(--success)}
 @media (max-width:640px){.usage-row{grid-template-columns:1fr auto}.usage-row .usage-meter{grid-column:1 / -1;grid-row:2}.usage-row .state{grid-column:2;grid-row:1}}
+
+/* ---------- Terms and Privacy ---------- */
+.legal{max-width:720px;margin:0 auto;padding:48px 20px 64px;color:var(--ink-body);font-size:15.5px;line-height:1.65;background:var(--paper)}
+.legal-mark{display:inline-block;margin-bottom:28px;text-decoration:none;color:var(--ink)}
+.legal h1{font-family:var(--display);font-size:36px;line-height:1.1;margin:0 0 6px;color:var(--ink)}
+.legal-meta{margin:0 0 28px;color:var(--ink-3);font-size:14px}
+.legal h2{font-size:18px;margin:28px 0 8px;color:var(--ink)}
+.legal p{margin:0 0 12px}
+.legal ul{margin:0 0 12px;padding-left:20px}
+.legal li{margin:0 0 6px}
+.legal a{color:var(--accent)}
+.legal-foot{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink-3)}
+.auth-legal{margin:4px 0 0;font-size:12.5px;color:var(--ink-3);text-align:center}
+.auth-legal a{color:var(--ink-2)}
