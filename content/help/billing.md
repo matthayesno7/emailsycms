@@ -50,6 +50,9 @@ If a payment fails, Plan & usage shows "payment failed, Stripe is retrying", and
 ## Monthly to yearly
 To switch an existing subscription between monthly and yearly, send a request through **Feedback** and it's switched for you, with the difference worked out.
 
+## Enterprise
+Enterprise is billed by invoice under your agreement, so **Plan & usage** shows your Enterprise account and how many of its brands are in use, with no card or checkout. For changes to your agreement, [book a call](https://calendar.notion.so/meet/matthayes/3363f4yal).
+
 ## Problems
 | Message | What to do |
 |---|---|

@@ -772,9 +772,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   }
 
   async function createWorkspace(name: string, quiet = false) {
-    const { data, error } = await supabase.rpc('create_workspace', { ws_name: name });
+    const { data, error } = await supabase.rpc('create_workspace', { ws_name: name, from_ws: curWs?.id ?? null });
     // Free covers one brand you own; the next one starts on Pro, through checkout.
+    // On an Enterprise account, owners and admins add brands straight away, up to the brands agreed.
     if (error && /FREE_BRAND_LIMIT/.test(error.message)) { setUpgrade({ reason: 'brand', brand: name }); setModal('upgrade'); return null; }
+    if (error && /BRAND_LIMIT/.test(error.message)) { toast(error.message.replace(/^.*BRAND_LIMIT:\s*/, '')); return null; }
     if (error || !data) { toast('Couldn’t create the workspace.'); return null; }
     await loadWorkspaces((data as any).id);
     setView('all'); setPage('library');

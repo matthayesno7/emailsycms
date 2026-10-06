@@ -193,7 +193,7 @@ export const MORE_TOOLS = [
   // ---------- set up ----------
   {
     name: 'create_brand',
-    description: 'Make a new brand workspace, owned by the user. Pass website to build its brand kit from the site straight away (saved as a draft to approve).',
+    description: 'Make a new brand workspace, owned by the user. One free brand per person; further brands start at checkout in Mise, except on an Enterprise account, where they join the account straight away. Pass website to build its brand kit from the site straight away (saved as a draft to approve).',
     inputSchema: { type: 'object', properties: { name: { type: 'string' }, website: { type: 'string' } }, required: ['name'], additionalProperties: false },
   },
   {
@@ -697,12 +697,14 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
     }
     case 'create_brand': {
       const db = need(ctx);
-      const name = String(args.name || '').trim().slice(0, 40);
+      const name = String(args.name || '').trim().slice(0, 60);
       if (!name) return toolError('Give the brand a name.');
-      const { data: w, error } = await db.from('workspaces').insert({ name, created_by: ctx.userId }).select('id, name').single();
+      // The same rules as the app: one free brand per person, further brands through checkout as Pro,
+      // and on an Enterprise account owners and admins add brands straight away (up to the brands agreed).
+      const { data: w, error } = await db.rpc('create_brand_for', { p_user: ctx.userId, p_name: name, p_from: null });
+      if (error && /FREE_BRAND_LIMIT/.test(error.message)) return toolError(`Each extra brand is on Pro, so it starts at checkout. Add it in Mise: click the brand name at the top of the sidebar → New brand. ${link(ctx)}`);
+      if (error && /BRAND_LIMIT/.test(error.message)) return toolError(error.message.replace(/^.*BRAND_LIMIT:\s*/, ''));
       if (error || !w) return toolError(`Couldn’t make the brand: ${error?.message}`);
-      const { error: e2 } = await db.from('workspace_members').insert({ workspace_id: (w as any).id, user_id: ctx.userId, role: 'owner' });
-      if (e2) return toolError(`Made the brand but couldn’t add you to it: ${e2.message}`);
       let kit: any = null;
       if (args.website) {
         const r = await brandKitFromWebsite(db, w as any, ctx.userId, String(args.website));

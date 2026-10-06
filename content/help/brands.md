@@ -20,6 +20,8 @@ Your first brand is free. **Every brand you add after that is on Pro** and opens
 
 Brands other people own and invite you to don't count: only brands you own do.
 
+**On Enterprise**, owners and admins add brands straight away, with no checkout: click the brand name → **+ New brand**. The new brand joins your Enterprise account, and the owners and admins of the brand you were in are added to it with the same roles. If you reach the number of brands in your agreement, you'll see "Your Enterprise plan covers {n} brands. Book a call to add more."
+
 ## Rename a brand
 Settings → **Brand workspace** → change **Workspace name** → **Save**. Only owners and admins can do this. Building your brand kit from a website also renames a brand that's still called "My brand".
 

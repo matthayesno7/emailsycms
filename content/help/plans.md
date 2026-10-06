@@ -35,7 +35,7 @@ Everything in Free, plus:
 
 ## Enterprise: from $12,500 a year
 For companies with several brands, or a procurement checklist.
-- All your brands on one contract and one invoice.
+- All your brands on one contract and one invoice. Owners and admins add new brands straight from the app, with no checkout.
 - **Roles**: owner, admin, editor, contributor and viewer. See [Team and roles](team-and-roles).
 - **Activity log** with CSV export. See [Activity log](activity-log).
 - Higher allowances (1,000 designs a month per brand).

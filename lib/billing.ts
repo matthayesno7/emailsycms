@@ -64,6 +64,10 @@ export async function syncSubscription(db: Db, sub: any, wsHint?: string) {
   const interval: Interval = flat?.price?.recurring?.interval === 'year' ? 'year' : 'month';
   const periodEnd = flat?.current_period_end || sub.current_period_end;
   const ended = ['canceled', 'incomplete_expired', 'unpaid'].includes(sub.status);
+  // A brand on an Enterprise account is billed by invoice: an old Pro subscription (say, one
+  // cancelled after moving to Enterprise) mustn't move it back to Pro or Free.
+  const { data: cur } = await db.from('workspace_billing').select('account_id').eq('workspace_id', ws).maybeSingle();
+  if (cur?.account_id) { console.log('[billing] ignoring subscription change on Enterprise brand', ws, sub?.id, sub?.status); return; }
   await db.from('workspace_billing').upsert({
     workspace_id: ws,
     plan: ended ? 'free' : 'pro',

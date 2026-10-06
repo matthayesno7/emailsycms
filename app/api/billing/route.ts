@@ -27,7 +27,15 @@ export async function GET(request: Request) {
   const extra = Math.max(0, used - allowance);
   // Prices show in US dollars; a paying brand sees the currency it actually pays in.
   const currency = billing.currency || 'usd';
+  // Enterprise: the account this brand belongs to, and how many of its brands are in use.
+  let account: { name: string; brand_limit: number | null; brands: number } | null = null;
+  if (row?.account_id) {
+    const { data: a } = await db.from('enterprise_accounts').select('name, brand_limit').eq('id', row.account_id).maybeSingle();
+    const { count } = await db.from('workspace_billing').select('workspace_id', { count: 'exact', head: true }).eq('account_id', row.account_id);
+    if (a) account = { name: a.name, brand_limit: a.brand_limit ?? null, brands: count || 0 };
+  }
   return Response.json({
+    account,
     billing,
     role: who.role,
     currency,

@@ -6,6 +6,7 @@ import AutoOrganise from './AutoOrganise';
 
 type State = {
   billing: Billing; role: string | null; stripe: boolean; trial_days: number; currency: Currency;
+  account: { name: string; brand_limit: number | null; brands: number } | null;
   free: { files: number; files_max: number; studio_used: boolean };
   designs: { used: number; allowance: number; extra: number; extra_pence: number; extra_left: number; resets: string };
 };
@@ -61,6 +62,8 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
   const b = s.billing;
   const owner = s.role === 'owner';
   const pro = b.plan !== 'free';
+  const ent = b.plan === 'enterprise';
+  const acct = s.account;
   const d = s.designs;
   const cur: Currency = s.currency || 'usd';
   const P = PRICES[cur];
@@ -86,14 +89,16 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
       <section className="plan-card">
         <div className="plan-head">
           <div>
-            <div className="plan-name">{ws.name} is on <b>{pro ? 'Pro' : 'Free'}</b>{pro && b.status === 'trialing' && <span className="trial-tag">Trial</span>}</div>
+            <div className="plan-name">{ws.name} is on <b>{ent ? 'Enterprise' : pro ? 'Pro' : 'Free'}</b>{pro && b.status === 'trialing' && <span className="trial-tag">Trial</span>}</div>
             <p className="tip">
-              {pro
+              {ent
+                ? <>{acct ? `Part of ${acct.name}’s Enterprise account · ${acct.brands} ${acct.brand_limit ? `of ${acct.brand_limit} brands` : acct.brands === 1 ? 'brand' : 'brands'}. Owners and admins add brands from the brand menu at the top of the sidebar.` : 'Enterprise, billed by invoice.'}</>
+                : pro
                 ? <>{b.interval === 'year' ? priceLine('year', cur) : priceLine('month', cur)}{b.current_period_end ? (b.cancel_at_period_end ? ` · ends ${day(b.current_period_end)}` : b.status === 'trialing' ? ` · trial ends ${day(b.current_period_end)}` : ` · renews ${day(b.current_period_end)}`) : ''}{b.status === 'past_due' ? ' · payment failed, Stripe is retrying' : ''}</>
                 : 'A taster of Mise: your brand kit, up to 50 files and one Create run. No card needed.'}
             </p>
           </div>
-          {pro && owner && s.stripe && b.has_customer && (
+          {pro && !ent && owner && s.stripe && b.has_customer && (
             <button className="btn" type="button" disabled={busy} onClick={async () => { setBusy(true); if (!(await go('/api/billing/portal', { workspace_id: ws.id }, toast))) setBusy(false); }}>Manage billing</button>
           )}
         </div>
@@ -134,7 +139,14 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
         </section>
       )}
 
-      {pro && (
+      {ent && (
+        <section className="plan-sec">
+          <h3>Your agreement</h3>
+          <p className="tip">Enterprise is billed by invoice, so there’s nothing to manage here. Need more designs or brands, or a change to your agreement? <a href="https://calendar.notion.so/meet/matthayes/3363f4yal" target="_blank" rel="noreferrer">Book a call</a>.</p>
+        </section>
+      )}
+
+      {pro && !ent && (
         <form className="plan-sec" onSubmit={saveCap}>
           <h3>Extra designs</h3>
           <div className="row-inline">
