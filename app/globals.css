@@ -150,10 +150,10 @@ svg.wire .wb{fill:var(--accent)}
 .sthumb.contain{background:#fff}.sthumb.contain img{object-fit:contain;padding:6%}
 .sinfo{display:flex;flex-direction:column;gap:6px;align-items:flex-start;min-width:0;font-size:13.5px;color:var(--ink-2)}
 .sinfo span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.img-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;max-height:210px;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:10px}
-.pk{aspect-ratio:1;border:1px solid var(--line);border-radius:6px;padding:0;overflow:hidden;background:var(--surface)}
+.img-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));grid-auto-rows:76px;gap:8px;max-height:252px;overflow-y:auto;padding:8px;border:1px solid var(--line);border-radius:10px;align-content:start}
+.pk{position:relative;display:block;width:100%;height:100%;min-height:0;border:1px solid var(--line);border-radius:8px;padding:0;overflow:hidden;background:var(--surface)}
 .pk:hover{border-color:var(--accent)}
-.pk img{width:100%;height:100%;object-fit:cover}
+.pk img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .pk.product,.pk.logo{background:#fff}.pk.product img,.pk.logo img{object-fit:contain;padding:8%}
 .thumb.block.live{display:grid;place-items:center;padding:12px 12px 44px;background:var(--surface)}
 .readcard .tip{margin-bottom:8px}

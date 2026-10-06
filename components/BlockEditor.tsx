@@ -46,7 +46,8 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
   const srcOfAsset = (a?: Asset) => (a?.storage_path ? urls[a.storage_path] : undefined);
   // A changed slot previews its source: a library asset, or the block's own original upload.
   const slotSrc = (slot: any) => (slot?.path && !slot.dirty ? urls[slot.path] : srcOfAsset(byId(slot?.source_asset_id)) || (slot?.original_path ? urls[slot.original_path] : undefined));
-  const pickable = library.filter((i) => i.kind !== 'block' && i.storage_path && urls[i.storage_path]);
+  // Images, logos and product photos only (no videos or blocks); thumbnails use the small email-ready copy when there is one.
+  const pickable = library.filter((i) => ['image', 'logo', 'product'].includes(i.kind) && !/^video\//.test(i.mime || '') && i.storage_path && (urls[i.images?.email?.path] || urls[i.storage_path]));
   const products = library.filter((i) => i.kind === 'product');
 
   const setField = (k: string, v: string) => setB((x: any) => {
@@ -315,7 +316,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
                       {pickable.length ? pickable.map((i) => (
                         <button key={i.id} type="button" className={'pk ' + i.kind} title={i.name}
                           onClick={() => { setImage(d.k, { ...(slot || {}), source_asset_id: i.id, alt: i.fields?.alt || i.name, dirty: true, original_path: i.storage_path, crop: undefined }); setPickFor(null); }}>
-                          <img src={urls[i.storage_path]} alt={i.name} />
+                          <img src={urls[i.images?.email?.path] || urls[i.storage_path]} alt={i.name} loading="lazy" />
                         </button>
                       )) : <p className="tip">Upload images first, then pick one here.</p>}
                     </div>
