@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { whoFor } from '@/lib/billingAuth';
 import { billingRow, ensureCustomer, proLineItems } from '@/lib/billing';
-import { currencyFor, effectivePlan, isCurrency, TRIAL_DAYS, trialDaysFor, type Interval } from '@/lib/plans';
+import { currencyOf, effectivePlan, isCurrency, TRIAL_DAYS, trialDaysFor, type Interval } from '@/lib/plans';
 import { hasStripe, stripe } from '@/lib/stripe';
 import { publicOrigin } from '@/lib/origin';
 
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const db = createAdminClient();
   const tax = process.env.STRIPE_TAX === '1';
   // The currency the person was shown (GBP in the UK, USD elsewhere). The prices carry both.
-  const currency = isCurrency(b?.currency) ? b.currency : currencyFor(request.headers.get('cf-ipcountry'));
+  const currency = isCurrency(b?.currency) ? b.currency : currencyOf(request.headers);
 
   const common = {
     mode: 'subscription',

@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { whoFor } from '@/lib/billingAuth';
 import { billingRow, cancelNow, toBilling } from '@/lib/billing';
-import { currencyFor, designAllowance, FREE_FILES, overageDesigns, PRICES, TRIAL_DAYS, trialDaysFor } from '@/lib/plans';
+import { currencyOf, designAllowance, FREE_FILES, overageDesigns, PRICES, TRIAL_DAYS, trialDaysFor } from '@/lib/plans';
 import { hasStripe } from '@/lib/stripe';
 
 // A brand's plan and this month's Studio designs.
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   const allowance = designAllowance(billing.plan);
   const extra = Math.max(0, used - allowance);
   // A paying brand keeps its currency; otherwise UK visitors see GBP and everyone else USD.
-  const currency = billing.currency || currencyFor(request.headers.get('cf-ipcountry'));
+  const currency = billing.currency || currencyOf(request.headers);
   return Response.json({
     billing,
     role: who.role,

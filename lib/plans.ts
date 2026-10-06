@@ -23,8 +23,11 @@ export const PRICES: Record<Currency, { month: number; year: number; overage: nu
 };
 export const PRICE = PRICES.gbp; // existing GBP brands
 export const isCurrency = (c: unknown): c is Currency => c === 'gbp' || c === 'usd';
-// Visitors in the UK see and pay GBP; everyone else USD (Cloudflare's country header).
-export const currencyFor = (country?: string | null): Currency => (String(country || '').toUpperCase() === 'GB' ? 'gbp' : 'usd');
+// Visitors in the UK see and pay GBP; everyone else USD. Cloudflare's country header decides; without
+// it, a British English browser counts as the UK.
+export const currencyFor = (country?: string | null, lang?: string | null): Currency =>
+  country ? (String(country).toUpperCase() === 'GB' ? 'gbp' : 'usd') : /\ben-GB\b/i.test(lang || '') ? 'gbp' : 'usd';
+export const currencyOf = (h: Headers) => currencyFor(h.get('cf-ipcountry'), h.get('accept-language'));
 export const money = (minor: number, cur: Currency = 'gbp') =>
   `${cur === 'usd' ? '$' : '£'}${(minor / 100).toLocaleString(cur === 'usd' ? 'en-US' : 'en-GB', { minimumFractionDigits: minor % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 export const symbol = (cur: Currency = 'gbp') => (cur === 'usd' ? '$' : '£');
