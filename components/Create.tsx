@@ -21,6 +21,13 @@ const FORMATS: { label: string; size: [number, number]; ask: string; video?: boo
   { label: 'Animated banner', size: [1200, 600], ask: 'an animated email banner, 1200×600, under 4 seconds', video: true },
 ];
 
+// One-click starters for the composer: words, and the size they suit (index into FORMATS).
+const TRIES: { text: string; fmt: number }[] = [
+  { text: 'Autumn sale email hero', fmt: 0 },
+  { text: 'New arrivals LinkedIn post', fmt: 2 },
+  { text: 'Instagram story for a product drop', fmt: 4 },
+];
+
 // The home page: Claude-first and visual. Describe it or pick a design from the library;
 // Claude makes it with the brand kit and assets and saves it back for approval.
 // Ideas the Studio can design right here (single-canvas designs; AI photos and video go to Claude).
@@ -139,60 +146,78 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
       {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
 
       <section className="cr-hero">
-        <div className="cr-brand" onClick={onBrandKit} role="button" tabIndex={0} title="Brand kit">
-          {brand.logo ? <img src={brand.logo} alt="" /> : <b style={{ fontFamily: brand.head }}>{ws.name}</b>}
-          <span className="cr-sw">{[brand.primary, brand.accent, brand.text, brand.surface].map((c, i) => <i key={i} style={{ background: c }} />)}</span>
-          <span className="cr-bk">{kit ? (kit.status === 'approved' ? 'Brand kit' : 'Brand kit · draft') : 'Set up brand kit'}</span>
-        </div>
-        <h1>What are we making?</h1>
+        <h1>What do you want to make?</h1>
+        <p className="cr-lede">Describe it in a sentence. Mise designs three options in your brand, with your photos.</p>
 
         <div className={'cr-compose' + (picked ? ' picked' : '')}>
-          {picked && <div className="cr-picked"><span>{PROMPTS.find((p) => p.id === picked)?.title}</span><button type="button" className="linkish" onClick={() => { setPicked(null); setAsk(''); }}>Clear</button></div>}
-          <textarea ref={box} className="in" rows={picked ? 4 : 2} value={ask} onChange={(e) => setAsk(e.target.value)}
-            placeholder="Describe it: “A LinkedIn banner for our autumn launch, warm and simple”"
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && text) { e.preventDefault(); if (canDesign) design(); else openInClaude(text); } }} />
-          {(blanks.product || blanks.image) && (
-            <div className="cr-blanks">
-              {blanks.product && products.length > 0 && (
-                <select className="in" value="" onChange={(e) => fillBlank('product', products.find((p) => p.id === e.target.value))}>
-                  <option value="">Choose the product…</option>
-                  {products.slice(0, 300).map((p) => <option key={p.id} value={p.id}>{p.pid} · {p.name}</option>)}
-                </select>
-              )}
-              {blanks.image && photos.length > 0 && (
-                <select className="in" value="" onChange={(e) => fillBlank('image', photos.find((p) => p.id === e.target.value))}>
-                  <option value="">Choose the image…</option>
-                  {photos.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              )}
-              <span className="tip">or leave it and Claude will ask.</span>
-            </div>
-          )}
+          <div className="cr-sec">
+            <div className="cr-label"><i>1</i>Describe it</div>
+            {picked && <div className="cr-picked"><span>Idea: {PROMPTS.find((p) => p.id === picked)?.title}</span><button type="button" className="linkish" onClick={() => { setPicked(null); setAsk(''); }}>Clear</button></div>}
+            <textarea ref={box} className="cr-input" rows={picked ? 4 : 2} value={ask} onChange={(e) => setAsk(e.target.value)}
+              aria-label="Describe what you want to make"
+              placeholder="e.g. A LinkedIn banner for our autumn launch, warm and simple"
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && text) { e.preventDefault(); if (canDesign) design(); else openInClaude(text); } }} />
+            {!picked && !ask.trim() && (
+              <div className="cr-tries"><span>Try:</span>
+                {TRIES.map((t) => <button key={t.text} type="button" className="cr-try" onClick={() => { setAsk(t.text); setFmt(t.fmt); box.current?.focus(); }}>{t.text}</button>)}
+              </div>
+            )}
+            {(blanks.product || blanks.image) && (
+              <div className="cr-blanks">
+                {blanks.product && products.length > 0 && (
+                  <select className="in" value="" onChange={(e) => fillBlank('product', products.find((p) => p.id === e.target.value))}>
+                    <option value="">Choose the product…</option>
+                    {products.slice(0, 300).map((p) => <option key={p.id} value={p.id}>{p.pid} · {p.name}</option>)}
+                  </select>
+                )}
+                {blanks.image && photos.length > 0 && (
+                  <select className="in" value="" onChange={(e) => fillBlank('image', photos.find((p) => p.id === e.target.value))}>
+                    <option value="">Choose the image…</option>
+                    {photos.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                )}
+                <span className="tip">or leave it and Claude will ask.</span>
+              </div>
+            )}
+          </div>
+
           {!picked && (
-            <div className="cr-formats" role="group" aria-label="Format">
-              {FORMATS.map((f, i) => {
-                const r = f.size[0] / f.size[1];
-                return (
-                  <button key={f.label} type="button" className="cr-fmt" aria-pressed={fmt === i} onClick={() => setFmt(fmt === i ? null : i)}>
-                    <span className="shape"><i style={r >= 1 ? { width: '100%', aspectRatio: `${r}` } : { height: '100%', aspectRatio: `${r}` }}>{f.video && <em>▶</em>}</i></span>
-                    <b>{f.label}</b><small>{f.size[0]}×{f.size[1]}</small>
-                  </button>
-                );
-              })}
+            <div className="cr-sec cr-sec-line">
+              <div className="cr-label"><i>2</i>Size <span className="cr-opt">· optional, we’ll pick one from your words</span></div>
+              <div className="cr-sizes" role="group" aria-label="Size">
+                <button type="button" className="cr-size" aria-pressed={fmt === null} onClick={() => setFmt(null)}><b>Auto</b></button>
+                {FORMATS.map((f, i) => {
+                  const r = f.size[0] / f.size[1];
+                  const w = r >= 1 ? 18 : Math.max(8, Math.round(16 * r)), h = r >= 1 ? Math.max(4, Math.round(18 / r)) : 16;
+                  return (
+                    <button key={f.label} type="button" className="cr-size" aria-pressed={fmt === i} title={`${f.size[0]}×${f.size[1]}`} onClick={() => setFmt(fmt === i ? null : i)}>
+                      {f.video ? <span className="cr-play" aria-hidden>▶</span> : <span className="cr-shape" style={{ width: w, height: h }} aria-hidden />}
+                      <b>{f.label}</b>{f.video && <span className="cr-via">with Claude</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
-          <div className="cr-row">
-            <span className="tip">{canDesign ? 'Three designs in seconds, in your brand, with your photos. Made here, so you can edit them here any time.'
-              : chosen?.video || (picked && !pickedLive) ? 'Video and new photography are made by Claude in Figma, then saved here. They’re edited in Figma too.'
-              : live === false ? 'Designs are made by Claude in Figma. Add ANTHROPIC_API_KEY on the server to design right here.' : ''}</span>
+
+          <div className="cr-foot">
+            <button type="button" className="cr-using" onClick={onBrandKit} title="Open the brand kit">
+              <span className="cr-sw">{[brand.primary, brand.accent, brand.text].map((c, i) => <i key={i} style={{ background: c }} />)}</span>
+              {kit ? <span>Using the <b>{ws.name}</b> brand kit{kit.status === 'approved' ? '' : ' (draft)'}{photos.length ? ` and ${photos.length} photo${photos.length === 1 ? '' : 's'}` : ''}</span>
+                : <span>No brand kit yet · <u>set it up</u></span>}
+            </button>
             <span className="spacer" />
-            {canDesign ? <>
-              <button className="primary" type="button" disabled={!text} onClick={design}><Icon.Sparkle size={16} />Design it</button>
-            </> : <>
+            {canDesign ? (
+              <button className="primary cr-go" type="button" onClick={() => (text ? design() : box.current?.focus())}>Design 3 options <span aria-hidden>→</span></button>
+            ) : <>
               <button className="btn" type="button" disabled={!text} onClick={() => copy(text)}>Copy</button>
-              <button className="primary" type="button" disabled={!text} onClick={() => openInClaude(text)}><Icon.Sparkle size={16} />Make it in Claude</button>
+              <button className="primary cr-go" type="button" onClick={() => (text ? openInClaude(text) : box.current?.focus())}><Icon.Sparkle size={16} />Make it in Claude</button>
             </>}
           </div>
+          {!canDesign && (chosen?.video || (picked && !pickedLive) || live === false) && (
+            <p className="cr-note">{chosen?.video || (picked && !pickedLive) ? 'Video and new photography are made by Claude in Figma, then saved here. They’re edited in Figma too.'
+              : 'Designs are made by Claude in Figma. Add ANTHROPIC_API_KEY on the server to design right here.'}</p>
+          )}
         </div>
 
         {steps.some((s) => !s.done) && (

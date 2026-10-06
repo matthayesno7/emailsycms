@@ -1338,3 +1338,36 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .legal-foot{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink-3)}
 .auth-legal{margin:4px 0 0;font-size:12.5px;color:var(--ink-3);text-align:center}
 .auth-legal a{color:var(--ink-2)}
+
+/* ---------- Create: the composer (describe it → size → design) ---------- */
+.cr-lede{margin:-4px 0 10px;color:var(--ink-2);font-size:16px;max-width:560px}
+.cr-compose{padding:0;gap:0;overflow:hidden;border-color:var(--line-strong);border-radius:20px}
+.cr-sec{padding:18px 22px;display:flex;flex-direction:column;gap:10px}
+.cr-sec-line{border-top:1px solid var(--line)}
+.cr-label{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
+.cr-label i{font-style:normal;width:18px;height:18px;border-radius:50%;background:var(--ink);color:var(--bg);display:inline-grid;place-items:center;font-size:11px;letter-spacing:0}
+.cr-opt{font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink-3)}
+.cr-compose textarea.cr-input{width:100%;border:1.5px solid var(--line-strong);border-radius:12px;padding:13px 15px;font-size:17px;line-height:1.5;resize:vertical;min-height:76px;background:var(--bg);color:var(--ink);font:inherit;font-size:17px;line-height:1.5}
+.cr-compose textarea.cr-input::placeholder{color:var(--faint)}
+.cr-compose textarea.cr-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.cr-tries{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--ink-3)}
+.cr-try{border:1px solid var(--line);background:var(--side);border-radius:999px;padding:5px 11px;font-size:13px;color:var(--ink-body)}
+.cr-try:hover{border-color:var(--ink-3);color:var(--ink)}
+.cr-sizes{display:flex;gap:8px;flex-wrap:wrap}
+.cr-size{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:7px 12px;font-size:13.5px;color:var(--ink)}
+.cr-size b{font-weight:500}
+.cr-size:hover{border-color:var(--ink-3)}
+.cr-size[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.cr-shape{display:inline-block;border:1.5px solid var(--ink-2);border-radius:2px;box-sizing:border-box}
+.cr-play{font-size:9px;color:var(--ink-2)}
+.cr-via{font-size:10.5px;background:var(--surface);color:var(--ink-2);border-radius:999px;padding:1px 7px}
+.cr-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--side);border-top:1px solid var(--line);padding:14px 22px}
+.cr-using{display:inline-flex;align-items:center;gap:10px;border:0;background:none;padding:0;font-size:13.5px;color:var(--ink-2);text-align:left}
+.cr-using b{color:var(--ink);font-weight:600}
+.cr-using:hover span{color:var(--ink)}
+.cr-using .cr-sw i{border-color:var(--side)}
+.cr-foot .cr-go{border-radius:999px;padding:11px 22px;font-size:15px;font-weight:600}
+.cr-foot .btn{border-radius:999px}
+.cr-note{margin:0;padding:0 22px 14px;background:var(--side);font-size:13px;color:var(--ink-2)}
+.cr-compose .cr-picked{margin:0}
+@media (max-width:560px){.cr-sec,.cr-foot{padding-left:16px;padding-right:16px}.cr-foot .cr-go{width:100%;justify-content:center}}
