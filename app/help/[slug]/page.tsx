@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import HelpShell from '@/components/help/HelpShell';
+import HelpToc from '@/components/help/HelpToc';
 import { HELP_ARTICLES, HELP_ORIGIN, helpArticle } from '@/lib/helpArticles';
+import { headings, navLabel } from '@/lib/helpNav';
 import { markdown } from '@/lib/markdown';
 
 export const dynamicParams = false;
@@ -18,26 +20,23 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function Article({ params }: { params: Promise<{ slug: string }> }) {
   const a = helpArticle((await params).slug);
   if (!a) notFound();
-  const related = HELP_ARTICLES.filter((x) => x.category === a.category && x.slug !== a.slug);
   const i = HELP_ARTICLES.findIndex((x) => x.slug === a.slug);
+  const prev = HELP_ARTICLES[i - 1];
   const next = HELP_ARTICLES[i + 1];
+  const toc = headings(a.body);
   return (
-    <HelpShell crumb={a.category}>
+    <HelpShell active={a.slug} aside={<HelpToc items={toc} />}>
       <article className="hc-article">
+        <p className="hcx-eyebrow">{a.category}</p>
         <h1>{a.title}</h1>
-        <p className="legal-meta">{a.description}</p>
+        <p className="hcx-lede">{a.description}</p>
         <div className="hc-body" dangerouslySetInnerHTML={{ __html: markdown(a.body) }} />
       </article>
-      <aside className="hc-after">
-        {next && <a className="hc-card hc-next" href={`/help/${next.slug}`}><span>Next</span><b>{next.title}</b></a>}
-        {related.length > 0 && (
-          <div>
-            <h2>More in {a.category}</h2>
-            <ul>{related.map((r) => <li key={r.slug}><a href={`/help/${r.slug}`}>{r.title}</a></li>)}</ul>
-          </div>
-        )}
-        <p className="tip">Didn’t answer your question? In Mise, click <b>Help</b> at the bottom of the sidebar and ask in your own words.</p>
-      </aside>
+      <p className="hcx-ask">Didn’t answer your question? In Mise, click <b>Help</b> at the bottom of the sidebar and ask in your own words.</p>
+      <nav className="hcx-pager" aria-label="More articles">
+        {prev ? <a href={`/help/${prev.slug}`}><small>← Previous</small><b>{navLabel(prev)}</b></a> : <span />}
+        {next ? <a className="next" href={`/help/${next.slug}`}><small>Next →</small><b>{navLabel(next)}</b></a> : <span />}
+      </nav>
     </HelpShell>
   );
 }

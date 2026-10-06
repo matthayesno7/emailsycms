@@ -12,8 +12,10 @@ export const metadata: Metadata = {
 export default function Help() {
   return (
     <HelpShell>
-      <h1>How can we help?</h1>
-      <p className="legal-meta">{HELP_INTRO}</p>
+      <div className="hcx-head">
+        <h1>How can we help?</h1>
+        <p className="hcx-lede">{HELP_INTRO}</p>
+      </div>
       <HelpIndex />
     </HelpShell>
   );

@@ -1,33 +1,19 @@
 'use client';
-import { useMemo, useState } from 'react';
 import { HELP_ARTICLES, HELP_CATEGORIES } from '@/lib/helpArticles';
 
-// The help centre's front page: search across every article, then the articles by section.
+// The help centre's front page: a search box that opens search, then every article by section.
 export default function HelpIndex() {
-  const [q, setQ] = useState('');
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const hits = useMemo(() => {
-    if (!words.length) return [];
-    return HELP_ARTICLES.map((a) => {
-      const hay = `${a.title} ${a.description} ${a.body}`.toLowerCase();
-      const title = `${a.title} ${a.description}`.toLowerCase();
-      if (!words.every((w) => hay.includes(w))) return null;
-      const score = words.reduce((s, w) => s + (title.includes(w) ? 5 : 0) + hay.split(w).length - 1, 0);
-      return { a, score };
-    }).filter(Boolean).sort((x, y) => y!.score - x!.score).slice(0, 12).map((x) => x!.a);
-  }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
-
   return (
     <>
-      <input className="in hc-search" type="search" autoFocus value={q} onChange={(e) => setQ(e.target.value)}
-        placeholder="Search the help centre, e.g. “connect Shopify” or “share a folder”" aria-label="Search the help centre" />
-      {words.length > 0 ? (
-        <section className="hc-results">
-          {hits.length ? hits.map((a) => (
-            <a key={a.slug} className="hc-card" href={`/help/${a.slug}`}><b>{a.title}</b><span>{a.description}</span></a>
-          )) : <p className="tip">Nothing matches “{q}”. Try other words, or open Mise and ask under Help.</p>}
-        </section>
-      ) : HELP_CATEGORIES.map((c) => (
+      <button type="button" className="hcx-bigsearch" onClick={() => window.dispatchEvent(new Event('hcx-search'))}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        Search the help centre, e.g. “connect Shopify” or “share a folder”
+      </button>
+      <div className="hcx-start">
+        <a className="hc-card hcx-feature" href="/help/quick-start"><small>Start here</small><b>Set up Mise in 10 minutes</b><span>From sign-in to a tidy library, a brand kit, a first design and a link to share.</span></a>
+        <a className="hc-card hcx-feature" href="/help/claude-connector"><small>Claude</small><b>Connect Claude</b><span>Use your library, brand kit and products inside Claude, Claude Code and Figma.</span></a>
+      </div>
+      {HELP_CATEGORIES.map((c) => (
         <section key={c} className="hc-sec">
           <h2>{c}</h2>
           <div className="hc-grid">
