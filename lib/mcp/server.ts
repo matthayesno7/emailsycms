@@ -3,6 +3,7 @@
 import { isAvailable, lifecycleForClaude } from '../lifecycle';
 import { MAX_IMAGE_BYTES, MAX_IMPORT_BYTES } from '../plans';
 import { PURPOSES } from '../models';
+import { can, NEEDS, roleLabel } from '../roles';
 import { planOf } from '../billing';
 import { VIDEO_ASPECTS, VIDEO_SECONDS } from '../videoGen';
 import { clipStatus, makeImages, startClip } from '../makeMedia';
@@ -390,8 +391,43 @@ async function blockImages(ctx: Ctx, a: AssetRow) {
   return out;
 }
 
+// What each writing tool needs (lib/roles.ts). Reading tools need only membership.
+const TOOL_LEVEL: Record<string, keyof typeof can> = {
+  generate_image: 'add', generate_video: 'add', add_generated_asset: 'add', import_from_urls: 'add', get_upload_link: 'add', record_figma_placement: 'add',
+  save_brand_kit: 'manage', brand_kit_from_website: 'manage', approve_assets: 'manage', delete_assets: 'manage', resolve_review_item: 'manage',
+  update_asset: 'manage', move_to_folder: 'manage', create_collection: 'manage', delete_folder_or_collection: 'manage', edit_image: 'manage',
+  revert_asset: 'manage', create_share_link: 'manage', update_share_link: 'manage', save_portal: 'manage',
+  approve_brand_kit: 'admin', invite_teammate: 'admin',
+};
+
+// The connector writes with the service role, so it checks the person's role in the brand itself.
+async function roleGate(name: string, args: Record<string, any>, ctx: Ctx): Promise<string | null> {
+  let level = TOOL_LEVEL[name];
+  if (!level) return null;
+  if (name === 'add_generated_asset' && args.replaces_asset_id) level = 'manage';
+  let wsId: string | null = typeof args.workspace_id === 'string' ? args.workspace_id : null;
+  if (!wsId) {
+    const assetId = [args.asset_id, args.replaces_asset_id, ...(Array.isArray(args.asset_ids) ? args.asset_ids : [])].find((x) => typeof x === 'string');
+    if (assetId) wsId = (await ctx.repo.getAsset(assetId))?.workspace_id || null;
+  }
+  if (!wsId && ctx.db) {
+    const ref: [string, unknown][] = [['folders', args.folder_id], ['collections', args.collection_id], ['shares', args.share_id], ['portals', args.portal_id]];
+    for (const [table, id] of ref) {
+      if (typeof id !== 'string') continue;
+      const { data } = await ctx.db.from(table).select('workspace_id').eq('id', id).maybeSingle();
+      if (data) { wsId = data.workspace_id; break; }
+    }
+  }
+  if (!wsId) return null; // the tool itself reports what's missing or not found
+  const role = (await ctx.repo.workspacesForUser(ctx.userId)).find((w) => w.id === wsId)?.role;
+  if (!role) return null;
+  return can[level](role) ? null : `${NEEDS[level]} (Your role in this brand: ${roleLabel(role)}.)`;
+}
+
 export async function callTool(name: string, args: Record<string, any>, ctx: Ctx) {
   args = args || {};
+  const refused = await roleGate(name, args, ctx);
+  if (refused) return toolError(refused);
   switch (name) {
     case 'list_workspaces': {
       const ws = await ctx.repo.workspacesForUser(ctx.userId);

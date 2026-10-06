@@ -120,13 +120,13 @@ function BrandAddress({ supabase, ws, slug, origin, onChange, toast }: { supabas
     const s = (edit || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
     if (!s || s === slug) { setEdit(null); return; }
     const { data, error } = await supabase.from('workspaces').update({ slug: s }).eq('id', ws.id).select('slug').maybeSingle();
-    if (error || !data) { toast(error?.message?.includes('duplicate') ? 'That address is taken. Try another.' : 'Only owners can change the address.'); return; }
+    if (error || !data) { toast(error?.message?.includes('duplicate') ? 'That address is taken. Try another.' : 'Only admins and owners can change the address.'); return; }
     onChange(data.slug); setEdit(null); toast('Address changed. Old portal links stop working.');
   }
   return (
     <div className="brand-address">
       <span className="tip">Brand address:</span>
-      {edit === null ? <><code>{origin.replace(/^https?:\/\//, '')}/p/{slug}</code>{ws.role === 'owner' && <button type="button" className="linkish" onClick={() => setEdit(slug)}>Change</button>}</>
+      {edit === null ? <><code>{origin.replace(/^https?:\/\//, '')}/p/{slug}</code>{['owner', 'admin'].includes(ws.role) && <button type="button" className="linkish" onClick={() => setEdit(slug)}>Change</button>}</>
         : <form onSubmit={(e) => { e.preventDefault(); save(); }}><input className="in mono" autoFocus value={edit} maxLength={40} onChange={(e) => setEdit(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setEdit(null)} /><button className="btn" type="submit">Save</button></form>}
     </div>
   );

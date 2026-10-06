@@ -29,6 +29,8 @@ import Review from './Review';
 import { reviewQueue } from '@/lib/review';
 import { PlanSettings, UpgradeModal, openUpgrade, type UpgradeAsk } from './Billing';
 import LibrarySync from './LibrarySync';
+import Activity from './Activity';
+import { can, NEEDS, roleError } from '@/lib/roles';
 import { fromRows } from '@/lib/feedParse';
 import ProductFeeds from './ProductFeeds';
 import { countsAsFile, effectivePlan, FREE_FILES, freeLimitOf, mb, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, tooBig, type Plan } from '@/lib/plans';
@@ -126,7 +128,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (r === 'connected') { setBoxReturn(true); setModal('import'); }
     else setTimeout(() => toast(r === 'cancelled' ? 'Box wasn’t connected.' : 'Couldn’t connect Box. Try again.'), 300);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [settingsTab, setSettingsTab] = useState<'workspace' | 'plan' | 'members' | 'claude' | 'help'>('workspace');
+  const [settingsTab, setSettingsTab] = useState<'workspace' | 'plan' | 'members' | 'activity' | 'claude' | 'help'>('workspace');
   const [upgrade, setUpgrade] = useState<UpgradeAsk | null>(null);  // the upgrade pop-up, and why it opened
   const [limitHit, setLimitHit] = useState<{ message: string; reason?: string } | null>(null);  // out of Studio designs this month
   const [plan, setPlan] = useState<Plan>('free');
@@ -526,7 +528,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   async function patchAsset(id: string, patch: Record<string, any>) {
     setItems((list) => list.map((i) => (i.id === id ? { ...i, ...patch } : i)));
     const { error } = await supabase.from('assets').update(patch).eq('id', id);
-    if (error) { toast('Couldn’t save that change. Try again.'); loadAssets(ws); return false; }
+    if (error) { toast(roleError(error.message) || 'Couldn’t save that change. Try again.'); loadAssets(ws); return false; }
     return true;
   }
 
@@ -538,7 +540,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (a.storage_path && !referenced(a.storage_path)) paths.push(a.storage_path);
     for (const s of Object.values(a.images || {}) as any[]) if (s?.path && !referenced(s.path)) paths.push(s.path);
     const { error } = await supabase.from('assets').delete().eq('id', a.id);
-    if (error) { toast('Couldn’t delete. Try again.'); return; }
+    if (error) { toast(roleError(error.message) || 'Couldn’t delete. Try again.'); return; }
     if (paths.length) await supabase.storage.from('assets').remove(paths);
     setItems((list) => list.filter((i) => i.id !== a.id));
     setOpenId(null); setBlock(null); setUrl(null, null, true);
@@ -582,7 +584,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       phash: phash || (video ? null : '-'), duplicate_of: dup?.id || null,
     }).select('*').single();
     if (freeLimitOf(e2?.message) === 'files') { await supabase.storage.from('assets').remove([path]); openUpgrade({ reason: 'files' }); return null; }
-    if (e2 || !data) { toast('Couldn’t save the image.'); return null; }
+    if (e2 || !data) { await supabase.storage.from('assets').remove([path]).catch(() => {}); toast(roleError(e2?.message) || 'Couldn’t save the image.'); return null; }
     if (dup) toast(`${base} looks like a copy of ${dup.name}. It’s flagged so you can decide.`);
     // Optional: AI alt text, filled in shortly after upload (skipped if no API key is set).
     if (img && !/svg/.test(type)) suggestAlt(img).then((alt) => { if (alt) supabase.from('assets').update({ fields: { ...(data.fields || {}), alt } }).eq('id', data.id).then(() => {}); });
@@ -1030,11 +1032,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             </div>
           )}
           {page === 'review' && curWs ? (
-            ready ? <Review items={items} kit={kitRow} thumbOf={emailSrcOf}
+            ready ? <Review items={items} kit={kitRow} thumbOf={emailSrcOf} canDecide={can.manage(curWs.role)}
               onApprove={async (ids) => {
                 setItems((list) => list.map((i) => (ids.includes(i.id) ? { ...i, status: 'approved' } : i)));
                 const { error } = await supabase.from('assets').update({ status: 'approved' }).in('id', ids);
-                if (error) { toast('Couldn’t approve. Try again.'); loadAssets(ws); return; }
+                if (error) { toast(roleError(error.message) || 'Couldn’t approve. Try again.'); loadAssets(ws); return; }
                 toast(ids.length === 1 ? 'Approved' : `${ids.length} approved`);
               }}
               onReject={deleteAsset}
@@ -1045,6 +1047,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               onProducts={() => library('product')}
               onBrandKit={() => go('brand')}
               onLibrary={() => library('all')} /> : <p className="loading">Loading…</p>
+          ) : page === 'create' && curWs && !can.add(curWs.role) ? (
+            <div className="settings"><h1>Create</h1><p className="tip">{NEEDS.add}</p></div>
           ) : page === 'create' && curWs ? (
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
               autoBrief={autoBrief} onAutoUsed={() => setAutoBrief(null)}
@@ -1054,7 +1058,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             <div className="settings-page">
               <div className="head"><h1>Settings</h1></div>
               <div className="seg tabs" role="tablist">
-                {([['workspace', 'Brand workspace'], ['plan', 'Plan & usage'], ['members', 'Team'], ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
+                {([['workspace', 'Brand workspace'], ['plan', 'Plan & usage'], ['members', 'Team'], ...(can.admin(curWs.role) ? [['activity', 'Activity'] as const] : []), ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
                   <button key={k} type="button" role="tab" aria-pressed={settingsTab === k} onClick={() => setSettingsTab(k)}>{l}{k === 'claude' && !connected ? ' •' : ''}</button>
                 ))}
               </div>
@@ -1068,11 +1072,13 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   }} />}
                 {settingsTab === 'plan' && <PlanSettings key={curWs.id} ws={curWs} toast={toast} />}
                 {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} />}
+                {settingsTab === 'activity' && can.admin(curWs.role) && <Activity supabase={supabase} ws={curWs} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
                 {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
               </div>
             </div>
           ) : page === 'sharing' && curWs ? (
+            !can.manage(curWs.role) ? <div className="settings"><h1>Sharing</h1><p className="tip">{NEEDS.manage} Ask one of them to share files or set up a portal.</p></div> :
             <Sharing key={curWs.id} free={plan === 'free'} supabase={supabase} ws={curWs} items={items} folders={folders} collections={collections.map((c) => ({ id: c.id, name: c.name }))} toast={toast} />
           ) : page === 'brand' && curWs ? (
             ready ? <BrandKitView key={curWs.id} supabase={supabase} ws={curWs} userId={userId} row={kitRow} items={items} urls={urls} toast={toast} onChanged={() => { loadKit(ws); loadAssets(ws); loadWorkspaces(ws); }}
@@ -1094,7 +1100,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 <span className="spacer" />
                 <label className="search" htmlFor="q"><Icon.Search size={15} /><input id="q" ref={searchRef} type="search" placeholder="Search: beach, blue bag, logo…" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} /><kbd>/</kbd></label>
                 {q.trim() && <button className="btn quiet savesearch" type="button" title="Save this search as a smart collection" onClick={() => setCollForm({ name: q.trim().replace(/^./, (c) => c.toUpperCase()), rules: { text: q.trim(), ...(['image', 'logo', 'product', 'video'].includes(view) ? { kinds: [view] } : {}) } })}>Save search</button>}
-                <div className="addwrap" ref={addRef}>
+                {can.add(curWs?.role) && <div className="addwrap" ref={addRef}>
                   <button className="primary" type="button" aria-expanded={addOpen} onClick={toggleAdd}><Icon.Plus size={16} />Add</button>
                   {addOpen && (
                     <div className={'addmenu' + (addLeft ? ' left' : '')} role="menu" onClick={() => setAddOpen(false)}>
@@ -1107,7 +1113,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                       <button type="button" role="menuitem" onClick={() => setModal('blocktype')}><Icon.Blocks /><span><b>New email block</b><small>Hero, card, product, button, footer</small></span></button>
                     </div>
                   )}
-                </div>
+                </div>}
               </div>
               {addOpen && <div className="clickaway" onClick={() => setAddOpen(false)} />}
               {curWs && !q.trim() && folder === 'all' && !curColl && (

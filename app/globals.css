@@ -1435,3 +1435,22 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .pv-card{border:0;padding:0;cursor:pointer;text-align:inherit;font:inherit;color:inherit;max-height:100%;overflow:auto;transition:box-shadow .15s}
 .pv-card:hover{box-shadow:0 10px 40px rgba(20,20,22,.12),0 0 0 3px var(--accent-soft)}
 .pv-site{align-self:flex-start;margin-top:4px}
+
+/* Team: roles */
+.role-pick{width:auto;min-width:0;padding:5px 10px;font-size:13.5px}
+.role-key{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 18px;margin:18px 0 6px;font-size:13px}
+.role-key div{display:flex;flex-direction:column;gap:1px}
+.role-key dt{font-weight:600;color:var(--ink)}
+.role-key dd{margin:0;color:var(--ink-2)}
+
+/* Settings: Activity */
+.act-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
+.act-person{width:auto;min-width:0;padding:5px 10px;font-size:13.5px}
+.act-list{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.act-row{display:flex;gap:14px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:13.5px;align-items:baseline}
+.act-when{flex:none;width:120px;color:var(--ink-3);font-variant-numeric:tabular-nums;font-size:12.5px}
+.act-what{flex:1;min-width:0;color:var(--ink-2)}
+.act-what b{color:var(--ink);font-weight:600}
+.act-what q{color:var(--ink)}
+.act-what q::before{content:'“'}.act-what q::after{content:'”'}
+@media (max-width:640px){.act-row{flex-direction:column;gap:2px}.act-when{width:auto}}

@@ -3,13 +3,20 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { readFeed, storeHost, syncFeed, type Feed } from '@/lib/feedSync';
 import { allowedUrl } from '@/lib/net';
 import { planOf } from '@/lib/billing';
+import { needRole } from '@/lib/roleAuth';
 
 // Product feeds that stay in sync: GET lists a brand's, POST adds one and syncs it straight away,
 // PATCH { id } syncs again now, DELETE ?id stops syncing (the products stay).
 export const runtime = 'nodejs';
 export const maxDuration = 120;
 
+// Anyone in the brand can see its feeds; editors and up add, sync and remove them.
 async function who(ws: string) {
+  const r = await needRole(ws, 'manage');
+  if ('error' in r) return { error: r.error };
+  return { user: r.user, db: createAdminClient() };
+}
+async function anyMember(ws: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: Response.json({ error: 'Sign in first.' }, { status: 401 }) };
@@ -20,7 +27,7 @@ async function who(ws: string) {
 
 export async function GET(request: Request) {
   const ws = new URL(request.url).searchParams.get('workspace_id') || '';
-  const w = await who(ws);
+  const w = await anyMember(ws);
   if ('error' in w) return w.error;
   const { data } = await w.db.from('product_feeds').select('id, kind, source, name, last_synced_at, last_status, last_count').eq('workspace_id', ws).order('created_at');
   const plan = (await planOf(w.db, ws)).plan;
@@ -49,7 +56,7 @@ export async function POST(request: Request) {
   const { data: feed, error } = await w.db.from('product_feeds')
     .upsert({ workspace_id: ws, kind, source, name, created_by: w.user.id }, { onConflict: 'workspace_id,kind,source' }).select('*').single();
   if (error || !feed) return Response.json({ error: error?.message || 'Couldn’t save the feed.' }, { status: 400 });
-  const r = await syncFeed(w.db, feed as Feed, test);
+  const r = await syncFeed(w.db, feed as Feed, test, w.user.id);
   if ('error' in r) return Response.json({ error: r.error, feed }, { status: 400 });
   return Response.json({ feed: { ...feed, last_status: 'ok', last_count: r.count }, result: r });
 }
@@ -61,7 +68,7 @@ export async function PATCH(request: Request) {
   if ('error' in w) return w.error;
   const { data: feed } = await w.db.from('product_feeds').select('*').eq('id', String(body?.id || '')).eq('workspace_id', ws).maybeSingle();
   if (!feed) return Response.json({ error: 'Feed not found.' }, { status: 404 });
-  const r = await syncFeed(w.db, feed as Feed);
+  const r = await syncFeed(w.db, feed as Feed, undefined, w.user.id);
   if ('error' in r) return Response.json({ error: r.error }, { status: 400 });
   return Response.json({ result: r });
 }

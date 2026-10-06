@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const u = new URL(request.url);
   const ws = u.searchParams.get('workspace_id') || '';
-  const m = await member(ws);
+  const m = await member(ws, 'any');
   if ('error' in m) return m.error;
   const r = await clipStatus(m.repo, m.db, ws, m.user.id, u.searchParams.get('job') || '');
   if ('error' in r) return Response.json({ error: r.error }, { status: r.status });

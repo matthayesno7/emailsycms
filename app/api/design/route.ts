@@ -1,3 +1,4 @@
+import { can, NEEDS } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
 import { askClaude, hasClaude, jsonFrom, MODEL } from '@/lib/anthropic';
 import { limitMessage, takeUsage } from '@/lib/usage';
@@ -37,6 +38,8 @@ export async function POST(request: Request) {
       .order('updated_at', { ascending: false }).limit(80),
   ]);
   if (!workspace) return Response.json({ error: 'Workspace not found.' }, { status: 404 });
+  const { data: me } = await supabase.from('workspace_members').select('role').eq('workspace_id', ws).eq('user_id', user.id).maybeSingle();
+  if (!can.add(me?.role)) return Response.json({ error: NEEDS.add, code: 'role' }, { status: 403 });
   // Free is a taster: one Studio run (a brief: its designs and extra sizes). Changing a design is editing.
   if (await freeBrand(ws)) {
     if (body?.instruction) return Response.json({ error: 'Changing designs is on Pro. Upgrade to keep going.', code: 'upgrade', reason: 'edit' }, { status: 402 });

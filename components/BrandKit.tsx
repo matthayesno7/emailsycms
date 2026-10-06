@@ -24,7 +24,7 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
   const [site, setSite] = useState(row?.source?.type === 'website' ? row.source.url || '' : '');
   const [building, setBuilding] = useState(false);
   const [busy, setBusy] = useState(false);
-  const owner = ws.role === 'owner';
+  const owner = ['owner', 'admin'].includes(ws.role || ''); // admins and owners approve the kit
 
   // Someone else (or Claude) saved a new version: show it unless we have unsaved edits.
   useEffect(() => { if (!dirty) setKit(normaliseKit(row?.kit || { name: ws.name }, ws.name)); }, [row, ws.name]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -117,7 +117,7 @@ export default function BrandKitView({ supabase, ws, userId, row, items, urls, t
         {dirty && <button className="btn" type="button" disabled={busy} onClick={() => save()}>Save</button>}
         {(row.status !== 'approved' || dirty) && (owner
           ? <button className="primary" type="button" disabled={busy} onClick={() => save('approved')}>{dirty ? 'Save and approve' : 'Approve'}</button>
-          : <span className="tip">An owner approves the kit.</span>)}
+          : <span className="tip">An admin or owner approves the kit.</span>)}
       </div>
 
       {(gaps.length > 0 || warns.length > 0) && (

@@ -6,10 +6,11 @@ import { ORDER, SECTION, reviewQueue, summaryLine, type ReviewItem, type ReviewK
 
 // Review: the home when something needs a person. Mise files, tags, checks and makes things on
 // its own; this is where people make the calls it shouldn't make alone.
-export default function Review({ items, kit, thumbOf, onApprove, onReject, onKeepBoth, onFine, onRetry, onOpen, onProducts, onBrandKit, onLibrary }: {
+export default function Review({ items, kit, thumbOf, canDecide = true, onApprove, onReject, onKeepBoth, onFine, onRetry, onOpen, onProducts, onBrandKit, onLibrary }: {
   items: Asset[];
   kit: { status?: string | null } | null;
   thumbOf: (a?: Asset | null) => string | null;
+  canDecide?: boolean; // editors and up approve and reject
   onApprove: (ids: string[]) => Promise<void>;
   onReject: (a: Asset) => Promise<void>;
   onKeepBoth: (a: Asset) => Promise<void>;
@@ -37,6 +38,7 @@ export default function Review({ items, kit, thumbOf, onApprove, onReject, onKee
         <span className="lib-fact">{q.count ? `${q.count} thing${q.count === 1 ? '' : 's'} need${q.count === 1 ? 's' : ''} you` : 'All clear'}</span>
       </div>
       <p className="rv-week"><Icon.Sparkle size={15} />{summaryLine(q.summary)}</p>
+      {!canDecide && groups.length > 0 && <p className="tip">An editor, admin or owner decides on these. You can open any of them to look.</p>}
 
       {!groups.length ? (
         <div className="rv-clear">
@@ -49,7 +51,7 @@ export default function Review({ items, kit, thumbOf, onApprove, onReject, onKee
         <section key={g.kind} className="rv-sec">
           <div className="rv-sec-h">
             <h2>{SECTION[g.kind].title} <span>{g.kind === 'no_image' ? g.list[0].asset_ids?.length : g.list.length}</span></h2>
-            {g.kind === 'draft' && g.list.length > 1 && (
+            {canDecide && g.kind === 'draft' && g.list.length > 1 && (
               <button className="btn quiet" type="button" disabled={busy === 'all'} onClick={() => run('all', () => onApprove(g.list.map((i) => i.asset_id!)))}>
                 <Icon.Check size={15} />Approve all {g.list.length}
               </button>
@@ -58,7 +60,7 @@ export default function Review({ items, kit, thumbOf, onApprove, onReject, onKee
           <p className="tip">{SECTION[g.kind].hint}</p>
           <div className="rv-list">
             {g.list.map((it) => <Row key={it.key} it={it} kind={g.kind} a={it.asset_id ? byId.get(it.asset_id) : undefined} other={it.other_id ? byId.get(it.other_id) : undefined}
-              thumbOf={thumbOf} busy={busy === it.key || busy === 'all'}
+              thumbOf={thumbOf} busy={busy === it.key || busy === 'all'} readOnly={!canDecide}
               act={(fn) => run(it.key, fn)} {...{ onApprove, onReject, onKeepBoth, onFine, onRetry, onOpen, onProducts, onBrandKit }} />)}
           </div>
         </section>
@@ -69,8 +71,8 @@ export default function Review({ items, kit, thumbOf, onApprove, onReject, onKee
   );
 }
 
-function Row({ it, kind, a, other, thumbOf, busy, act, onApprove, onReject, onKeepBoth, onFine, onRetry, onOpen, onProducts, onBrandKit }: {
-  it: ReviewItem; kind: ReviewKind; a?: Asset; other?: Asset; thumbOf: (a?: Asset | null) => string | null; busy: boolean;
+function Row({ it, kind, a, other, thumbOf, busy, readOnly, act, onApprove, onReject, onKeepBoth, onFine, onRetry, onOpen, onProducts, onBrandKit }: {
+  it: ReviewItem; kind: ReviewKind; a?: Asset; other?: Asset; thumbOf: (a?: Asset | null) => string | null; busy: boolean; readOnly?: boolean;
   act: (fn: () => Promise<void>) => void;
   onApprove: (ids: string[]) => Promise<void>; onReject: (a: Asset) => Promise<void>; onKeepBoth: (a: Asset) => Promise<void>;
   onFine: (a: Asset) => Promise<void>; onRetry: (a: Asset) => Promise<void>; onOpen: (id: string) => void; onProducts: () => void; onBrandKit: () => void;
@@ -92,6 +94,7 @@ function Row({ it, kind, a, other, thumbOf, busy, act, onApprove, onReject, onKe
         <span>{it.detail}</span>
       </div>
       <div className="rv-acts">
+        {readOnly ? (a ? <button className="btn" type="button" onClick={() => onOpen(a.id)}>Open</button> : null) : <>
         {kind === 'draft' && a && <>
           <button className="btn quiet" type="button" disabled={busy} onClick={() => act(() => onReject(a))}>Reject</button>
           <button className="btn" type="button" disabled={busy} onClick={() => onOpen(a.id)}>Open</button>
@@ -112,6 +115,7 @@ function Row({ it, kind, a, other, thumbOf, busy, act, onApprove, onReject, onKe
         </>}
         {kind === 'no_image' && <button className="btn" type="button" onClick={onProducts}>See products</button>}
         {kind === 'brand_kit' && <button className="btn" type="button" onClick={onBrandKit}>Open brand kit</button>}
+        </>}
       </div>
     </div>
   );

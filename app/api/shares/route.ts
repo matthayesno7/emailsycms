@@ -1,3 +1,4 @@
+import { needRole } from '@/lib/roleAuth';
 import { createClient } from '@/lib/supabase/server';
 import { freeBrand } from '@/lib/billing';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -7,14 +8,8 @@ import { FORMATS, hashPasscode, newToken } from '@/lib/share';
 // in the app through row level security; this route exists because passcodes are hashed here.
 export const runtime = 'nodejs';
 
-async function member(ws: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: Response.json({ error: 'Sign in first.' }, { status: 401 }) };
-  const { data } = await supabase.from('workspaces').select('id').eq('id', ws).maybeSingle();
-  if (!data) return { error: Response.json({ error: 'Workspace not found.' }, { status: 404 }) };
-  return { user };
-}
+// Sharing is for editors, admins and owners.
+const member = (ws: string) => needRole(ws, 'manage');
 
 const formats = (v: unknown) => {
   const f = (Array.isArray(v) ? v : FORMATS).map(String).filter((x) => (FORMATS as readonly string[]).includes(x));

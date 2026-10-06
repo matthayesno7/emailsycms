@@ -208,8 +208,8 @@ export const MORE_TOOLS = [
   },
   {
     name: 'invite_teammate',
-    description: 'Invite someone to a workspace by email (owners only). New people get an email; people with an account see the brand next time they open Mise.',
-    inputSchema: { type: 'object', properties: { workspace_id: ws, email: { type: 'string' } }, required: ['workspace_id', 'email'], additionalProperties: false },
+    description: 'Invite someone to a workspace by email, with a role (admins and owners only). New people get an email; people with an account see the brand next time they open Mise.',
+    inputSchema: { type: 'object', properties: { workspace_id: ws, email: { type: 'string' }, role: { type: 'string', enum: ['admin', 'editor', 'contributor', 'viewer'], default: 'editor', description: 'admin: people and settings; editor: add, edit, approve, share; contributor: add and make things that wait for review; viewer: look and download.' } }, required: ['workspace_id', 'email'], additionalProperties: false },
   },
 ];
 
@@ -721,7 +721,7 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
     case 'approve_brand_kit': {
       const w = await workspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
-      if (w.ws.role !== 'owner') return toolError('Only owners can approve the brand kit. Ask an owner of this brand.');
+      if (!['owner', 'admin'].includes(w.ws.role)) return toolError('Only admins and owners can approve the brand kit. Ask one of them.');
       const kit = await ctx.repo.getBrandKit(w.ws.id);
       if (!kit) return toolError('There’s no brand kit yet.');
       if (kit.status === 'approved') return text({ ok: true, note: 'It was already approved.' });
@@ -732,11 +732,11 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
     case 'invite_teammate': {
       const w = await workspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
-      if (w.ws.role !== 'owner') return toolError('Only owners can invite people. Ask an owner of this brand.');
+      if (!['owner', 'admin'].includes(w.ws.role)) return toolError('Only admins and owners can invite people. Ask one of them.');
       const email = String(args.email || '').trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toolError('That isn’t a valid email address.');
       const db = need(ctx);
-      const { error } = await db.from('workspace_invites').upsert({ workspace_id: w.ws.id, email, role: 'editor', invited_by: ctx.userId, accepted_at: null }, { onConflict: 'workspace_id,email' });
+      const { error } = await db.from('workspace_invites').upsert({ workspace_id: w.ws.id, email, role: ['admin', 'editor', 'contributor', 'viewer'].includes(args.role) ? args.role : 'editor', invited_by: ctx.userId, accepted_at: null }, { onConflict: 'workspace_id,email' });
       if (error) return toolError(error.message);
       const { error: ie } = await db.auth.admin.inviteUserByEmail(email, { redirectTo: link(ctx, 'login') });
       const existing = !!ie && /already|registered|exists/i.test(ie.message);

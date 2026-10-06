@@ -1,3 +1,4 @@
+import { needRole } from '@/lib/roleAuth';
 import { createClient } from '@/lib/supabase/server';
 import { freeBrand } from '@/lib/billing';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -13,14 +14,8 @@ const slugify = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').repla
 const emails = (v: unknown) => (Array.isArray(v) ? v : String(v || '').split(/[\s,;]+/))
   .map((x) => String(x).trim().toLowerCase()).filter((x) => /^(@[\w.-]+\.[a-z]{2,}|[^@\s]+@[\w.-]+\.[a-z]{2,})$/.test(x)).slice(0, 500);
 
-async function member(ws: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: Response.json({ error: 'Sign in first.' }, { status: 401 }) };
-  const { data } = await supabase.from('workspaces').select('id, name, slug').eq('id', ws).maybeSingle();
-  if (!data) return { error: Response.json({ error: 'Workspace not found.' }, { status: 404 }) };
-  return { user, ws: data };
-}
+// Portals are for editors, admins and owners.
+const member = (ws: string) => needRole(ws, 'manage');
 
 // Fields a person can set, checked and cleaned. Ids must belong to the workspace.
 async function fields(db: any, ws: string, b: any) {

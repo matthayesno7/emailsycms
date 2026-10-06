@@ -141,7 +141,7 @@ export function fetchImagesInBackground(db: any, ws: string) {
   })().catch((e) => console.error('[feeds] images', e?.message));
 }
 
-export async function syncFeed(db: any, feed: Feed, already?: FeedProduct[]) {
+export async function syncFeed(db: any, feed: Feed, already?: FeedProduct[], actor?: string | null) {
   const read = already || (await readFeed(feed.kind, feed.source));
   const at = new Date().toISOString();
   if ('error' in read) {
@@ -151,6 +151,9 @@ export async function syncFeed(db: any, feed: Feed, already?: FeedProduct[]) {
   try {
     const r = await applyProducts(db, feed.workspace_id, feed.created_by, feed.id, read);
     await db.from('product_feeds').update({ last_synced_at: at, last_status: 'ok', last_count: r.count }).eq('id', feed.id);
+    if (r.added || r.removed || r.restored || actor) {
+      await db.rpc('audit', { p_ws: feed.workspace_id, p_action: 'feed.synced', p_type: 'feed', p_id: feed.id, p_name: feed.name || feed.source, p_details: { products: r.count, added: r.added, removed: r.removed, restored: r.restored }, p_actor: actor || null });
+    }
     if (r.images) fetchImagesInBackground(db, feed.workspace_id);
     return r;
   } catch (e: any) {

@@ -1,4 +1,5 @@
 'use client';
+import { ROLES, can, roleError, roleLabel, type Role } from '@/lib/roles';
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
@@ -69,33 +70,43 @@ export function HelpFeed() {
 
 export function Members({ supabase, ws, userId, toast }: { supabase: SupabaseClient; ws: Ws; userId: string; toast: (m: string) => void }) {
   const [members, setMembers] = useState<{ user_id: string; role: string; email: string }[]>([]);
-  const [invites, setInvites] = useState<{ id: string; email: string }[]>([]);
+  const [invites, setInvites] = useState<{ id: string; email: string; role: string }[]>([]);
   const [email, setEmail] = useState('');
+  const [role, setRole] = useState<Role>('editor');
   const [busy, setBusy] = useState(false);
-  const owner = ws.role === 'owner';
+  const admin = can.admin(ws.role);
+  const owner = can.owner(ws.role);
 
   const load = useCallback(async () => {
     const { data: m } = await supabase.from('workspace_members').select('user_id, role').eq('workspace_id', ws.id);
     const ids = (m || []).map((r: any) => r.user_id);
     const { data: p } = ids.length ? await supabase.from('profiles').select('id, email').in('id', ids) : { data: [] as any[] };
     const emails = Object.fromEntries((p || []).map((r: any) => [r.id, r.email]));
-    setMembers((m || []).map((r: any) => ({ ...r, email: emails[r.user_id] || 'Unknown' })));
-    if (owner) {
-      const { data: i } = await supabase.from('workspace_invites').select('id, email').eq('workspace_id', ws.id).is('accepted_at', null);
+    const order = ROLES.map((r) => r.id as string);
+    setMembers((m || []).map((r: any) => ({ ...r, email: emails[r.user_id] || 'Unknown' })).sort((x, y) => order.indexOf(x.role) - order.indexOf(y.role) || x.email.localeCompare(y.email)));
+    if (admin) {
+      const { data: i } = await supabase.from('workspace_invites').select('id, email, role').eq('workspace_id', ws.id).is('accepted_at', null);
       setInvites(i || []);
     }
-  }, [supabase, ws.id, owner]);
+  }, [supabase, ws.id, admin]);
   useEffect(() => { load(); }, [load]);
 
   async function invite(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const res = await fetch('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId: ws.id, email }) });
+    const res = await fetch('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId: ws.id, email, role }) });
     const json = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { toast(json.error || 'Couldn’t send the invite.'); return; }
     toast(json.existing ? `${email} already has an account. They'll see ${ws.name} next time they open Mise.` : `Invite sent to ${email}`);
     setEmail('');
+    load();
+  }
+
+  async function change(uid: string, to: string) {
+    const { error } = await supabase.rpc('set_member_role', { p_ws: ws.id, p_user: uid, p_role: to });
+    if (error) { toast(roleError(error.message) || error.message); return; }
+    toast(`Now ${roleLabel(to).toLowerCase()}`);
     load();
   }
 
@@ -109,32 +120,47 @@ export function Members({ supabase, ws, userId, toast }: { supabase: SupabaseCli
     load();
   }
 
+  // Owners can set any role; admins any role below owner, and can't change an owner.
+  const choices = (current: string) => ROLES.filter((r) => owner || (r.id !== 'owner' && current !== 'owner'));
+  const editable = (m: { user_id: string; role: string }) => admin && m.user_id !== userId && (owner || m.role !== 'owner');
+
   return (
     <>
-      <h2>Members of {ws.name}</h2>
+      <h2>Team for {ws.name}</h2>
       <div className="rows">
         {members.map((m) => (
           <div className="row" key={m.user_id}>
             <span className="grow">{m.email}{m.user_id === userId ? ' (you)' : ''}</span>
-            <span className="muted">{m.role === 'owner' ? 'Owner' : 'Editor'}</span>
-            {owner && m.user_id !== userId && <button className="btn quiet" type="button" onClick={() => remove(m.user_id)}>Remove</button>}
+            {editable(m) ? (
+              <select className="in role-pick" value={m.role} onChange={(e) => change(m.user_id, e.target.value)} aria-label={`Role for ${m.email}`}>
+                {choices(m.role).map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+            ) : <span className="muted">{roleLabel(m.role)}</span>}
+            {editable(m) && <button className="btn quiet" type="button" onClick={() => remove(m.user_id)}>Remove</button>}
           </div>
         ))}
         {invites.map((i) => (
           <div className="row" key={i.id}>
-            <span className="grow">{i.email}</span><span className="muted">Invited</span>
+            <span className="grow">{i.email}</span><span className="muted">Invited · {roleLabel(i.role)}</span>
             <button className="btn quiet" type="button" onClick={() => cancel(i.id)}>Cancel</button>
           </div>
         ))}
       </div>
-      {owner ? (
+      {admin ? (
         <form className="inline" onSubmit={invite}>
           <input className="in" type="email" required placeholder="teammate@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <select className="in role-pick" value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label="Role">
+            {ROLES.filter((r) => r.id !== 'owner').map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+          </select>
           <button className="primary" type="submit" disabled={busy}>{busy ? 'Sending…' : 'Invite'}</button>
         </form>
       ) : (
-        <p className="tip">Only owners can invite people to this workspace.</p>
+        <p className="tip">Only admins and owners can invite people to this brand.</p>
       )}
+      <dl className="role-key">
+        {ROLES.map((r) => <div key={r.id}><dt>{r.label}</dt><dd>{r.blurb}</dd></div>)}
+      </dl>
+      <p className="tip">Everyone is free: Mise is priced per brand, not per person.</p>
     </>
   );
 }
@@ -272,7 +298,7 @@ export function parseFigmaUrl(raw: string) {
 }
 
 export function WorkspaceSettings({ supabase, ws, toast, onSaved, onDeleted }: { supabase: SupabaseClient; ws: Ws; toast: (m: string) => void; onSaved: () => void; onDeleted?: () => void }) {
-  const owner = ws.role === 'owner';
+  const owner = can.admin(ws.role); // admins and owners change brand settings
   const [name, setName] = useState(ws.name);
   const [link, setLink] = useState(ws.figma_file_url || '');
   const [busy, setBusy] = useState(false);
@@ -290,7 +316,7 @@ export function WorkspaceSettings({ supabase, ws, toast, onSaved, onDeleted }: {
       figma_file_name: parsed?.name || null,
     }).eq('id', ws.id);
     setBusy(false);
-    if (error) { toast('Couldn’t save. Only owners can change workspace settings.'); return; }
+    if (error) { toast('Couldn’t save. Only admins and owners can change brand settings.'); return; }
     toast(parsed ? `Connected ${parsed.name}` : 'Saved');
     onSaved();
   }
@@ -312,9 +338,9 @@ export function WorkspaceSettings({ supabase, ws, toast, onSaved, onDeleted }: {
       {owner ? (
         <div className="actions"><button className="primary" type="submit" disabled={busy || invalid}>{busy ? 'Saving…' : 'Save'}</button></div>
       ) : (
-        <p className="tip">Only owners can change workspace settings.</p>
+        <p className="tip">Only admins and owners can change brand settings.</p>
       )}
-      {owner && onDeleted && <DeleteBrand supabase={supabase} ws={ws} toast={toast} onDeleted={onDeleted} />}
+      {can.owner(ws.role) && onDeleted && <DeleteBrand supabase={supabase} ws={ws} toast={toast} onDeleted={onDeleted} />}
     </form>
   );
 }

@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { appUrl } from '@/lib/keys';
 
-// Invite a teammate to a workspace. Owners only (enforced by row level security on the insert).
+// Invite a teammate to a brand with a role. Admins and owners only (row level security on the insert).
+import { isRole } from '@/lib/roles';
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -11,12 +12,13 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const email = String(body?.email || '').trim().toLowerCase();
   const workspaceId = String(body?.workspaceId || '');
+  const role = isRole(body?.role) && body.role !== 'owner' ? body.role : 'editor';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return Response.json({ error: 'Enter a valid email address.' }, { status: 400 });
 
   const { error } = await supabase
     .from('workspace_invites')
-    .upsert({ workspace_id: workspaceId, email, role: 'editor', invited_by: user.id, accepted_at: null }, { onConflict: 'workspace_id,email' });
-  if (error) return Response.json({ error: 'Only workspace owners can invite people.' }, { status: 403 });
+    .upsert({ workspace_id: workspaceId, email, role, invited_by: user.id, accepted_at: null }, { onConflict: 'workspace_id,email' });
+  if (error) return Response.json({ error: 'Only admins and owners can invite people.' }, { status: 403 });
 
   // New people get an invite email from Supabase; people who already have an account
   // see the workspace the next time they open the app.
