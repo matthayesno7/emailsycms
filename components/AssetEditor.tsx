@@ -198,7 +198,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
             {!isVideo && src && <button className="btn" type="button" disabled title="Remove backgrounds, extend, upscale and change it with words. Coming next."><Icon.Sparkle size={15} />AI edit <em className="soon">Soon</em></button>}
           </div>
         )}
-        {!editing && src && isVideo && <a className="btn" href={src} download={`${it.name.replace(/[^\w.-]+/g, '-')}.mp4`} target="_blank" rel="noreferrer">Download</a>}
+        {!editing && src && isVideo && <a className="btn" href={src} download={`${it.name.replace(/[^\w.-]+/g, '-')}.${(it.mime || '').includes('webm') ? 'webm' : (it.mime || '').includes('quicktime') ? 'mov' : 'mp4'}`} target="_blank" rel="noreferrer">Download</a>}
         {!editing && src && !isVideo && (
           <div className="dlwrap">
             <button className="btn" type="button" aria-expanded={dlOpen} onClick={() => setDlOpen((o) => !o)}><Icon.Download size={15} />Download</button>

@@ -109,7 +109,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent).detail || {};
-      setLimitHit({ message: d.message || 'This brand has used its Studio designs for this month.', reason: d.reason });
+      setLimitHit({ message: d.message || 'This brand has used its designs for this month.', reason: d.reason });
       // Free and out of designs: the upgrade pop-up, once per visit.
       if (d.reason === 'allowance' && !shownDesignsUpsell.current) { shownDesignsUpsell.current = true; setUpgrade({ reason: 'designs' }); setModal('upgrade'); }
     };
@@ -987,7 +987,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 <button type="button" role="menuitem" className="muted" onClick={() => setNewWs('')}><Icon.Plus size={16} />New brand</button>
               ) : (
                 <form className="newws" onSubmit={(e) => { e.preventDefault(); const n = newWs.trim(); if (n) createWorkspace(n); setNewWs(null); setWsOpen(false); }}>
-                  <input className="in" autoFocus value={newWs} maxLength={40} placeholder="Brand name" onChange={(e) => setNewWs(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setNewWs(null)} />
+                  <input className="in" autoFocus value={newWs} maxLength={60} placeholder="Brand name" onChange={(e) => setNewWs(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setNewWs(null)} />
                   <button className="btn" type="submit">Add</button>
                 </form>
               )}

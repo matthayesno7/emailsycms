@@ -49,7 +49,7 @@ See [Plans](plans) and [Billing](billing#extra-designs).
 |---|---|
 | "Claude didn’t return a design. Try again." | Click **Try again** on that design. It's usually a one-off. |
 | "Couldn’t make that change." | Try rewording the change, or make it in smaller steps. |
-| "Your free Studio run is used…" (Studio is Create's design tool) | Upgrade to Pro to keep making designs. |
+| "Your free Create run is used…" | Upgrade to Pro to keep making designs. |
 | A banner about the monthly cap | The brand has reached its cap for extra designs. An owner can raise it in Settings → **Plan & usage**, or it resets on the 1st. |
 | Designs don't look like your brand | Check your brand kit: approved, with a logo, colours, fonts and imagery rules. Add more approved photos. |
 | "Viewers can look and download, not add or make things…" | Your role is Viewer. Ask an admin for contributor access. |

@@ -82,7 +82,7 @@ Search this page (⌘F or Ctrl+F) for the words you see.
 ## Create
 | Message | What to do |
 |---|---|
-| "Your free Studio run is used…" | Upgrade to Pro to keep creating. |
+| "Your free Create run is used…" | Upgrade to Pro to keep creating. |
 | "Claude didn’t return a design. Try again." | Click **Try again** on that design. |
 | "Couldn’t make that change." | Reword it, or make it in smaller steps. |
 | "Couldn’t reach Mise." | Check your connection and try again. |

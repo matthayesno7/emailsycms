@@ -73,7 +73,7 @@ export default function ImportSources({ ws, folderId, folderName, onDone, toast,
         linkType: 'direct', multiselect: true, extensions: ['images', 'video'],
         success: (files: any[]) => run('Dropbox', '/api/import/dropbox', files.map((f) => ({ id: f.id, name: f.name, link: f.link }))),
       });
-    } catch { toast('Dropbox didn’t load. Check the app key and allowed domain.'); }
+    } catch { toast('Dropbox didn’t load. Allow pop-ups for Mise and try again, or upload a folder instead.'); }
   }
 
   async function google() {
@@ -104,7 +104,7 @@ export default function ImportSources({ ws, folderId, folderName, onDone, toast,
         });
       if (g.appId) builder.setAppId(g.appId);
       builder.build().setVisible(true);
-    } catch (e: any) { if (e?.message !== 'cancelled') toast('Google Drive didn’t load. Check the Google keys.'); }
+    } catch (e: any) { if (e?.message !== 'cancelled') toast('Google Drive didn’t load. Allow pop-ups for Mise and try again, or upload a folder instead.'); }
   }
 
   function box() {

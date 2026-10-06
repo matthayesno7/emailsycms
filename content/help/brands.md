@@ -14,7 +14,7 @@ Click the brand name at the top of the sidebar and pick another brand. A tick sh
 
 ## Add a brand
 1. Click the brand name at the top of the sidebar → **+ New brand**.
-2. Type the brand's name (up to 40 characters; you can make it longer later, up to 60) and click **Add**.
+2. Type the brand's name (up to 60 characters) and click **Add**.
 
 Your first brand is free. **Every brand you add after that is on Pro** and opens checkout, because each brand has its own library, brand kit, portals and monthly designs. After you pay, Mise sets the brand up and opens its brand kit ("Your new brand is ready"). If it takes a moment, refresh.
 

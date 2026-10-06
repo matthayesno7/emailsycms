@@ -12,7 +12,7 @@ import { overagePriceFor, reportOverage } from './stripe';
 
 export type UsageKind = 'tag' | 'search' | 'design' | 'kit';
 
-export const LABEL: Record<UsageKind, string> = { tag: 'files organised', search: 'plain-English searches', design: 'Studio designs', kit: 'brand kits from a website' };
+export const LABEL: Record<UsageKind, string> = { tag: 'files organised', search: 'plain-English searches', design: 'designs', kit: 'brand kits from a website' };
 
 export function capFor(kind: UsageKind, plan: Plan = 'free') {
   if (kind === 'design') return designAllowance(plan);
@@ -83,10 +83,10 @@ export async function takeUsage(ws: string, kind: UsageKind, n = 1): Promise<Tak
 
 export function limitMessage(kind: UsageKind, t?: Pick<Take, 'plan' | 'reason'>) {
   if (kind === 'design' && t?.reason === 'allowance') {
-    return `This brand has used its ${designAllowance(t.plan)} Studio designs for this month on Free. Upgrade it to Pro for ${designAllowance('pro')} a month (then 50p a design), or they reset on the 1st.`;
+    return `This brand has used its free designs. Upgrade it to Pro for ${designAllowance('pro')} designs a month.`;
   }
   if (kind === 'design' && t?.reason === 'overage_cap') {
-    return 'This brand has reached the monthly spending cap for extra Studio designs. An owner can raise it in Settings → Plan, or it resets on the 1st.';
+    return 'This brand has reached its monthly cap for extra designs. An owner can raise it in Settings → Plan & usage, or it resets on the 1st.';
   }
   return `This brand has used its ${LABEL[kind]} for this month. It resets on the 1st, or tell us through Feedback and we’ll raise it.`;
 }

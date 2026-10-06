@@ -25,7 +25,7 @@ const proAdds = (cur: Currency) => [
   'Your whole library: unlimited files, every one organised and searchable',
   'Share links and brand portals',
   'Edit photos and designs, with every version kept',
-  `${designAllowance('pro')} Studio designs a month, then ${money(PRICES[cur].overage, cur)} each up to a cap you set`,
+  `${designAllowance('pro')} designs a month, then ${money(PRICES[cur].overage, cur)} each up to a cap you set`,
   'Licence expiry dates, with expired files blocked automatically',
   'Mark files obsolete and point people to the replacement',
 ];
@@ -90,7 +90,7 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
             <p className="tip">
               {pro
                 ? <>{b.interval === 'year' ? priceLine('year', cur) : priceLine('month', cur)}{b.current_period_end ? (b.cancel_at_period_end ? ` · ends ${day(b.current_period_end)}` : b.status === 'trialing' ? ` · trial ends ${day(b.current_period_end)}` : ` · renews ${day(b.current_period_end)}`) : ''}{b.status === 'past_due' ? ' · payment failed, Stripe is retrying' : ''}</>
-                : 'A taster of Mise: your brand kit, up to 50 files and one Studio run. No card needed.'}
+                : 'A taster of Mise: your brand kit, up to 50 files and one Create run. No card needed.'}
             </p>
           </div>
           {pro && owner && s.stripe && b.has_customer && (
@@ -102,18 +102,18 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
           {!pro ? (
             <>
               <Meter label="Files" used={s.free.files} max={s.free.files_max} />
-              <div className="usage-row"><span>Studio run</span><span className={'state ' + (s.free.studio_used ? 'used' : 'ok')}>{s.free.studio_used ? 'Used' : 'Available'}</span></div>
+              <div className="usage-row"><span>Create run</span><span className={'state ' + (s.free.studio_used ? 'used' : 'ok')}>{s.free.studio_used ? 'Used' : 'Available'}</span></div>
               <div className="usage-row"><span>Sharing and editing</span><span className="state locked">On Pro</span></div>
             </>
           ) : (
             <>
               <div className="usage-row"><span>Files</span><span className="state ok">{s.free.files.toLocaleString()} · unlimited</span></div>
-              <Meter label="Studio designs this month" used={Math.min(d.used, d.allowance)} max={d.allowance} />
+              <Meter label="Designs this month" used={Math.min(d.used, d.allowance)} max={d.allowance} />
               {d.extra > 0 && <div className="usage-row"><span>Extra designs</span><span className="state">{d.extra} · {fmt(d.extra_pence)} on the next invoice</span></div>}
             </>
           )}
         </div>
-        {pro && <p className="tip">Studio designs reset on {day(d.resets)}.</p>}
+        {pro && <p className="tip">Designs reset on {day(d.resets)}.</p>}
       </section>
 
       {!pro && (
@@ -136,14 +136,14 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
 
       {pro && (
         <form className="plan-sec" onSubmit={saveCap}>
-          <h3>Extra Studio designs</h3>
+          <h3>Extra designs</h3>
           <div className="row-inline">
             <label htmlFor="cap" className="tip">Monthly cap</label>
             <span className="prefix">{symbol(cur)}</span>
             <input id="cap" className="in short" type="number" min={0} max={10000} step={1} value={cap} disabled={!owner} onChange={(e) => setCap(e.target.value)} />
             {owner && <button className="btn" type="submit" disabled={busy}>Save</button>}
           </div>
-          <p className="tip">After {d.allowance} designs a month, each extra one is {fmt(P.overage)}. Studio pauses at the cap; {symbol(cur)}0 switches extras off.{d.extra_left > 0 ? ` ${d.extra_left} more fit this month.` : ''}</p>
+          <p className="tip">After {d.allowance} designs a month, each extra one is {fmt(P.overage)}. Create pauses at the cap; {symbol(cur)}0 switches extras off.{d.extra_left > 0 ? ` ${d.extra_left} more fit this month.` : ''}</p>
         </form>
       )}
 
@@ -168,15 +168,15 @@ function pitch(ask: UpgradeAsk, wsName: string, cur: Currency) {
   const over = money(PRICES[cur].overage, cur);
   switch (ask.reason) {
     case 'files': return { h: 'Bring in the rest of your library', p: `You’ve tried Mise with ${FREE_FILES} files${ask.count ? `; ${ask.count.toLocaleString()} more ${ask.count === 1 ? 'is' : 'are'} waiting to come in` : ''}. Pro takes your whole library, every file organised and searchable the moment it’s added.` };
-    case 'studio': return { h: 'Keep creating', p: `That was your free Studio run. Pro gives you ${designAllowance('pro')} designs a month, on brand every time, then ${over} each up to a cap you set.` };
+    case 'studio': return { h: 'Keep creating', p: `That was your free Create run. Pro gives you ${designAllowance('pro')} designs a month, on brand every time, then ${over} each up to a cap you set.` };
     case 'portal': return { h: 'Publish your brand portal', p: 'Your portal is built and styled from your brand kit. Publish it to give agencies, retailers and partners one place for your logos, images and guidelines, and see who downloads what.' };
     case 'share': return { h: 'Share with your team, agencies and retailers', p: 'Send links to files, folders and collections, and publish a brand portal styled from your brand kit. See who viewed and downloaded what.' };
-    case 'edit': return { h: 'Edit without leaving Mise', p: 'Crop, resize and retouch photos, change Studio designs, ask Claude to edit in Figma, and restore any earlier version.' };
+    case 'edit': return { h: 'Edit without leaving Mise', p: 'Crop, resize and retouch photos, change designs made in Create, ask Claude to edit in Figma, and restore any earlier version.' };
     case 'organise': return { h: 'Organise your whole library today', p: `${ask.count ? `${ask.count.toLocaleString()} file${ask.count === 1 ? ' is' : 's are'}` : 'Some files are'} uploaded but waiting to be organised. On Pro, every file is tagged, described and searchable the moment it’s added. On Free, they carry on from ${nextFirst()}.` };
     case 'media': return { h: 'Make new photos and video', p: `New photography and video, made in your brand’s style with the best AI model for each job, are on Pro. Pro gives you ${designAllowance('pro')} designs a month: a photo is 1, a video clip is 10.` };
-    case 'designs': return { h: 'Keep designing', p: `${wsName} has used this month’s ${designAllowance('free')} Studio designs. Pro gives you ${designAllowance('pro')} a month, then ${over} each up to a cap you set. On Free, Studio comes back on ${nextFirst()}.` };
-    case 'lifecycle': return { h: 'Never use an expired image again', p: 'Add the date a photo’s licence runs out and Mise blocks it on the day: no downloads, no shares, not offered to Studio or Claude. Mark old files obsolete and point people to the replacement.' };
-    case 'brand': return { h: `Add ${ask.brand || 'another brand'}`, p: 'Your free plan covers one brand. Each extra brand gets its own library, brand kit, portals and Studio designs.' };
+    case 'designs': return { h: 'Keep designing', p: `${wsName} has used this month’s ${designAllowance('free')} designs. Pro gives you ${designAllowance('pro')} a month, then ${over} each up to a cap you set. On Free, designs come back on ${nextFirst()}.` };
+    case 'lifecycle': return { h: 'Never use an expired image again', p: 'Add the date a photo’s licence runs out and Mise blocks it on the day: no downloads, no shares, not used in Create or by Claude. Mark old files obsolete and point people to the replacement.' };
+    case 'brand': return { h: `Add ${ask.brand || 'another brand'}`, p: 'Your free plan covers one brand. Each extra brand gets its own library, brand kit, portals and designs.' };
     default: return { h: 'Get your whole brand working', p: 'Everything in Free, without the waiting.' };
   }
 }
@@ -185,7 +185,7 @@ const proCard = (cur: Currency) => [
   'Your whole library: unlimited files, every one organised and searchable',
   'Share links and brand portals, with views and downloads',
   'Edit photos and designs, with every version kept',
-  `${designAllowance('pro')} Studio designs a month, then ${money(PRICES[cur].overage, cur)} each`,
+  `${designAllowance('pro')} designs a month, then ${money(PRICES[cur].overage, cur)} each`,
   'Licence expiry dates, with expired files blocked automatically',
   'Unlimited users, no seat fees',
 ];

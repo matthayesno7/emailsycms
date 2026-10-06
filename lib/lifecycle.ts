@@ -9,7 +9,7 @@ type Row = Record<string, any> | null | undefined;
 export type Lifecycle = 'active' | 'archived' | 'expired' | 'obsolete';
 
 export const LIFECYCLE: Record<Exclude<Lifecycle, 'active'>, { label: string; badge: string; help: string }> = {
-  archived: { label: 'Archived', badge: 'Archived', help: 'Retired. Still here for the record, but hidden from the library, Studio and Claude.' },
+  archived: { label: 'Archived', badge: 'Archived', help: 'Retired. Still here for the record, but hidden from the library, Create and Claude.' },
   expired: { label: 'Licence expired', badge: 'Licence expired', help: 'The licence or usage rights have run out. It can’t be downloaded, shared or used in new work.' },
   obsolete: { label: 'Obsolete', badge: 'Obsolete', help: 'Superseded, e.g. an old logo or a format that’s no longer used. Point people to its replacement.' },
 };
