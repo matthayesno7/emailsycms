@@ -61,7 +61,7 @@ export const TERMS: Section[] = [
     'Mise, its software and its design belong to us and our licensors. These terms give you the right to use Mise; they do not transfer any of our intellectual property to you. If you send us feedback, we may use it freely.',
   ] },
   { h: 'Data protection', p: [
-    'Our Privacy Policy explains how we handle personal data. Where we process personal data in your content on your behalf, we do so as your processor, following your instructions and the data processing terms available on request (and included in Enterprise contracts).',
+    'Our Privacy Policy explains how we handle personal data. Where we process personal data in your content on your behalf, we do so as your processor under our Data Processing Agreement (app.misedam.com/dpa), which forms part of these terms. Our Security page (app.misedam.com/security) describes how we protect your data.',
   ] },
   { h: 'Ending your account', p: [
     'You can stop using Mise at any time. Owners can delete a brand in Settings, which deletes its content. To close your whole account, email us.',
@@ -111,7 +111,8 @@ export const PRIVACY: Section[] = [
     '- Resend: sending email (EU).',
     '- Anthropic: AI for organising files, brand kits and designs (US).',
     '- Voyage AI: AI search (US).',
-    '- Google (Gemini API): making new images when you ask for them (US).',
+    '- Google (Gemini API): making new photos and video when you ask for them (US).',
+    '- Cloudflare: DNS and network protection (global).',
     '- Google, Dropbox and Box: only when you choose to import files from them, or sign in with Google.',
     'We may also share data if the law requires it, to protect our rights or users, or as part of a sale or reorganisation of our business (with the same protections).',
   ] },
@@ -132,5 +133,145 @@ export const PRIVACY: Section[] = [
   ] },
   { h: 'Changes', p: [
     'We will update this policy when how we handle data changes, and tell customers by email about significant changes.',
+  ] },
+];
+
+// Who processes data for Mise. Shared by the Security page and the DPA (and kept in step with PRIVACY).
+export const SUBPROCESSORS: { name: string; what: string; where: string }[] = [
+  { name: 'Supabase', what: 'Database, file storage and sign-in', where: 'EU (on AWS)' },
+  { name: 'Railway', what: 'Hosting the app', where: 'EU' },
+  { name: 'Cloudflare', what: 'DNS and network protection', where: 'Global' },
+  { name: 'Stripe', what: 'Payments and invoices', where: 'UK, EU and US' },
+  { name: 'Resend', what: 'Sending email (sign-in links, invites, notices)', where: 'EU' },
+  { name: 'Anthropic', what: 'AI for organising files, search, brand kits and designs', where: 'US' },
+  { name: 'Voyage AI', what: 'AI search (making files searchable by meaning)', where: 'US' },
+  { name: 'Google (Gemini API)', what: 'Making new photos and video when you ask for them', where: 'US' },
+];
+const SUBS = SUBPROCESSORS.map((s) => `- ${s.name}: ${s.what} (${s.where}).`);
+
+export const SECURITY: Section[] = [
+  { h: 'At a glance', p: [
+    '- Your files and data are stored in the EU.',
+    '- Everything is encrypted in transit (TLS) and at rest (AES-256).',
+    '- Every brand is walled off from every other at the database level, not just in the app.',
+    '- Files are private. Every view and download goes through a link that expires within minutes.',
+    '- No passwords to leak: people sign in with Google or a one-time email link.',
+    '- Your content is never used to train AI, and Mise never identifies people from their faces.',
+    '- Enterprise adds roles (owner, admin, editor, contributor, viewer) and an activity log you can export.',
+    `- A UK company working under UK GDPR, with a standard Data Processing Agreement at app.misedam.com/dpa.`,
+  ] },
+  { h: 'Where your data lives', p: [
+    'The Mise app runs on Railway in the EU. Your database, files and sign-in run on Supabase in the EU, which is hosted on Amazon Web Services. Files are stored in a private storage bucket that can only be reached through Mise.',
+    'Payments are handled by Stripe, which is certified to PCI DSS Level 1. Mise never sees or stores card numbers. Supabase and Stripe are independently audited (SOC 2 Type 2).',
+  ] },
+  { h: 'Encryption', p: [
+    '- In transit: every connection to Mise, to share links and portals, and between Mise and its providers uses TLS (HTTPS).',
+    '- At rest: the database, files and backups are encrypted with AES-256 by our hosting providers.',
+    '- Passcodes for share links and portals are stored only as salted hashes (scrypt). Claude connector links are stored only as SHA-256 hashes, so even we can’t read them back.',
+  ] },
+  { h: 'Who can see what', p: [
+    'Every brand (workspace) is isolated by row-level security in the database: each request is checked against the person’s membership of that brand, so one customer’s data can’t be read through another’s account, even by a bug in the app.',
+    '- Your team: only people invited to a brand can see it. On Enterprise, roles control what each person can do, and the same rules apply in the app, through Claude and in the database.',
+    '- People you share with: only the files in the links and portals you create, in the formats you allow. Links can have a passcode, an expiry date and downloads switched off, and can be turned off at any time. Portals can be limited to an invite list of emails or company domains, with visitors confirming their email.',
+    '- Claude: only through a person’s own connector link, with that person’s role, and only in their brands. Links can be turned off instantly in Settings.',
+    'Share and portal pages are hidden from search engines, and their views and downloads are recorded for the brand that shared them.',
+  ] },
+  { h: 'Signing in', p: [
+    'Mise has no passwords. People sign in with Google, or with a one-time link sent to their email that works once and expires after an hour. Sign-in is handled by Supabase Auth.',
+    'Single sign-on with your identity provider (SAML: Okta, Microsoft Entra ID, Google Workspace) is on the Enterprise roadmap. Tell us if you need it.',
+  ] },
+  { h: 'AI and your content', p: [
+    'Mise sends the content each feature needs, and only that, to its AI providers: Anthropic (Claude) to organise files, search and design; Google’s Gemini API for new photos and video; and Voyage AI to make files searchable by meaning. They process it under commercial terms that do not allow them to train their models on it.',
+    '- Mise never identifies people from their faces.',
+    '- AI suggestions never overwrite your team’s edits.',
+    '- Photos and video that AI makes from scratch are drafts until a person approves them.',
+  ] },
+  { h: 'Our own access', p: [
+    'Access to production systems is limited to the people who run Mise, protected by multi-factor authentication, and used only to operate the service, fix problems or help when you ask. [Confirm before publishing: MFA is on for Supabase, Railway, Stripe, GitHub, Cloudflare and Google accounts.]',
+    'We don’t look at your content unless you ask us to, or we need to in order to keep the service safe or meet a legal obligation.',
+  ] },
+  { h: 'Backups, retention and deletion', p: [
+    'The database is backed up automatically every day. [Confirm the retention on your Supabase plan, for example 7 days, and state it here.] Files are stored on Amazon S3 through Supabase Storage, which is designed for very high durability.',
+    'Every edit to a file keeps the previous version, so changes can be undone.',
+    'When a brand is deleted, its content is removed from the live service within 30 days and from backups within a further 90 days.',
+  ] },
+  { h: 'Activity log', p: [
+    'On Enterprise, admins and owners see who added, approved, changed, deleted and shared what, plus changes to people, roles, the brand kit, product feeds and the plan, and can download it as CSV. Entries can’t be edited or removed. Activity is recorded on every plan, so it’s there from day one when a brand moves to Enterprise.',
+  ] },
+  { h: 'Incidents', p: [
+    'If we become aware of a security incident that affects your data, we’ll tell the owners of the affected brands without undue delay, and within 48 hours, with what happened, what data was involved and what we’re doing about it. We’ll help you meet any obligations you have to notify others.',
+  ] },
+  { h: 'Software and vulnerabilities', p: [
+    'Mise is built on maintained, widely used frameworks (Next.js, Postgres, Supabase) and its dependencies are kept up to date. Secrets are kept in our hosting provider’s encrypted settings, never in code.',
+    `Found a security problem? Email ${COMPANY.email} with “Security” in the subject. We’ll reply within two working days and won’t take action against good-faith research.`,
+    'Mise doesn’t hold its own SOC 2 or ISO 27001 certification yet. Our main providers do, and we’re happy to complete your security questionnaire.',
+  ] },
+  { h: 'Subprocessors', p: [
+    'These providers process data for Mise, under contracts that protect it. We give customers 30 days’ notice before adding a new one (see the DPA).',
+    ...SUBS,
+    'Google, Dropbox and Box are only involved when you choose to import files from them or sign in with Google.',
+  ] },
+  { h: 'Your data, your control', p: [
+    '- Export: download any file in its original format at any time. For a full export of a library, email us.',
+    '- Delete: owners can delete a brand in Settings. To close your whole account, email us.',
+    '- Data requests: we help you answer requests from the people in your content (access, correction, deletion).',
+    `Questions, security questionnaires or a signed DPA: ${COMPANY.email}.`,
+  ] },
+];
+
+export const DPA: Section[] = [
+  { h: 'About this agreement', p: [
+    `This Data Processing Agreement (“DPA”) is between ${C.name} (company number ${C.number}), ${C.address}, trading as ${C.trading} (“Mise”, “we”), and the customer that uses Mise (“you”). It forms part of the Mise Terms (app.misedam.com/terms) or your Enterprise contract (together, the “Agreement”), and applies whenever we process personal data on your behalf.`,
+    'It is designed to meet Article 28 of the UK GDPR and, where it applies, the EU GDPR (together, “Data Protection Law”). If this DPA and the Agreement conflict about personal data, this DPA wins.',
+    'You accept this DPA by using Mise under the Agreement. If you’d like a signed copy for your records, email us.',
+  ] },
+  { h: '1. Roles', p: [
+    'For personal data in the content you and your team put into Mise (“Customer Personal Data”), you are the controller and Mise is your processor. For account, billing and usage data about the people who use Mise, Mise is a controller, as described in our Privacy Policy.',
+  ] },
+  { h: '2. What we process', p: [
+    '- Subject matter: providing Mise, a brand asset library, under the Agreement.',
+    '- Duration: for as long as you use Mise, and until deletion under section 9.',
+    '- Nature and purpose: storing, organising (including with AI), searching, transforming, displaying and sharing your content, as you direct through Mise.',
+    '- Types of personal data: whatever your content contains, for example images of people, names, job titles and contact details in files, product data or brand guidelines; and the email addresses of people you share with through invite-only portals.',
+    '- Data subjects: people who appear in or are named in your content, such as models, staff, customers and partners; and recipients of your share links and portals.',
+    '- Special category data: Mise isn’t designed for it, and you agree not to upload special category data unless you need to and have a lawful basis.',
+  ] },
+  { h: '3. Our obligations', p: [
+    'We will:',
+    '- process Customer Personal Data only on your documented instructions, which are the Agreement, this DPA and how you use Mise, unless the law requires otherwise (in which case we’ll tell you first, unless the law forbids it);',
+    '- tell you if we think an instruction breaks Data Protection Law;',
+    '- make sure everyone who processes Customer Personal Data for us is bound by confidentiality;',
+    '- not use Customer Personal Data for any other purpose, including training AI models, and not sell it.',
+  ] },
+  { h: '4. Security', p: [
+    'We maintain appropriate technical and organisational measures to protect Customer Personal Data, described on our Security page (app.misedam.com/security), including encryption in transit and at rest, database-level isolation between customers, access controls and backups. We may improve these measures over time, but won’t reduce the overall level of protection.',
+  ] },
+  { h: '5. Subprocessors', p: [
+    'You authorise us to use the subprocessors listed on our Security page. These are the current ones:',
+    ...SUBS,
+    'We’ll give you at least 30 days’ notice by email before adding or replacing a subprocessor. If you object on reasonable data protection grounds, we’ll discuss it in good faith; if we can’t resolve it, you may end the affected service and we’ll refund any prepaid fees for the remaining period.',
+    'We impose data protection terms on each subprocessor that are at least as protective as this DPA, and remain responsible for their performance.',
+  ] },
+  { h: '6. International transfers', p: [
+    'Some subprocessors are outside the UK and the EEA. Where Customer Personal Data is transferred, we rely on adequacy regulations or decisions, or on the UK International Data Transfer Agreement, the UK Addendum to the EU Standard Contractual Clauses, or the EU Standard Contractual Clauses, as applicable.',
+  ] },
+  { h: '7. Helping you', p: [
+    'Taking into account what we process and the information available to us, we’ll help you:',
+    '- respond to requests from data subjects (Mise lets you find, edit, export and delete content yourself; we’ll pass on any request we receive directly);',
+    '- carry out data protection impact assessments and consult regulators, where needed;',
+    '- meet your security and breach notification obligations.',
+  ] },
+  { h: '8. Personal data breaches', p: [
+    'We’ll notify you without undue delay, and within 48 hours of becoming aware, of a personal data breach affecting Customer Personal Data. We’ll tell you what we know (what happened, the data and people likely affected, likely consequences, and what we’re doing), update you as we learn more, and take reasonable steps to contain it.',
+  ] },
+  { h: '9. Deletion and return', p: [
+    'You can export and delete your content in Mise at any time. When the Agreement ends, or a brand is deleted, we delete Customer Personal Data from the live service within 30 days and from backups within a further 90 days, unless the law requires us to keep it. On request before deletion, we’ll help you export your library.',
+  ] },
+  { h: '10. Audits', p: [
+    'We’ll make available the information reasonably needed to show we comply with this DPA, including answering security questionnaires and providing our subprocessors’ audit reports where they allow it. If that isn’t enough, you (or an independent auditor bound by confidentiality) may audit our compliance once a year, with at least 30 days’ notice, during business hours, at your cost and without disrupting the service or other customers’ data.',
+  ] },
+  { h: '11. General', p: [
+    'Each party’s liability under this DPA is subject to the limits in the Agreement. This DPA lasts as long as we process Customer Personal Data for you. It is governed by the law of England and Wales, and the courts of England and Wales have exclusive jurisdiction.',
+    `Contact for anything in this DPA: ${COMPANY.email}.`,
   ] },
 ];

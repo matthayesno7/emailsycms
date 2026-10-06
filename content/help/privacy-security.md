@@ -7,6 +7,8 @@ order: 3
 
 # Privacy, security and AI
 
+For security reviews and procurement, see the full [Security page](/security) and our [Data Processing Agreement](/dpa).
+
 ## Where your files live
 Your files and data are stored in the EU. Mise is run by HW Tech Ltd, trading as Mise, in London. See the [Privacy Policy](/privacy) and [Terms](/terms).
 

@@ -47,7 +47,7 @@ export default function HelpShell({ children, active, aside }: { children: React
           {children}
           <footer className="hcx-foot">
             <span>{COMPANY.name}, trading as {COMPANY.trading}</span>
-            <span><a href="https://misedam.com">misedam.com</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></span>
+            <span><a href="https://misedam.com">misedam.com</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/security">Security</a></span>
           </footer>
         </div>
         {aside ? <aside className="hcx-aside">{aside}</aside> : null}

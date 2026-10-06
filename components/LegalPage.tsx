@@ -1,6 +1,6 @@
 import { COMPANY, type Section } from '@/lib/legal';
 
-// Terms and Privacy: one simple, readable page each, public (no sign-in).
+// Terms, Privacy, Security and the DPA: one simple, readable page each, public (no sign-in).
 export default function LegalPage({ title, intro, sections }: { title: string; intro?: string; sections: Section[] }) {
   return (
     <main className="legal">
@@ -16,7 +16,7 @@ export default function LegalPage({ title, intro, sections }: { title: string; i
         </section>
       ))}
       <footer className="legal-foot">
-        {COMPANY.name}, trading as {COMPANY.trading} · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a>
+        {COMPANY.name}, trading as {COMPANY.trading} · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/security">Security</a> · <a href="/dpa">DPA</a> · <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a>
       </footer>
     </main>
   );
