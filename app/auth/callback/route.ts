@@ -6,9 +6,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const origin = publicOrigin(request);
   const code = searchParams.get('code');
+  // Supabase or Google can send an error back instead of a code: keep the reason so the sign-in page can show it.
+  let why = searchParams.get('error_description') || searchParams.get('error') || (code ? '' : 'No sign-in code came back');
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) { why = error.message; console.error('[auth/callback]', error.message); }
     if (!error) {
       // Portal visitors (invite-list portals) go back to the portal and get no workspace of their own.
       const next = searchParams.get('next') || '';
@@ -19,5 +22,6 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${origin}/`);
     }
   }
-  return NextResponse.redirect(`${origin}/login?error=link`);
+  if (why) console.error('[auth/callback] sign-in failed:', why);
+  return NextResponse.redirect(`${origin}/login?error=link${why ? `&why=${encodeURIComponent(why.slice(0, 200))}` : ''}`);
 }

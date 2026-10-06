@@ -32,7 +32,7 @@ export default function LoginPage() {
     if (new URLSearchParams(window.location.search).get('error') === 'link' || h.get('error')) {
       setError(h.get('error_code') === 'otp_expired'
         ? 'That sign-in link has expired or was already used. Links work once, for an hour. Send yourself a new one.'
-        : 'That sign-in link didn’t work. Send yourself a new one, or continue with Google.');
+        : `That sign-in didn’t work. Send yourself a new link, or try Google again.${new URLSearchParams(window.location.search).get('why') ? ` (${new URLSearchParams(window.location.search).get('why')})` : ''}`);
       setState('error');
       window.history.replaceState(null, '', '/login');
       return;
