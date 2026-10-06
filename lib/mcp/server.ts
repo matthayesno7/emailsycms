@@ -4,6 +4,7 @@ import { isAvailable, lifecycleForClaude } from '../lifecycle';
 import { MAX_IMAGE_BYTES, MAX_IMPORT_BYTES } from '../plans';
 import { ASPECTS, PURPOSES, brandPrompt, designsFor, generateImages, hasImageGen, routeFor, type Aspect, type Purpose, type Ref } from '../imageGen';
 import { planOf } from '../billing';
+import { VIDEO_ASPECTS, VIDEO_DESIGNS, VIDEO_SECONDS, downloadVideo, hasVideoGen, pollVideo, startVideo } from '../videoGen';
 import { limitMessage, takeUsage } from '../usage';
 import { BLOCK_TYPES, isReadDesign } from '../blockTypes';
 import { productAsBlock } from '../products';
@@ -59,7 +60,7 @@ No longer available: an asset can be archived, expired (its licence or usage rig
 
 Making things. Mise holds the brand and the source assets. Check get_brand_kit and whether the brand has a Figma file (list_workspaces → figma_file) and whether the Figma connector is available to you, then pick the route:
 - No Figma (no file, or no Figma connector): make new photography and finished single images with generate_image. Mise picks the right model for the job from purpose: product (a real product in a new scene; pass the product photo in reference_asset_ids so it stays exact), text (exact words on the image, hero shots; counts as 2 designs), quick (fast variations, up to 4 at once, no references). Leave it on auto when unsure. For layouts like email heroes and social posts with live text, suggest Mise Studio (Create → Describe it), which designs three on-brand options in seconds. Never tell the user they need Figma.
-- Video and audio: Mise doesn't make these yet. With Figma, use a Weave video model or export_video as above; otherwise say so plainly. Never send the user to another tool to make them.
+- Video: generate_video makes a short clip with sound (4–8 seconds) from a description, or animates a product photo or finished design (reference_asset_id). It counts as 10 Studio designs, so confirm before making several. It takes a minute or two: call check_video with the job_id it returns. Audio on its own (voiceover, music) isn't something Mise makes yet; say so plainly.
 With Figma, the Figma connector does the making:
 - Designs (banners, social posts, ads, slides): build them in Figma from the brand kit and Mise assets (push_image_to_figma), headline as live text, then save the finished frame with add_generated_asset.
 - New imagery (a product in a new scene, a seasonal backdrop, a cut-out): use Figma's Weave models. weave_find_model (e.g. "nano banana 2" for images), pass the product photo's image_url from get_asset as the reference image, and describe the scene using the brand kit's imagery.style and do/don't rules. Never alter the product itself: say so in the prompt, and prefer compositing the real cut-out over a generated scene in Figma when the product must be exact. Weave runs cost the user credits: always quote the cost and get an explicit yes before running.
@@ -250,6 +251,33 @@ const TOOLS = [
     },
   },
   {
+    name: 'generate_video',
+    description: 'Make a short video clip (4–8 seconds, with sound) with Mise’s own video model and save it to the library as a draft. Describe the shot, or pass reference_asset_id to animate a product photo or finished design (the product is kept as it is). Returns a job_id at once; the clip takes a minute or two, so call check_video with it. On Pro; each clip counts as 10 Studio designs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        prompt: { type: 'string', description: 'The shot: subject, action, camera movement, setting, mood and sound.' },
+        reference_asset_id: { type: 'string', description: 'A Mise image to animate (product photo, generated image or design). Optional.' },
+        aspect_ratio: { type: 'string', enum: [...VIDEO_ASPECTS], default: '16:9', description: '16:9 for web and email GIF-style heroes; 9:16 for stories, Reels and TikTok.' },
+        seconds: { type: 'integer', enum: [...VIDEO_SECONDS], default: 8 },
+        name: { type: 'string' },
+      },
+      required: ['workspace_id', 'prompt'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'check_video',
+    description: 'See whether a clip from generate_video is ready. When it is, returns the saved draft asset with its link.',
+    inputSchema: {
+      type: 'object',
+      properties: { workspace_id: { type: 'string' }, job_id: { type: 'string' } },
+      required: ['workspace_id', 'job_id'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'add_generated_asset',
     description: 'Save a finished image you made into a workspace\'s library as a draft, with where it came from: a design you built in Figma (pass the export URL from Figma\'s download_assets), or an image from an image model. Pass an https URL of the image; the Mise server downloads it, so the file never passes through you. A person approves it in Mise.',
     inputSchema: {
@@ -310,6 +338,56 @@ export function publicAsset(a: AssetRow, ws?: Workspace) {
   if (a.figma) out.figma = a.figma;
   if (ws) out.workspace_figma_file = figmaFile(ws);
   return out;
+}
+
+
+// ---------- video jobs ----------
+type ClipMeta = { name: string; prompt: string | null; model: string | null; aspect: string | null; seconds: number | null; source: string | null; kitVersion: number | null };
+const savingClips = new Set<string>();
+
+async function clipFor(ctx: Ctx, wsId: string, job: string): Promise<AssetRow | null> {
+  if (!ctx.db || !job) return null;
+  const { data } = await ctx.db.from('assets').select('*').eq('workspace_id', wsId).eq('provenance->>job', job).limit(1).maybeSingle();
+  return (data as AssetRow) || null;
+}
+
+async function saveClip(ctx: Ctx, ws: Workspace, job: string, uri: string, m: ClipMeta): Promise<AssetRow | { error: string }> {
+  if (savingClips.has(job)) return { error: 'Already saving this clip. Check again in a moment.' };
+  savingClips.add(job);
+  try {
+    const existing = await clipFor(ctx, ws.id, job);
+    if (existing) return existing;
+    const got = await downloadVideo(uri);
+    if ('error' in got) return got;
+    const path = `${ws.id}/generated/${crypto.randomUUID()}.mp4`;
+    await ctx.repo.upload(path, got.buf, got.mime);
+    return await ctx.repo.insertAsset({
+      workspace_id: ws.id, kind: 'video', name: m.name, storage_path: path, mime: got.mime, bytes: got.buf.length, width: null, height: null,
+      origin: 'generated', status: 'draft', created_by: ctx.userId, fields: {},
+      provenance: { via: 'mise-video', job, prompt: m.prompt, model: m.model, aspect_ratio: m.aspect, seconds: m.seconds, source_asset_ids: m.source ? [m.source] : [], brand_kit_version: m.kitVersion, generated_at: new Date().toISOString() },
+      figma: null,
+    });
+  } finally {
+    savingClips.delete(job);
+  }
+}
+
+// Keep polling in the background and save the clip when it's ready (check_video picks it up after a restart).
+function watchClip(ctx: Ctx, ws: Workspace, job: string, m: ClipMeta) {
+  (async () => {
+    const until = Date.now() + 12 * 60_000;
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 10_000));
+      const st = await pollVideo(job);
+      if ('error' in st) { console.error('[video]', job, st.error); return; }
+      if (st.done) {
+        const r = await saveClip(ctx, ws, job, st.uri, m);
+        if ('error' in r) console.error('[video] save', job, r.error);
+        return;
+      }
+    }
+    console.warn('[video] gave up waiting', job);
+  })().catch((e) => console.error('[video]', job, e?.message));
 }
 
 async function allowedAsset(ctx: Ctx, id: string) {
@@ -646,6 +724,52 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
         saved.push({ ...publicAsset(row, w.ws), image_url: await ctx.repo.signedUrl(path) });
       }
       return text({ ok: true, model: out.model, purpose: out.route.purpose, designs_used: designs, assets: saved, next: 'Saved as drafts in Mise for the team to approve. To try another take, call generate_image again with a changed prompt; for exact words on the image use purpose text.' });
+    }
+    case 'generate_video': {
+      const w = await ownWorkspace(ctx, args.workspace_id);
+      if ('error' in w) return toolError(w.error);
+      if (!hasVideoGen()) return toolError('Video isn’t switched on for this Mise yet.');
+      if (ctx.db && (await planOf(ctx.db, w.ws.id)).plan === 'free') return toolError('Making video is on Pro. The brand’s owner can start a 7-day free trial in Mise → Settings → Plan & usage.');
+      const prompt = String(args.prompt || '').trim().slice(0, 3000);
+      if (!prompt) return toolError('Describe the clip to make.');
+      let image: Ref | null = null;
+      let source: string | null = null;
+      if (args.reference_asset_id) {
+        const a = await ctx.repo.getAsset(String(args.reference_asset_id));
+        if (!a || a.workspace_id !== w.ws.id || !isAvailable(a)) return toolError('reference_asset_id isn’t an available asset in this workspace.');
+        const path = a.images?.email?.path || a.storage_path;
+        if (!path || /svg|video/.test(a.mime || '')) return toolError('That asset can’t be animated: pass a photo or image.');
+        const url = await ctx.repo.signedUrl(path);
+        const got = url ? await fetchLimited(url, { accept: 'image/*', maxBytes: 8_000_000, fetchImpl: ctx.fetchImpl }) : null;
+        if (!got || 'error' in got) return toolError('Couldn’t read that image.');
+        image = { mime: got.type || 'image/jpeg', data: got.buf, label: a.name };
+        source = a.id;
+      }
+      const kitRow = await ctx.repo.getBrandKit(w.ws.id);
+      const full = brandPrompt(prompt, (kitRow?.kit as any) || null, { hasProduct: !!image });
+      const aspect = (VIDEO_ASPECTS as readonly string[]).includes(String(args.aspect_ratio)) ? (args.aspect_ratio as '16:9' | '9:16') : '16:9';
+      const seconds = (VIDEO_SECONDS as readonly number[]).includes(Number(args.seconds)) ? Number(args.seconds) : 8;
+      const take = await takeUsage(w.ws.id, 'design', VIDEO_DESIGNS);
+      if (!take.ok) return toolError(limitMessage('design', take));
+      const started = await startVideo({ prompt: full, image, aspect, seconds });
+      if ('error' in started) return toolError(started.error);
+      const meta: ClipMeta = { name: String(args.name || prompt).trim().slice(0, 120) || 'New video', prompt, model: started.model, aspect, seconds, source, kitVersion: kitRow?.version ?? null };
+      watchClip(ctx, w.ws, started.job, meta);
+      return text({ ok: true, job_id: started.job, designs_used: VIDEO_DESIGNS, next: 'Making the clip: it usually takes one to three minutes. Call check_video with this job_id; it saves to Mise as a draft by itself when ready.' });
+    }
+    case 'check_video': {
+      const w = await ownWorkspace(ctx, args.workspace_id);
+      if ('error' in w) return toolError(w.error);
+      const job = String(args.job_id || '');
+      const saved = await clipFor(ctx, w.ws.id, job);
+      if (saved) return text({ ok: true, ready: true, asset: { ...publicAsset(saved, w.ws), video_url: saved.storage_path ? await ctx.repo.signedUrl(saved.storage_path) : null }, next: 'Saved as a draft in Mise for the team to approve.' });
+      const st = await pollVideo(job);
+      if ('error' in st) return toolError(st.error);
+      if (!st.done || savingClips.has(job)) return text({ ok: true, ready: false, next: 'Still making. Check again in about 30 seconds.' });
+      // Ready but not saved (the server restarted while it was being made): save it now.
+      const row = await saveClip(ctx, w.ws, job, st.uri, { name: 'New video', prompt: null, model: null, aspect: null, seconds: null, source: null, kitVersion: null });
+      if ('error' in row) return toolError(row.error);
+      return text({ ok: true, ready: true, asset: { ...publicAsset(row, w.ws), video_url: row.storage_path ? await ctx.repo.signedUrl(row.storage_path) : null }, next: 'Saved as a draft in Mise for the team to approve.' });
     }
     case 'add_generated_asset': {
       const w = await ownWorkspace(ctx, args.workspace_id);
