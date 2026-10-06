@@ -1,4 +1,5 @@
 'use client';
+import { openInClaude } from '@/lib/openClaude';
 import { useState } from 'react';
 import { Icon } from './icons';
 import type { Asset } from './Library';
@@ -21,7 +22,7 @@ export default function FigmaEdit({ it, src, toast, onCancel }: { it: Asset; src
       'Make the change in that Figma frame and keep everything else as it is (layout, fonts, colours, size). Then export the frame with download_assets and save it back to Mise with add_generated_asset, passing replaces_asset_id "' + it.id + '" so it becomes the next version of the same asset, not a new one.',
     ].join('\n');
     try { navigator.clipboard.writeText(prompt); } catch {}
-    window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
+    openInClaude(prompt);
     toast('Sent to Claude. The new version shows up here when it’s saved.');
   }
 

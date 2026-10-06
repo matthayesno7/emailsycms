@@ -1,4 +1,5 @@
 'use client';
+import { openInClaude } from '@/lib/openClaude';
 import { runKey } from '@/lib/plans';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -203,7 +204,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
     if (!id) return;
     const prompt = `Rebuild my Mise design "${v.spec!.name}" (asset id ${id}) in Figma as editable layers${ws.figma_file_url ? ` in ${ws.figma_file_url}` : ''}: live text in our brand fonts, our brand kit colours, and the photos pushed from Mise. Its layout is in the asset's provenance.spec.`;
     try { await navigator.clipboard.writeText(prompt); } catch {}
-    window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
+    openInClaude(prompt);
   }
 
   const setText = (v: Variant, i: number, text: string) => {

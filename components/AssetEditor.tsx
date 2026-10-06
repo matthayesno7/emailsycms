@@ -1,4 +1,5 @@
 'use client';
+import { openInClaude } from '@/lib/openClaude';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DEFAULT_CTA } from '@/lib/products';
@@ -309,7 +310,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 <button type="button" onClick={async () => {
                   const prompt = `Put my Mise ${isVideo ? 'video' : 'image'} "${it.name}" (asset id ${it.id}) into my Figma file${figmaUrl ? ` ${figmaUrl}` : ''}.`;
                   try { await navigator.clipboard.writeText(prompt); } catch {}
-                  window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
+                  openInClaude(prompt);
                 }}><Icon.Send /><span><b>Figma</b><small>Claude places it full size, or drag the image in</small></span></button>
                 {onShare && <button type="button" onClick={async () => { const u = await onShare(); if (u) { try { await navigator.clipboard.writeText(u); toast('Link copied.'); } catch { toast(u); } } }}><Icon.Share /><span><b>Share link</b><small>Expiry, passcode, download counts</small></span></button>}
               </div>

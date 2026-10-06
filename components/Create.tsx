@@ -1,4 +1,5 @@
 'use client';
+import { openInClaude as openClaude } from '@/lib/openClaude';
 import { runKey } from '@/lib/plans';
 import { openUpgrade } from './Billing';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -136,7 +137,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   }
   const fillBlank = (key: 'product' | 'image', a?: Asset) => a && setAsk((t) => t.replace(`[${key}]`, `"${a.name}"${a.pid ? ` (PID ${a.pid})` : ''}`));
   async function copy(t: string) { try { await navigator.clipboard.writeText(t); toast('Copied. Paste it into Claude.'); } catch { toast(t); } }
-  const openInClaude = (t: string) => window.open(`https://claude.ai/new?q=${encodeURIComponent(t)}`, '_blank', 'noopener');
+  const openInClaude = (t: string) => openClaude(t);
 
   const steps = [
     { done: connected, label: 'Connect Claude', note: 'Mise + Figma', go: onConnect },
