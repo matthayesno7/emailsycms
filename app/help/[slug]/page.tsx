@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import HelpShell from '@/components/help/HelpShell';
-import { HELP_ARTICLES, helpArticle } from '@/lib/helpArticles';
+import { HELP_ARTICLES, HELP_ORIGIN, helpArticle } from '@/lib/helpArticles';
 import { markdown } from '@/lib/markdown';
 
 export const dynamicParams = false;
@@ -12,7 +12,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const a = helpArticle((await params).slug);
   if (!a) return {};
-  return { title: `${a.title} · Mise help`, description: a.description, alternates: { canonical: `https://misedam.com/help/${a.slug}` } };
+  return { title: `${a.title} · Mise help`, description: a.description, alternates: { canonical: `${HELP_ORIGIN}/help/${a.slug}` } };
 }
 
 export default async function Article({ params }: { params: Promise<{ slug: string }> }) {

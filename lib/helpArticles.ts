@@ -272,3 +272,5 @@ export const HELP_ARTICLES: HelpArticle[] = [
  }
 ];
 export const helpArticle = (slug: string) => HELP_ARTICLES.find((a) => a.slug === slug) || null;
+// Where the help centre lives (the app). Used for canonical links.
+export const HELP_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL || 'https://app.misedam.com').replace(/\/$/, '');

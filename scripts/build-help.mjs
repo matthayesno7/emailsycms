@@ -28,5 +28,6 @@ ts += `export const HELP_INTRO = ${JSON.stringify(intro)};\n`;
 ts += `export const HELP_CATEGORIES: string[] = ${JSON.stringify(cats)};\n`;
 ts += `export const HELP_ARTICLES: HelpArticle[] = ${JSON.stringify(arts, null, 1)};\n`;
 ts += 'export const helpArticle = (slug: string) => HELP_ARTICLES.find((a) => a.slug === slug) || null;\n';
+ts += "// Where the help centre lives (the app). Used for canonical links.\nexport const HELP_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL || 'https://app.misedam.com').replace(/\\/$/, '');\n";
 writeFileSync(join(process.cwd(), 'lib', 'helpArticles.ts'), ts);
 console.log(`${arts.length} articles → lib/helpArticles.ts`);
