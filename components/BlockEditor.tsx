@@ -273,7 +273,7 @@ export default function BlockEditor({ draft, ws, userId, library, urls, appUrl, 
             <div className="bf">
               <div className="bl"><label htmlFor="bprod">Fill from product</label></div>
               <select className="in" id="bprod" value={b.product_id || ''} onChange={(e) => fillFromProduct(e.target.value)}>
-                <option value="">{products.length ? 'Choose a product…' : 'Import a product feed first'}</option>
+                <option value="">{products.length ? 'Choose a product…' : 'Add your products first'}</option>
                 {products.map((p) => <option key={p.id} value={p.id}>{p.pid} · {p.name}</option>)}
               </select>
             </div>

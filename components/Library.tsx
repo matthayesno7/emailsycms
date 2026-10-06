@@ -29,6 +29,8 @@ import Review from './Review';
 import { reviewQueue } from '@/lib/review';
 import { PlanSettings, UpgradeModal, openUpgrade, type UpgradeAsk } from './Billing';
 import LibrarySync from './LibrarySync';
+import { fromRows } from '@/lib/feedParse';
+import ProductFeeds from './ProductFeeds';
 import { countsAsFile, effectivePlan, FREE_FILES, freeLimitOf, mb, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, tooBig, type Plan } from '@/lib/plans';
 import { expiresSoon, isAvailable, lifecycleOf, LIFECYCLE } from '@/lib/lifecycle';
 
@@ -573,38 +575,27 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   }
 
   async function importFeed(file: File) {
-    const rows = parseCSV(await file.text());
-    if (rows.length < 2) { toast('That CSV has no product rows.'); return; }
-    const head = rows[0].map((h) => h.trim().toLowerCase().replace(/^g:/, ''));
-    const col = (...n: string[]) => head.findIndex((h) => n.includes(h));
-    const ci = {
-      pid: col('id', 'pid', 'sku', 'item_id', 'product_id'), name: col('title', 'name', 'product_name'), price: col('sale_price', 'price'),
-      link: col('link', 'url', 'product_url'), img: col('image_link', 'image', 'image_url'), desc: col('description', 'short_description', 'body_html', 'body'),
-    };
-    if (ci.pid < 0) { toast('Couldn’t find a PID column (id, pid, sku or item_id).'); return; }
+    const read = fromRows(parseCSV(await file.text()));
+    if ('error' in read) { toast(read.error); return; }
     // Existing products: copy the team edited (name, description) is kept; price, link and image follow the feed.
     const { data: existing } = await supabase.from('assets').select('id, pid, name, fields, feed_image, storage_path, created_by').eq('workspace_id', ws).eq('kind', 'product').limit(10000);
     const byPid = new Map((existing || []).map((e: any) => [e.pid, e]));
     const seen = new Set<string>();
-    const products = rows.slice(1).map((r) => {
-      const pid = (r[ci.pid] || '').trim();
-      if (!pid || seen.has(pid)) return null;
-      seen.add(pid);
-      const ex: any = byPid.get(pid);
+    const products = read.map((p) => {
+      if (seen.has(p.pid)) return null;
+      seen.add(p.pid);
+      const ex: any = byPid.get(p.pid);
       const edited: string[] = ex?.fields?.edited || [];
-      const feedName = ((ci.name >= 0 && r[ci.name]) || pid).trim().slice(0, 120);
-      const feedImage = ci.img >= 0 ? (r[ci.img] || '').trim() : '';
       const fields: Record<string, any> = { ...(ex?.fields || {}) };
-      if (ci.desc >= 0) {
-        fields.feed_description = cleanText(r[ci.desc] || '').slice(0, 5000);
-        if (!edited.includes('description')) fields.description = shortDescription(r[ci.desc] || '');
+      if (p.desc) {
+        fields.feed_description = cleanText(p.desc).slice(0, 5000);
+        if (!edited.includes('description')) fields.description = shortDescription(p.desc);
       }
-      const imageChanged = !!ex && !!feedImage && ex.feed_image !== feedImage;
+      const imageChanged = !!ex && !!p.image && ex.feed_image !== p.image;
       return {
-        workspace_id: ws, kind: 'product', origin: 'product_feed', pid,
-        name: edited.includes('name') && ex ? ex.name : feedName,
-        price: ci.price >= 0 ? (r[ci.price] || '').trim() : null, link: ci.link >= 0 ? (r[ci.link] || '').trim() : null,
-        feed_image: feedImage || null, fields,
+        workspace_id: ws, kind: 'product', origin: 'product_feed', pid: p.pid.slice(0, 120),
+        name: edited.includes('name') && ex ? ex.name : (p.name || p.pid).slice(0, 120),
+        price: p.price, link: p.link, feed_image: p.image || null, fields,
         storage_path: imageChanged ? null : ex?.storage_path ?? null,
         created_by: ex?.created_by || userId,
       };
@@ -632,6 +623,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       done += json.done;
       for (const f of json.failed || []) { skip.push(f.id); failed++; }
       loadAssets(ws);
+      if (json.limit) { openUpgrade({ reason: 'files' }); break; }
       if (!json.remaining || (!json.done && !(json.failed || []).length)) break;
       toast(`Fetched ${done} product images…`);
     }
@@ -1093,9 +1085,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     <div className="addmenu" role="menu" onClick={() => setAddOpen(false)}>
                       <button type="button" role="menuitem" onClick={() => fileImg.current?.click()}><Icon.Image /><span><b>Upload files</b><small>Images, logos, videos. Or drop them anywhere.</small></span></button>
                       <button type="button" role="menuitem" onClick={() => fileDir.current?.click()}><Icon.Folder /><span><b>Upload a folder</b><small>Keeps the folder’s name, like Dropbox</small></span></button>
-                      <button type="button" role="menuitem" onClick={() => fileCsv.current?.click()}><Icon.Table /><span><b>Import a product feed</b><small>CSV from Shopify, Google Merchant…</small></span></button>
+                      <button type="button" role="menuitem" onClick={() => setModal('feeds')}><Icon.Table /><span><b>Add products</b><small>Connect Shopify, a feed link, or a CSV</small></span></button>
                       <button type="button" role="menuitem" onClick={() => setModal('import')}><Icon.Cloud /><span><b>Import from Drive, Dropbox or Box</b><small>Copy images and videos in, or a whole Box folder</small></span></button>
-                      <button type="button" role="menuitem" disabled><Icon.Bag /><span><b>Connect Shopify <em className="soon">Soon</em></b><small>Every product image, synced both ways</small></span></button>
                       <hr />
                       <button type="button" role="menuitem" onClick={() => setNewFolder('')}><Icon.Plus /><span><b>New folder</b></span></button>
                       <button type="button" role="menuitem" onClick={() => setModal('blocktype')}><Icon.Blocks /><span><b>New email block</b><small>Hero, card, product, button, footer</small></span></button>
@@ -1193,8 +1184,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                   <div className="intake-sources">
                     <div className="src-h">Or bring them in from</div>
                     <button type="button" className="src" onClick={() => fileDir.current?.click()}><Icon.Folder /><span><b>A folder on your computer</b><small>Keeps the folder’s name</small></span></button>
-                    <button type="button" className="src" onClick={() => fileCsv.current?.click()}><Icon.Table /><span><b>Product feed</b><small>CSV from Shopify or Google Merchant</small></span></button>
-                    <button type="button" className="src" disabled><Icon.Bag /><span><b>Shopify <em className="soon">Soon</em></b><small>Every product image, synced both ways</small></span></button>
+                    <button type="button" className="src" onClick={() => setModal('feeds')}><Icon.Bag /><span><b>Your products</b><small>Connect Shopify, a feed link, or a CSV</small></span></button>
                     <button type="button" className="src" onClick={() => setModal('import')}><Icon.Cloud /><span><b>Google Drive, Dropbox or Box</b><small>Pick files, or import a whole Box folder</small></span></button>
                   </div>
                 </div>
@@ -1329,6 +1319,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </Modal>
       )}
       {modal === 'feedback' && <Feedback ws={curWs?.id} page={page === 'settings' ? `settings/${settingsTab}` : page} onClose={() => setModal(null)} toast={toast} />}
+      {modal === 'feeds' && curWs && (
+        <Modal wide onClose={() => setModal(null)}>
+          <ProductFeeds ws={ws} toast={toast} onCsv={() => { setModal(null); fileCsv.current?.click(); }}
+            onDone={() => { loadAssets(ws); kickTag(); setView('product'); setPage('library'); }} />
+        </Modal>
+      )}
       {modal === 'import' && curWs && (
         <Modal onClose={() => { setModal(null); setBoxReturn(false); }}>
           <h2>Import from where your images live</h2>

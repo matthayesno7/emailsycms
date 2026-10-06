@@ -96,23 +96,7 @@ export function toBlob(cv: HTMLCanvasElement, type = 'image/png', quality = 0.86
   return new Promise((resolve, reject) => cv.toBlob((b) => (b ? resolve(b) : reject(new Error('export failed'))), type, quality));
 }
 
-export function parseCSV(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [], cell = '', q = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (q) {
-      if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c;
-    } else if (c === '"') q = true;
-    else if (c === ',' || c === '\t') { row.push(cell); cell = ''; }
-    else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(cell); rows.push(row); row = []; cell = '';
-    } else cell += c;
-  }
-  if (cell || row.length) { row.push(cell); rows.push(row); }
-  return rows.filter((r) => r.some((x) => x.trim()));
-}
+export { parseCSV } from './csv';
 
 export const extOf = (file: File) => {
   const m = /\.([a-z0-9]+)$/i.exec(file.name || '');
