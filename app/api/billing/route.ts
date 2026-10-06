@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { whoFor } from '@/lib/billingAuth';
 import { billingRow, cancelNow, toBilling } from '@/lib/billing';
-import { designAllowance, overageDesigns, PRICE, TRIAL_DAYS, trialDaysFor } from '@/lib/plans';
+import { designAllowance, FREE_FILES, overageDesigns, PRICE, TRIAL_DAYS, trialDaysFor } from '@/lib/plans';
 import { hasStripe } from '@/lib/stripe';
 
 // A brand's plan and this month's Studio designs.
@@ -21,12 +21,15 @@ export async function GET(request: Request) {
   const month = new Date(); month.setUTCDate(1);
   const { data: u } = await db.from('ai_usage').select('used').eq('workspace_id', id).eq('month', month.toISOString().slice(0, 10)).eq('kind', 'design').maybeSingle();
   const used = u?.used || 0;
+  // Free taster: how many of the 50 files are in, and whether the one Studio run is used.
+  const { count: files } = await db.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', id).not('storage_path', 'is', null).neq('kind', 'block');
   const allowance = designAllowance(billing.plan);
   const extra = Math.max(0, used - allowance);
   return Response.json({
     billing,
     role: who.role,
     stripe: hasStripe(),
+    free: { files: files || 0, files_max: FREE_FILES, studio_used: !!row?.studio_free_run },
     trial_days: trialDaysFor(row),          // upgrading this brand
     trial_days_new_brand: TRIAL_DAYS,       // a new brand bought from here
     designs: {

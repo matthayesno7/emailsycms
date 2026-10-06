@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { askClaude, hasClaude, jsonFrom, MODEL } from '@/lib/anthropic';
 import { limitMessage, takeUsage } from '@/lib/usage';
 import { isAvailable } from '@/lib/lifecycle';
+import { freeBrand } from '@/lib/billing';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { cleanSpec, DIRECTIONS, FORMATS, systemPrompt, userPrompt, type LibraryItem } from '@/lib/design';
 
 // Mise Studio: one design per call (the page asks for several in parallel, so they
@@ -35,6 +37,14 @@ export async function POST(request: Request) {
       .order('updated_at', { ascending: false }).limit(80),
   ]);
   if (!workspace) return Response.json({ error: 'Workspace not found.' }, { status: 404 });
+  // Free is a taster: one Studio run (a brief: its designs and extra sizes). Changing a design is editing.
+  if (await freeBrand(ws)) {
+    if (body?.instruction) return Response.json({ error: 'Changing designs is on Pro. Start your 7-day free trial to keep going.', code: 'upgrade', reason: 'edit' }, { status: 402 });
+    const run = String(body?.run || '').slice(0, 64) || crypto.randomUUID();
+    const { data: ok, error: runErr } = await createAdminClient().rpc('claim_free_run', { p_ws: ws, p_run: run });
+    if (runErr) console.error('[design] free run', runErr.message);
+    else if (!ok) return Response.json({ error: 'Your free Studio run is used. Start your 7-day free trial to make more.', code: 'upgrade', reason: 'studio' }, { status: 402 });
+  }
   const t = await takeUsage(ws, 'design');
   if (!t.ok) return Response.json({ error: limitMessage('design', t), code: 'limit', plan: t.plan, reason: t.reason }, { status: 429 });
 

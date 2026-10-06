@@ -1,10 +1,11 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { designAllowance, gbp, PRICE, type Billing, type Interval } from '@/lib/plans';
+import { designAllowance, FREE_FILES, gbp, PRICE, type Billing, type Interval } from '@/lib/plans';
 import type { Ws } from './Library';
 
 type State = {
   billing: Billing; role: string | null; stripe: boolean; trial_days: number;
+  free: { files: number; files_max: number; studio_used: boolean };
   designs: { used: number; allowance: number; extra: number; extra_pence: number; extra_left: number; resets: string };
 };
 
@@ -20,9 +21,10 @@ async function go(path: string, body: Record<string, any>, toast: (m: string) =>
 
 // What Pro adds, said the same way as the pricing page.
 const PRO_ADDS = [
-  'Every file organised as soon as it’s added (Free does 500 a month)',
+  'Your whole library: unlimited files, every one organised and searchable',
+  'Share links and brand portals',
+  'Edit photos and designs, with every version kept',
   `${designAllowance('pro')} Studio designs a month, then ${gbp(PRICE.overage)} each up to a cap you set`,
-  'Unlimited portals and share links, no Mise badge',
   'Licence expiry dates, with expired files blocked automatically',
   'Mark files obsolete and point people to the replacement',
 ];
@@ -73,7 +75,7 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
             <p className="tip">
               {pro
                 ? <>{b.interval === 'year' ? priceLine('year') : priceLine('month')}{b.current_period_end ? (b.cancel_at_period_end ? ` · ends ${day(b.current_period_end)}` : ` · renews ${day(b.current_period_end)}`) : ''}{b.status === 'past_due' ? ' · payment failed, Stripe is retrying' : ''}</>
-                : 'One brand, unlimited users, files and storage. No card needed.'}
+                : `Try Mise free: your brand kit, up to ${s.free.files_max} files and one Studio run. No card needed.`}
             </p>
           </div>
           {pro && owner && s.stripe && b.has_customer && (
@@ -81,6 +83,20 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
           )}
         </div>
 
+        {!pro ? (
+          <div className="plan-usage">
+            <div className="ao-urow">
+              <span>Files</span>
+              <div className="ao-meter small" aria-label={`${s.free.files} of ${s.free.files_max} free files`}><i style={{ width: `${Math.min(100, Math.round((s.free.files / s.free.files_max) * 100))}%` }} /></div>
+              <span className="muted">{Math.min(s.free.files, s.free.files_max)} of {s.free.files_max}</span>
+            </div>
+            <div className="ao-urow">
+              <span>Studio run</span><span />
+              <span className="muted">{s.free.studio_used ? 'Used' : 'Not used yet'}</span>
+            </div>
+            <p className="tip">Sharing, editing, more files and more Studio are on Pro.</p>
+          </div>
+        ) : (
         <div className="plan-usage">
           <div className="ao-urow">
             <span>Studio designs this month</span>
@@ -88,8 +104,9 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
             <span className="muted">{Math.min(d.used, d.allowance)} of {d.allowance}</span>
           </div>
           {pro && d.extra > 0 && <p className="tip">Plus <b>{d.extra}</b> extra design{d.extra === 1 ? '' : 's'} ({gbp(d.extra_pence)}), on the next invoice.</p>}
-          <p className="tip">Resets on {day(d.resets)}. Files, storage, organising and search are unlimited on every plan.</p>
+          <p className="tip">Resets on {day(d.resets)}. Files, storage, organising and search are unlimited.</p>
         </div>
+        )}
       </div>
 
       {pro && (
@@ -124,7 +141,7 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
 
 // ---------- the upgrade pop-up ----------
 // One plan, one button, opened right where the free plan holds something back.
-export type UpgradeReason = 'organise' | 'designs' | 'lifecycle' | 'brand' | 'general';
+export type UpgradeReason = 'files' | 'studio' | 'share' | 'edit' | 'organise' | 'designs' | 'lifecycle' | 'brand' | 'general';
 export type UpgradeAsk = { reason: UpgradeReason; count?: number; brand?: string };
 
 // Anything in the app can ask for it: the app shell listens and opens the pop-up.
@@ -136,6 +153,10 @@ const nextFirst = () => { const d = new Date(); return new Date(d.getFullYear(),
 
 function pitch(ask: UpgradeAsk, wsName: string) {
   switch (ask.reason) {
+    case 'files': return { h: 'Bring in the rest of your library', p: `You’ve tried Mise with ${FREE_FILES} files${ask.count ? `; ${ask.count.toLocaleString()} more ${ask.count === 1 ? 'is' : 'are'} waiting to come in` : ''}. Pro takes your whole library, every file organised and searchable the moment it’s added.` };
+    case 'studio': return { h: 'Keep creating', p: `That was your free Studio run. Pro gives you ${designAllowance('pro')} designs a month, on brand every time, then ${gbp(PRICE.overage)} each up to a cap you set.` };
+    case 'share': return { h: 'Share with your team, agencies and retailers', p: 'Send links to files, folders and collections, and publish a brand portal styled from your brand kit. See who viewed and downloaded what.' };
+    case 'edit': return { h: 'Edit without leaving Mise', p: 'Crop, resize and retouch photos, change Studio designs, ask Claude to edit in Figma, and restore any earlier version.' };
     case 'organise': return { h: 'Organise your whole library today', p: `${ask.count ? `${ask.count.toLocaleString()} file${ask.count === 1 ? ' is' : 's are'}` : 'Some files are'} uploaded but waiting to be organised. On Pro, every file is tagged, described and searchable the moment it’s added. On Free, they carry on from ${nextFirst()}.` };
     case 'designs': return { h: 'Keep designing', p: `${wsName} has used this month’s ${designAllowance('free')} Studio designs. Pro gives you ${designAllowance('pro')} a month, then ${gbp(PRICE.overage)} each up to a cap you set. On Free, Studio comes back on ${nextFirst()}.` };
     case 'lifecycle': return { h: 'Never use an expired image again', p: 'Add the date a photo’s licence runs out and Mise blocks it on the day: no downloads, no shares, not offered to Studio or Claude. Mark old files obsolete and point people to the replacement.' };
@@ -145,11 +166,11 @@ function pitch(ask: UpgradeAsk, wsName: string) {
 }
 
 const PRO_CARD = [
-  'Unlimited files and storage, every file organised as it’s added',
+  'Your whole library: unlimited files, every one organised and searchable',
+  'Share links and brand portals, with views and downloads',
+  'Edit photos and designs, with every version kept',
   `${designAllowance('pro')} Studio designs a month, then ${gbp(PRICE.overage)} each`,
   'Licence expiry dates, with expired files blocked automatically',
-  'Obsolete files that point to their replacement',
-  'Unlimited portals and share links, no Mise badge',
   'Unlimited users, no seat fees',
 ];
 

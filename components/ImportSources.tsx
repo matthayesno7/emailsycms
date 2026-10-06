@@ -1,4 +1,5 @@
 'use client';
+import { openUpgrade } from './Billing';
 import { useCallback, useEffect, useState } from 'react';
 import { Icon } from './icons';
 
@@ -45,18 +46,21 @@ export default function ImportSources({ ws, folderId, folderName, onDone, toast,
     const p = { source, total: files.length, done: 0, added: 0, skipped: 0, failed: 0, to: extra.folder_name || folderName || undefined };
     setProgress({ ...p });
     let landed: string | null | undefined = undefined;
+    let held = 0; // Free's 50 files reached: stop and offer the trial
     for (let i = 0; i < files.length; i += 6) {
+      if (held) { held += Math.min(6, files.length - i); continue; }
       const res = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws, folder_id: folderId, ...extra, files: files.slice(i, i + 6) }) }).catch(() => null);
       const json = res ? await res.json().catch(() => null) : null;
       if (!res?.ok || !json) { p.failed += Math.min(6, files.length - i); }
       else {
         if (json.folder_id !== undefined) landed = json.folder_id;
-        for (const r of json.results || []) { if (r.skipped) p.skipped++; else if (r.id) p.added++; else p.failed++; }
+        for (const r of json.results || []) { if (r.skipped) p.skipped++; else if (r.id) p.added++; else if (/FREE_FILE_LIMIT/.test(r.error || '')) held++; else p.failed++; }
       }
       p.done = Math.min(files.length, i + 6);
       setProgress({ ...p });
     }
     toast(`${p.added} added from ${source}${p.skipped ? `, ${p.skipped} already here` : ''}${p.failed ? `, ${p.failed} couldn’t be copied` : ''}`);
+    if (held) openUpgrade({ reason: 'files', count: held });
     setTimeout(() => setProgress(null), 1500);
     onDone(landed);
   }, [ws, folderId, folderName, onDone, toast]);

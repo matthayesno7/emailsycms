@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { freeBrand } from '@/lib/billing';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { FORMATS, hashPasscode } from '@/lib/share';
 
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
   if (!ws) return Response.json({ error: 'Workspace not found.' }, { status: 404 });
   const m = await member(ws);
   if (m.error) return m.error;
+  if (await freeBrand(ws)) return Response.json({ error: 'Sharing is on Pro. Start your 7-day free trial to share.', code: 'upgrade', reason: 'share' }, { status: 402 });
   const db = createAdminClient();
   const f = await fields(db, ws, { name: b.name || 'Brand portal', slug: b.slug || b.name || 'brand', ...b });
   if (f.access === 'passcode' && !f.passcode_hash) return Response.json({ error: 'Set a passcode, or choose another kind of access.' }, { status: 400 });
@@ -77,6 +79,7 @@ export async function PATCH(request: Request) {
   if (!p) return Response.json({ error: 'Portal not found.' }, { status: 404 });
   const m = await member(p.workspace_id);
   if (m.error) return m.error;
+  if (await freeBrand(p.workspace_id)) return Response.json({ error: 'Sharing is on Pro. Start your 7-day free trial to share.', code: 'upgrade', reason: 'share' }, { status: 402 });
   const f = await fields(db, p.workspace_id, b);
   if ((f.access || p.access) === 'passcode' && !('passcode_hash' in f ? f.passcode_hash : p.passcode_hash)) return Response.json({ error: 'Set a passcode, or choose another kind of access.' }, { status: 400 });
   if (f.slug) f.slug = await freeSlug(db, p.workspace_id, f.slug, p.id);

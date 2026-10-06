@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { openUpgrade } from './Billing';
+import { FREE_FILES } from '@/lib/plans';
 
 type P = { search_enabled?: boolean; searchable?: number; search_waiting?: number; enabled: boolean; organised: number; waiting: number; failed: number; not_yet: number; paused?: number; total: number; cost_per_file_gbp: number; errors?: { id: string; name: string; ai_error: string }[] };
 
@@ -93,18 +94,7 @@ export default function AutoOrganise({ ws, toast, canUpgrade }: { ws: string; to
           {(() => {
             const u = usage.find((x) => x.kind === 'tag');
             if (plan !== 'free' || !u) return <p className="tip">Uploads are unlimited, and every new file is organised as soon as it’s added.</p>;
-            const pc = u.cap ? Math.min(100, Math.round((u.used / u.cap) * 100)) : 100;
-            return (
-              <>
-                <div className="label">AI organising this month</div>
-                <div className={'ao-urow' + (pc >= 100 ? ' full' : pc >= 80 ? ' near' : '')}>
-                  <span>New uploads organised</span>
-                  <div className="ao-meter small" aria-label={`${pc}% of this month's organising used`}><i style={{ width: `${pc}%` }} /></div>
-                  <span className="muted">{u.used.toLocaleString()} of {u.cap.toLocaleString()}</span>
-                </div>
-                <p className="tip">You can upload as many files as you like. On Free, Mise’s AI organises the first {u.cap.toLocaleString()} new uploads each month; any more are ready to use straight away and get organised from the 1st. Pro organises every file as it’s added.</p>
-              </>
-            );
+            return <p className="tip">Free includes {FREE_FILES} files, every one organised and searchable. Start your free Pro trial to bring in the rest of your library.</p>;
           })()}
         </div>
       )}

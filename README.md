@@ -135,14 +135,16 @@ Run `supabase/migrations/20261002210000_versions.sql`. Nothing else to set up.
 
 ## 10. Plans and billing (Stripe)
 
-Free or Pro, per brand. Files, storage and search are unlimited on every plan (fair-use ceilings in `lib/plans.ts` only stop runaway imports). Free organises 500 files a month: the rest upload and work as normal, wait as `paused`, and are organised from the 1st, or straight away when the brand upgrades. Single files can be up to 50 MB (images) or 1 GB (videos) on every plan; imports through the server (Drive, Dropbox, Box, Claude) stop at 100 MB. The one metered thing is **Studio designs**: Free gets 20 a month, Pro 200, then 50p each up to a monthly cap the brand's owner sets (default £50).
+**Free is a taster; Pro is £149 a month per brand (or £1,490 a year), with a 7-day free trial (card up front).**
 
-- Free covers **one brand you own**. Making another brand opens checkout; Stripe's webhook creates it, on Pro.
-- Each Pro brand has its own Stripe customer and subscription (invoices, VAT number and extra designs stay separate).
-- Plans live in `workspace_billing`, which only the server writes, so owners can't change their own plan.
+- Free: build the brand kit, up to 50 files (all organised and searchable), one Studio run (a brief: its three designs and extra sizes), unlimited users, connect Claude.
+- The trial pop-up opens at: file 51, a second Studio brief, any sharing (links, portals), editing (photo edits, design changes, Figma edits, restoring versions), licence dates and obsolete files, and a second brand.
+- The database enforces it too (`20261006090000_free_taster.sql`): file 51 and edits raise `FREE_FILE_LIMIT` / `PRO_EDIT`; every brand after your first goes through checkout.
+- Pro: unlimited files, sharing, editing, 200 Studio designs a month then 50p each up to a cap the owner sets, licence expiry and lifecycle.
+- Each Pro brand has its own Stripe customer and subscription. Plans live in `workspace_billing`, which only the server writes.
 
 Set up:
-1. Run the migration `20261005120000_billing_and_lifecycle.sql` (it's at the end of `supabase/run-pending.sql`).
+1. Run the migrations `20261005120000_billing_and_lifecycle.sql` and `20261006090000_free_taster.sql` (both at the end of `supabase/run-pending.sql`).
 2. `STRIPE_SECRET_KEY=sk_test_… node scripts/stripe-setup.mjs` creates the meter, products, prices and portal settings, and prints the env lines.
 3. In Stripe → Developers → Webhooks, add `https://<app>/api/billing/webhook` with `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
 4. Add the env vars to Railway. For UK VAT, turn on Stripe Tax, add the VAT registration, then set `STRIPE_TAX=1`.

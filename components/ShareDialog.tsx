@@ -1,4 +1,5 @@
 'use client';
+import { openUpgrade } from './Billing';
 import { useState } from 'react';
 
 export type ShareTarget = { kind: 'assets'; asset_ids: string[]; title: string } | { kind: 'folder'; folder_id: string; title: string } | { kind: 'collection'; collection_id: string; title: string };
@@ -34,6 +35,7 @@ export default function ShareDialog({ ws, target, toast, onClose, onCreated }: {
     const r = await fetch('/api/shares', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws, ...target, title, message, expires_at, passcode: usePass ? passcode.trim() : null, allow_download: download, formats }) }).catch(() => null);
     const j = r ? await r.json().catch(() => null) : null;
     setBusy(false);
+    if (j?.code === 'upgrade') { onClose(); openUpgrade({ reason: 'share' }); return; }
     if (!r?.ok || !j?.share) { toast(j?.error || 'Couldn’t create the link. Try again.'); return; }
     const url = `${location.origin}/s/${j.share.token}`;
     setLink(url);

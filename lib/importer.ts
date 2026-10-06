@@ -41,7 +41,10 @@ export async function importFile(db: SupabaseClient, o: {
     width: size?.w ?? null, height: size?.h ?? null, folder_id: o.folderId, origin: 'uploaded', status: 'approved', created_by: o.userId,
     provenance: { via: 'import', source: o.source, external_id: o.externalId, path: o.path || null, imported_at: new Date().toISOString() },
   }).select('id').single();
-  if (error) return { error: error.message };
+  if (error) {
+    await db.storage.from('assets').remove([storagePath]).catch(() => {});
+    return { error: /FREE_FILE_LIMIT/.test(error.message) ? 'FREE_FILE_LIMIT: Free includes 50 files. Start your free Pro trial to add more.' : error.message };
+  }
   return { id: data.id };
 }
 

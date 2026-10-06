@@ -233,6 +233,14 @@ async function workspace(ctx: MoreCtx, id: unknown): Promise<{ ws: Workspace } |
   return w ? { ws: w } : { error: 'That workspace is not one of yours. Call list_workspaces for valid ids.' };
 }
 // Assets the user may touch, all from one workspace.
+// Free is a taster: sharing and editing are on Pro. null when allowed.
+async function proOnly(ctx: MoreCtx, ws: string, what: 'share' | 'edit') {
+  if (!ctx.db || (await planOf(ctx.db, ws)).plan !== 'free') return null;
+  return what === 'share'
+    ? 'Sharing (links and portals) is on Pro. The brand’s owner can start a 7-day free trial in Mise → Settings → Plan.'
+    : 'Editing files is on Pro. The brand’s owner can start a 7-day free trial in Mise → Settings → Plan.';
+}
+
 async function ownAssets(ctx: MoreCtx, want: string[]): Promise<{ rows: AssetRow[]; ws: Workspace } | { error: string }> {
   if (!want.length) return { error: 'Pass at least one asset id.' };
   const list = await ctx.repo.workspacesForUser(ctx.userId);
@@ -487,6 +495,8 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
       const r = await ownAssets(ctx, ids(args.asset_id, 1));
       if ('error' in r) return toolError(r.error);
       const a = r.rows[0];
+      const locked = await proOnly(ctx, a.workspace_id, 'edit');
+      if (locked) return toolError(locked);
       const db = need(ctx);
       if (!['image', 'logo', 'product'].includes(a.kind) || !a.storage_path) return toolError(`“${a.name}” has no photo to edit.`);
       const m = madeIn(a);
@@ -538,6 +548,7 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
     case 'revert_asset': {
       const r = await ownAssets(ctx, ids(args.asset_id, 1));
       if ('error' in r) return toolError(r.error);
+      { const locked = await proOnly(ctx, r.rows[0].workspace_id, 'edit'); if (locked) return toolError(locked); }
       const { data, error } = await need(ctx).rpc('asset_revert', { p_asset: r.rows[0].id, p_version: Math.round(Number(args.version)) });
       if (error) return toolError(/Version not found/.test(error.message) ? 'No such version. Call list_versions.' : error.message);
       return text({ ok: true, asset: publicAsset(data as AssetRow, r.ws), note: `Version ${args.version} is current again (as version ${(data as any).version}).` });
@@ -545,6 +556,7 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
     case 'create_share_link': {
       const w = await workspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
+      { const locked = await proOnly(ctx, w.ws.id, 'share'); if (locked) return toolError(locked); }
       const db = need(ctx);
       const assetIds = ids(args.asset_ids, 500);
       const kind = assetIds.length ? 'assets' : args.folder_id ? 'folder' : args.collection_id ? 'collection' : null;
@@ -609,6 +621,7 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
     case 'save_portal': {
       const w = await workspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
+      { const locked = await proOnly(ctx, w.ws.id, 'share'); if (locked) return toolError(locked); }
       const db = need(ctx);
       const f: Record<string, any> = {};
       if (typeof args.name === 'string') f.name = args.name.trim().slice(0, 80) || 'Brand portal';

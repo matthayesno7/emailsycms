@@ -28,7 +28,7 @@ import ShareDialog, { type ShareTarget } from './ShareDialog';
 import Review from './Review';
 import { reviewQueue } from '@/lib/review';
 import { PlanSettings, UpgradeModal, openUpgrade, type UpgradeAsk } from './Billing';
-import { effectivePlan, mb, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, tooBig, type Plan } from '@/lib/plans';
+import { countsAsFile, effectivePlan, FREE_FILES, freeLimitOf, mb, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, tooBig, type Plan } from '@/lib/plans';
 import { expiresSoon, isAvailable, lifecycleOf, LIFECYCLE } from '@/lib/lifecycle';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -434,7 +434,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const folderCounts = useMemo(() => { const m: Record<string, number> = {}; for (const i of items) if (i.folder_id) m[i.folder_id] = (m[i.folder_id] || 0) + 1; return m; }, [items]);
   const drafts = useMemo(() => items.filter((i) => i.status === 'draft').length, [items]);
   const unavailable = useMemo(() => items.filter((i) => !isAvailable(i)).length, [items]);
-  const pausedCount = useMemo(() => items.filter((i) => i.ai_status === 'paused').length, [items]);
+  const fileCount = useMemo(() => items.filter(countsAsFile).length, [items]);
   // Review: what Mise did on its own that needs a person. It's the home whenever something's waiting.
   const toReview = useMemo(() => reviewQueue(items, kitRow).count, [items, kitRow]);
   const landed = useRef(false);
@@ -534,6 +534,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     const type = file.type || (ext === 'svg' ? 'image/svg+xml' : ext === 'png' ? 'image/png' : 'image/jpeg');
     const big = tooBig({ size: file.size, type, name: file.name });
     if (big) { toast(big); return null; }
+    if (plan === 'free' && fileCount >= FREE_FILES) { openUpgrade({ reason: 'files' }); return null; }
     const path = `${ws}/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from('assets').upload(path, file, { contentType: type, upsert: false });
     if (error) { toast(/size|large|exceed/i.test(error.message) ? `${file.name} is too large to upload. Images can be up to ${mb(MAX_IMAGE_BYTES)}, videos ${mb(MAX_VIDEO_BYTES)}.` : `Couldn’t upload ${file.name}.`); return null; }
@@ -562,6 +563,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       width: w, height: h, bytes: file.size, images, created_by: userId,
       phash: phash || (video ? null : '-'), duplicate_of: dup?.id || null,
     }).select('*').single();
+    if (freeLimitOf(e2?.message) === 'files') { await supabase.storage.from('assets').remove([path]); openUpgrade({ reason: 'files' }); return null; }
     if (e2 || !data) { toast('Couldn’t save the image.'); return null; }
     if (dup) toast(`${base} looks like a copy of ${dup.name}. It’s flagged so you can decide.`);
     // Optional: AI alt text, filled in shortly after upload (skipped if no API key is set).
@@ -643,10 +645,18 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     let folderId: string | null | undefined = undefined;
     if (folderName) folderId = await ensureFolder(folderName);
     for (const f of list.filter((f) => /\.csv$/i.test(f.name) || f.type === 'text/csv')) await importFeed(f);
-    const vids = list.filter((f) => /^video\/(mp4|webm|quicktime)/.test(f.type));
+    let vids = list.filter((f) => /^video\/(mp4|webm|quicktime)/.test(f.type));
+    let imgs = list.filter((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name));
+    // Free: up to 50 files. Add what fits, then offer the trial for the rest.
+    let held = 0;
+    if (plan === 'free' && view !== 'block') {
+      const room = Math.max(0, FREE_FILES - fileCount);
+      held = Math.max(0, vids.length + imgs.length - room);
+      if (held && !room) { openUpgrade({ reason: 'files', count: held }); return; }
+      if (held) { vids = vids.slice(0, room); imgs = imgs.slice(0, room - vids.length); }
+    }
     for (const f of vids) await addImageAsset(f, { kind: 'video', folderId });
     if (vids.length) loadAssets(ws);
-    const imgs = list.filter((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name));
     // In Blocks, images become blocks: ask for the block type, then create them.
     if (view === 'block' && imgs.length) { await blocksFromImages(imgs); return; }
     if (imgs.length > 1) toast(`Adding ${imgs.length} images…`);
@@ -654,6 +664,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (imgs.length) { loadAssets(ws); kickTag(); }
     if (folderId) { setFolder(folderId); setView('all'); toast(`${imgs.length + vids.length} files added to ${folderName}`); }
     if (imgs.length || vids.length) setPage((p) => (p === 'brand' ? p : 'library'));
+    if (held) setTimeout(() => openUpgrade({ reason: 'files', count: held }), 600);
   }
 
   async function ensureFolder(name: string): Promise<string | null> {
@@ -731,6 +742,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     return true;
   }
   async function revertAsset(a: Asset, version: number) {
+    if (plan === 'free') { openUpgrade({ reason: 'edit' }); return false; }
     const { error } = await supabase.rpc('asset_revert', { p_asset: a.id, p_version: version });
     if (error) { toast('Couldn’t restore that version.'); return false; }
     await loadAssets(ws);
@@ -925,6 +937,11 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const ownFiles = items.some((a) => a.kind !== 'block' && a.provenance?.via !== 'brand_kit');
   const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); };
   const library = (k: string, o = 'any') => { setView(k); setOrigin(o); go('library'); };
+  // Free is a taster: sharing is on Pro, so asking to share opens the trial pop-up instead.
+  useEffect(() => {
+    if (shareTarget && plan === 'free') { setShareTarget(null); openUpgrade({ reason: 'share' }); }
+  }, [shareTarget, plan]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const openSettings = (t: typeof settingsTab) => { setSettingsTab(t); go('settings'); };
   const wsIndex = workspaces.findIndex((w) => w.id === ws);
   const needsSetup = !connected || !curWs?.figma_file_key;
@@ -1144,10 +1161,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 )}
               </div>}
 
-              {plan === 'free' && pausedCount > 0 && !q.trim() && (
+              {plan === 'free' && fileCount >= FREE_FILES - 10 && !q.trim() && (
                 <div className="upsell-strip" role="status">
-                  <span><b>{pausedCount.toLocaleString()} more file{pausedCount === 1 ? '' : 's'}</b> waiting to be organised · Free organises 500 a month</span>
-                  <button className="btn" type="button" onClick={() => openUpgrade({ reason: 'organise', count: pausedCount })}>Organise them now</button>
+                  <span>{fileCount >= FREE_FILES
+                    ? <><b>Your {FREE_FILES} free files are in.</b> Start your free trial to add the rest of your library.</>
+                    : <><b>{fileCount} of {FREE_FILES}</b> free files used.</>}</span>
+                  <button className="btn" type="button" onClick={() => openUpgrade({ reason: 'files' })}>Start free trial</button>
                 </div>
               )}
 
@@ -1232,7 +1251,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onDelete={() => deleteAsset(openAsset)}
           pro={plan !== 'free'}
           replacements={items.filter((i) => i.kind === openAsset.kind && i.id !== openAsset.id && isAvailable(i)).map((i) => ({ id: i.id, name: i.name })).sort((a, b) => a.name.localeCompare(b.name))}
-          onUpgrade={() => { openEditor(null); openUpgrade({ reason: 'lifecycle' }); }}
+          onUpgrade={(reason) => { if (reason !== 'edit') openEditor(null); openUpgrade({ reason: reason === 'edit' ? 'edit' : 'lifecycle' }); }}
           usedIn={usedIn[openAsset.id] || []}
           onOpenBlock={(b) => showBlock(blockDraft(b))}
           onMakeBlock={() => useInBlock(openAsset)}

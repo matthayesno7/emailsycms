@@ -6,11 +6,12 @@ export type Plan = 'free' | 'pro' | 'enterprise';
 export type Interval = 'month' | 'year';
 
 export const PLANS = {
-  // organise: files auto-organised a month. Everything else uploads and is usable straight away;
-  // on Free, files past the pace wait (paused) until the 1st, or until the brand upgrades.
-  free: { name: 'Free', designs: 20, organise: 500, overage: false, portals: 1, badge: true, lifecycle: false },
-  pro: { name: 'Pro', designs: 200, organise: 20000, overage: true, portals: Infinity, badge: false, lifecycle: true },
-  enterprise: { name: 'Enterprise', designs: 1000, organise: 50000, overage: true, portals: Infinity, badge: false, lifecycle: true },
+  // Free is a taster: brand kit, up to 50 files, one Studio run (a brief and its designs).
+  // More files, more Studio, sharing and editing are on Pro. designs and organise on Free are
+  // only safety ceilings (12 design calls cover one run with extra sizes).
+  free: { name: 'Free', files: 50, designs: 12, organise: 200, overage: false, portals: 0, badge: true, lifecycle: false },
+  pro: { name: 'Pro', files: Infinity, designs: 200, organise: 20000, overage: true, portals: Infinity, badge: false, lifecycle: true },
+  enterprise: { name: 'Enterprise', files: Infinity, designs: 1000, organise: 50000, overage: true, portals: Infinity, badge: false, lifecycle: true },
 } as const;
 
 export const PRICE = {
@@ -43,6 +44,12 @@ export function tooBig(f: { size: number; type?: string; name?: string }) {
   const max = video ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
   return f.size > max ? `${f.name || 'That file'} is ${mb(f.size)}. ${video ? 'Videos' : 'Images'} can be up to ${mb(max)}.` : null;
 }
+
+export const FREE_FILES = 50;
+// Files that count towards Free's 50: anything with a stored file, except email blocks.
+export const countsAsFile = (a: { storage_path?: string | null; kind?: string }) => !!a.storage_path && a.kind !== 'block';
+// Errors the database raises at Free's limits (see the free_taster migration).
+export const freeLimitOf = (msg?: string | null): 'files' | 'edit' | null => (/FREE_FILE_LIMIT/.test(msg || '') ? 'files' : /PRO_EDIT/.test(msg || '') ? 'edit' : null);
 
 export function organisePace(plan: Plan) {
   return PLANS[plan]?.organise ?? PLANS.free.organise;

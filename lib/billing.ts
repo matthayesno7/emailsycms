@@ -17,6 +17,11 @@ export async function planOf(db: Db, ws: string): Promise<{ plan: Plan; row: Rec
   return { plan: effectivePlan(row), row };
 }
 
+// Is this brand on Free right now? (Server routes use it to keep Pro features on Pro.)
+export async function freeBrand(ws: string) {
+  return (await planOf(createAdminClient(), ws)).plan === 'free';
+}
+
 export function toBilling(row: Record<string, any> | null): Billing {
   return {
     plan: effectivePlan(row),

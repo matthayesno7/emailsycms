@@ -1,4 +1,5 @@
 'use client';
+import { openUpgrade } from './Billing';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Asset, Ws } from './Library';
@@ -48,6 +49,7 @@ export default function Sharing({ supabase, ws, items, folders, collections, toa
     const r = await fetch('/api/portals', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, name: `${ws.name} brand portal`, slug: 'brand' }) }).catch(() => null);
     const j = r ? await r.json().catch(() => null) : null;
     setBusy(false);
+    if (j?.code === 'upgrade') { openUpgrade({ reason: 'share' }); return; }
     if (!r?.ok || !j?.portal) { toast(j?.error || 'Couldn’t create the portal.'); return; }
     setPortals((ps) => [...(ps || []), j.portal]);
     if (j.ws_slug) setSlug(j.ws_slug);

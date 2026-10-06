@@ -46,7 +46,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   onAddPreset?: (p: TeamPreset) => Promise<boolean>;
   pro?: boolean;                                   // the brand's plan: licence dates and replacements are on Pro
   replacements?: { id: string; name: string }[];   // what an obsolete file can point to
-  onUpgrade?: () => void;
+  onUpgrade?: (reason?: 'edit' | 'lifecycle') => void;
   src: string | null;
   usedIn?: Asset[];
   onOpenBlock?: (b: Asset) => void;
@@ -59,7 +59,12 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   position?: string;
   toast: (m: string) => void;
 }) {
-  const [editing, setEditing] = useState<false | 'image' | 'design' | 'product' | 'figma'>(false);
+  const [editing, setEditingRaw] = useState<false | 'image' | 'design' | 'product' | 'figma'>(false);
+  // Free is a taster: editing files (photo edits, Studio designs, Figma edits) is on Pro.
+  const setEditing = (v: false | 'image' | 'design' | 'product' | 'figma') => {
+    if (v && v !== 'product' && !pro && onUpgrade) { onUpgrade('edit'); return; }
+    setEditingRaw(v);
+  };
   const [zoom, setZoom] = useState<'fit' | '1x'>('fit');
   const [pmenu, setPmenu] = useState<{ x: number; y: number; left: boolean; up: boolean } | null>(null); // click the picture: its actions, where you clicked
   const [picking, setPicking] = useState(false); // choosing the focal point: only then is the picture clickable and the marker shown

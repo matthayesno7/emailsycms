@@ -58,6 +58,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
   const [edit, setEdit] = useState(brief);
   const refineBox = useRef<HTMLInputElement>(null);
   const run = useRef(0);
+  const runId = useRef<string>(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now()));
   const format = FORMATS.find((f) => f.w === size.w && f.h === size.h) || { id: 'custom', label: 'Custom', w: size.w, h: size.h, hint: '' };
 
   const patch = (k: string, p: Partial<Variant> | ((v: Variant) => Partial<Variant>)) =>
@@ -65,10 +66,12 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
 
   async function call(body: Record<string, any>): Promise<{ spec?: Spec; error?: string }> {
     try {
-      const res = await fetch('/api/design', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, brief, ...body }) });
+      const res = await fetch('/api/design', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, brief, run: runId.current, ...body }) });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         // Out of Studio designs for the month: the app shows the plan banner.
+        // Free: one Studio run, and no changing designs. The app opens the trial pop-up.
+        if (json.code === 'upgrade') window.dispatchEvent(new CustomEvent('mise:upgrade', { detail: { reason: json.reason } }));
         if (json.code === 'limit') window.dispatchEvent(new CustomEvent('mise:limit', { detail: { workspace_id: ws.id, message: json.error, reason: json.reason } }));
         return { error: json.error || 'Something went wrong.' };
       }
@@ -80,6 +83,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
   useEffect(() => {
     if (initial) return;
     const id = ++run.current;
+    runId.current = crypto.randomUUID(); // one brief = one run (its designs and extra sizes)
     const fresh: Variant[] = [0, 1, 2].map(() => ({ key: key(), size, status: 'loading', history: [] }));
     setVariants(fresh); setSel(null); setEdit(brief);
     fresh.forEach(async (v, i) => {

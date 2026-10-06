@@ -16,7 +16,7 @@ export default function AssetLifecycle({ it, pro, replacements, onPatch, onOpenA
   replacements: { id: string; name: string }[];   // same-kind files still available
   onPatch: (p: Record<string, any>) => Promise<boolean>;
   onOpenAsset?: (id: string) => void;
-  onUpgrade?: () => void;
+  onUpgrade?: (reason?: 'edit' | 'lifecycle') => void;
   toast: (m: string) => void;
 }) {
   const state = lifecycleOf(it);
@@ -80,7 +80,7 @@ export default function AssetLifecycle({ it, pro, replacements, onPatch, onOpenA
               {licence && <button type="button" className="linkish" onClick={() => saveLicence('')}>Remove</button>}
             </div>
           ) : (
-            <p className="tip">Add the date a photo’s licence or usage rights run out, and Mise blocks it automatically on that day. <button type="button" className="linkish" onClick={onUpgrade}>See Pro</button></p>
+            <p className="tip">Add the date a photo’s licence or usage rights run out, and Mise blocks it automatically on that day. <button type="button" className="linkish" onClick={() => onUpgrade?.('lifecycle')}>See Pro</button></p>
           )}
           {pro && <p className="tip">{licence ? 'On that day it stops being downloadable, shareable and usable in new work.' : 'For stock or licensed photos: on this date it stops being downloadable and shareable.'}</p>}
         </div>
@@ -107,7 +107,7 @@ export default function AssetLifecycle({ it, pro, replacements, onPatch, onOpenA
           <div className="row-inline">
             <button className="btn" type="button" onClick={() => setMode('archived')}>Archive</button>
             {pro ? <button className="btn" type="button" onClick={() => setMode('obsolete')}>Mark obsolete…</button>
-              : <button className="btn quiet" type="button" onClick={onUpgrade} title="On Pro">Mark obsolete<span className="pro-pill">Pro</span></button>}
+              : <button className="btn quiet" type="button" onClick={() => onUpgrade?.('lifecycle')} title="On Pro">Mark obsolete<span className="pro-pill">Pro</span></button>}
           </div>
         )}
       </div>
