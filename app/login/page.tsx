@@ -83,7 +83,7 @@ export default function LoginPage() {
           <form onSubmit={submit}>
             <h1>{pro ? 'Start Mise Pro' : siteHost ? <>Let’s get {siteHost} in order</> : 'Get your brand in order'}</h1>
             <p className="tip">{pro
-              ? <>Create your account or sign in, then pay securely with Stripe: {yearly ? '£1,490 a year' : '£149 a month'} per brand, plus VAT. Cancel any time.{siteHost ? <> Then Mise reads <b>{siteHost}</b> and builds your brand kit.</> : null}</>
+              ? <>Create your account or sign in, then upgrade securely with Stripe, {yearly ? 'billed yearly' : 'billed monthly'} per brand. Cancel any time.{siteHost ? <> Then Mise reads <b>{siteHost}</b> and builds your brand kit.</> : null}</>
               : siteHost
               ? <>Create your account or sign in. Then Mise reads <b>{siteHost}</b>, builds your brand kit and makes your first designs from it.</>
               : intent.connect === 'claude' ? <>Create your account or sign in, and your connector link for Claude is one click away.</>

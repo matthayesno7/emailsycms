@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { whoFor } from '@/lib/billingAuth';
 import { billingRow, cancelNow, toBilling } from '@/lib/billing';
-import { designAllowance, FREE_FILES, overageDesigns, PRICE, TRIAL_DAYS, trialDaysFor } from '@/lib/plans';
+import { currencyFor, designAllowance, FREE_FILES, overageDesigns, PRICES, TRIAL_DAYS, trialDaysFor } from '@/lib/plans';
 import { hasStripe } from '@/lib/stripe';
 
 // A brand's plan and this month's Studio designs.
@@ -25,17 +25,20 @@ export async function GET(request: Request) {
   const { count: files } = await db.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', id).not('storage_path', 'is', null).neq('kind', 'block');
   const allowance = designAllowance(billing.plan);
   const extra = Math.max(0, used - allowance);
+  // A paying brand keeps its currency; otherwise UK visitors see GBP and everyone else USD.
+  const currency = billing.currency || currencyFor(request.headers.get('cf-ipcountry'));
   return Response.json({
     billing,
     role: who.role,
+    currency,
     stripe: hasStripe(),
     free: { files: files || 0, files_max: FREE_FILES, studio_used: !!row?.studio_free_run, studio_run: row?.studio_free_run || null },
     trial_days: trialDaysFor(row),          // upgrading this brand
     trial_days_new_brand: TRIAL_DAYS,       // a new brand bought from here
     designs: {
       used, allowance, extra,
-      extra_pence: extra * PRICE.overage,
-      extra_left: Math.max(0, overageDesigns(billing.plan, billing.overage_cap_pence) - extra),
+      extra_pence: extra * PRICES[currency].overage,
+      extra_left: Math.max(0, overageDesigns(billing.plan, billing.overage_cap_pence, currency) - extra),
       resets: new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)).toISOString(),
     },
   });
@@ -47,7 +50,7 @@ export async function PATCH(request: Request) {
   if (!who.user) return Response.json({ error: 'Sign in first.' }, { status: 401 });
   if (who.role !== 'owner') return Response.json({ error: 'Only owners can change billing.' }, { status: 403 });
   const cap = Math.round(Number(b?.overage_cap_pence));
-  if (!(cap >= 0 && cap <= 1000000)) return Response.json({ error: 'The cap must be between £0 and £10,000.' }, { status: 400 });
+  if (!(cap >= 0 && cap <= 1000000)) return Response.json({ error: 'The cap must be between 0 and 10,000.' }, { status: 400 });
   const db = createAdminClient();
   const { error } = await db.from('workspace_billing').upsert({ workspace_id: who.ws!.id, overage_cap_pence: cap, updated_at: new Date().toISOString() }, { onConflict: 'workspace_id' });
   if (error) return Response.json({ error: error.message }, { status: 500 });

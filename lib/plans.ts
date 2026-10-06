@@ -14,11 +14,20 @@ export const PLANS = {
   enterprise: { name: 'Enterprise', files: Infinity, designs: 1000, organise: 50000, overage: true, portals: Infinity, badge: false, lifecycle: true },
 } as const;
 
-export const PRICE = {
-  month: 14900,        // £149 a month per brand, in pence, excluding VAT
-  year: 149000,        // £1,490 a year per brand (2 months free)
-  overage: 50,         // 50p per Studio design over the allowance
+// Two currencies: GBP for the UK, USD everywhere else. Amounts in minor units (pence, cents),
+// excluding VAT or sales tax. The same Stripe prices carry both (currency_options).
+export type Currency = 'gbp' | 'usd';
+export const PRICES: Record<Currency, { month: number; year: number; overage: number }> = {
+  gbp: { month: 14900, year: 149000, overage: 50 },   // £149 a month or £1,490 a year per brand; 50p per extra design
+  usd: { month: 19900, year: 199000, overage: 60 },   // $199 a month or $1,990 a year per brand; 60¢ per extra design
 };
+export const PRICE = PRICES.gbp; // existing GBP brands
+export const isCurrency = (c: unknown): c is Currency => c === 'gbp' || c === 'usd';
+// Visitors in the UK see and pay GBP; everyone else USD (Cloudflare's country header).
+export const currencyFor = (country?: string | null): Currency => (String(country || '').toUpperCase() === 'GB' ? 'gbp' : 'usd');
+export const money = (minor: number, cur: Currency = 'gbp') =>
+  `${cur === 'usd' ? '$' : '£'}${(minor / 100).toLocaleString(cur === 'usd' ? 'en-US' : 'en-GB', { minimumFractionDigits: minor % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+export const symbol = (cur: Currency = 'gbp') => (cur === 'usd' ? '$' : '£');
 
 // No trial: Free is how people try Mise, and Pro is charged from day one. (Set above 0 to bring a
 // card-up-front trial back; it's offered once per brand.)
@@ -70,9 +79,9 @@ export function designAllowance(plan: Plan) {
 }
 
 // How many paid extra designs fit under a monthly overage cap.
-export function overageDesigns(plan: Plan, capPence: number) {
+export function overageDesigns(plan: Plan, capPence: number, cur: Currency = 'gbp') {
   if (!PLANS[plan]?.overage) return 0;
-  return Math.max(0, Math.floor(capPence / PRICE.overage));
+  return Math.max(0, Math.floor(capPence / PRICES[cur].overage));
 }
 
 export type Billing = {
@@ -83,6 +92,7 @@ export type Billing = {
   cancel_at_period_end: boolean;
   overage_cap_pence: number;
   has_customer: boolean;
+  currency: Currency | null; // set once the brand has paid; until then it follows the visitor's country
 };
 
 // The plan a billing row actually gives (a lapsed subscription is Free).

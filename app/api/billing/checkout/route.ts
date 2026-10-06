@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { whoFor } from '@/lib/billingAuth';
 import { billingRow, ensureCustomer, proLineItems } from '@/lib/billing';
-import { effectivePlan, TRIAL_DAYS, trialDaysFor, type Interval } from '@/lib/plans';
+import { currencyFor, effectivePlan, isCurrency, TRIAL_DAYS, trialDaysFor, type Interval } from '@/lib/plans';
 import { hasStripe, stripe } from '@/lib/stripe';
 import { publicOrigin } from '@/lib/origin';
 
@@ -22,16 +22,19 @@ export async function POST(request: Request) {
   const origin = publicOrigin(request);
   const db = createAdminClient();
   const tax = process.env.STRIPE_TAX === '1';
+  // The currency the person was shown (GBP in the UK, USD elsewhere). The prices carry both.
+  const currency = isCurrency(b?.currency) ? b.currency : currencyFor(request.headers.get('cf-ipcountry'));
 
   const common = {
     mode: 'subscription',
+    currency,
     line_items: proLineItems(interval),
     allow_promotion_codes: 'true',
     billing_address_collection: 'required',
     tax_id_collection: { enabled: 'true' },
     customer_update: { address: 'auto', name: 'auto' },
     ...(tax ? { automatic_tax: { enabled: 'true' } } : {}),
-    locale: 'en-GB',
+    locale: currency === 'gbp' ? 'en-GB' : 'auto',
   };
 
   try {

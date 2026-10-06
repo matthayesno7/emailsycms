@@ -1,7 +1,7 @@
 // Sets up Stripe for Mise Pro, once per Stripe account (test mode first, then live).
 //   STRIPE_SECRET_KEY=sk_test_… node scripts/stripe-setup.mjs
 // Creates (or finds, if run again): the "studio_design" meter, the Pro product with its
-// £149/month and £1,490/year prices, the extra-designs product with 50p metered prices,
+// £149/$199 a month and £1,490/$1,990 a year prices, the extra-designs product with 50p/60¢ metered prices,
 // and a customer portal configuration. Prints the env lines to paste into Railway.
 const KEY = process.env.STRIPE_SECRET_KEY;
 if (!KEY) { console.error('Set STRIPE_SECRET_KEY first.'); process.exit(1); }
@@ -46,10 +46,10 @@ async function product(id, body) {
 const pro = await product('mise_pro', { name: 'Mise Pro', description: 'Per brand: unlimited files and storage, 200 Studio designs a month, unlimited portals, licence expiry and asset lifecycle.', tax_code: 'txcd_10103001' });
 const extra = await product('mise_extra_designs', { name: 'Mise Studio designs (extra)', description: '50p per Studio design over the monthly allowance, up to the cap you set.', tax_code: 'txcd_10103001' });
 
-const proMonth = await price('mise_pro_month', () => api('POST', '/prices', { product: pro.id, currency: 'gbp', unit_amount: 14900, tax_behavior: 'exclusive', lookup_key: 'mise_pro_month', nickname: 'Pro monthly', recurring: { interval: 'month' } }));
-const proYear = await price('mise_pro_year', () => api('POST', '/prices', { product: pro.id, currency: 'gbp', unit_amount: 149000, tax_behavior: 'exclusive', lookup_key: 'mise_pro_year', nickname: 'Pro yearly', recurring: { interval: 'year' } }));
-const exMonth = await price('mise_extra_month', () => api('POST', '/prices', { product: extra.id, currency: 'gbp', unit_amount: 50, tax_behavior: 'exclusive', lookup_key: 'mise_extra_month', nickname: 'Extra designs (monthly plans)', recurring: { interval: 'month', usage_type: 'metered', meter: meter.id } }));
-const exYear = await price('mise_extra_year', () => api('POST', '/prices', { product: extra.id, currency: 'gbp', unit_amount: 50, tax_behavior: 'exclusive', lookup_key: 'mise_extra_year', nickname: 'Extra designs (yearly plans)', recurring: { interval: 'year', usage_type: 'metered', meter: meter.id } }));
+const proMonth = await price('mise_pro_month', () => api('POST', '/prices', { product: pro.id, currency: 'gbp', unit_amount: 14900, tax_behavior: 'exclusive', currency_options: { usd: { unit_amount: 19900, tax_behavior: 'exclusive' } }, lookup_key: 'mise_pro_month', nickname: 'Pro monthly', recurring: { interval: 'month' } }));
+const proYear = await price('mise_pro_year', () => api('POST', '/prices', { product: pro.id, currency: 'gbp', unit_amount: 149000, tax_behavior: 'exclusive', currency_options: { usd: { unit_amount: 199000, tax_behavior: 'exclusive' } }, lookup_key: 'mise_pro_year', nickname: 'Pro yearly', recurring: { interval: 'year' } }));
+const exMonth = await price('mise_extra_month', () => api('POST', '/prices', { product: extra.id, currency: 'gbp', unit_amount: 50, tax_behavior: 'exclusive', currency_options: { usd: { unit_amount: 60, tax_behavior: 'exclusive' } }, lookup_key: 'mise_extra_month', nickname: 'Extra designs (monthly plans)', recurring: { interval: 'month', usage_type: 'metered', meter: meter.id } }));
+const exYear = await price('mise_extra_year', () => api('POST', '/prices', { product: extra.id, currency: 'gbp', unit_amount: 50, tax_behavior: 'exclusive', currency_options: { usd: { unit_amount: 60, tax_behavior: 'exclusive' } }, lookup_key: 'mise_extra_year', nickname: 'Extra designs (yearly plans)', recurring: { interval: 'year', usage_type: 'metered', meter: meter.id } }));
 
 // Customer portal: invoices, card, billing details and VAT number, cancel at period end.
 // Switching monthly/yearly is left off for now (the metered item has to switch with it).

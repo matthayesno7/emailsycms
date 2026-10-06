@@ -28,7 +28,7 @@ export const TERMS: Section[] = [
   ] },
   { h: 'Plans and payment', p: [
     'Free: you can try Mise without a card, within the limits shown in the app (currently a brand kit, up to 50 files and one Studio run per brand). We may change what Free includes.',
-    'Pro: £149 a month or £1,490 a year per brand, plus VAT where it applies, charged when you upgrade. Pro brands get 200 Studio designs a month; each design beyond that costs 50p, up to a monthly cap the brand’s owner sets, and is billed in arrears on the next invoice.',
+    'Pro: per brand, charged when you upgrade, plus VAT or sales tax where it applies. In the UK it is £149 a month or £1,490 a year; elsewhere it is US$199 a month or US$1,990 a year. Pro brands get 200 Studio designs a month; each design beyond that costs 50p (60¢ in US dollars), up to a monthly cap the brand’s owner sets, and is billed in arrears on the next invoice. A brand keeps the currency it first paid in.',
         'Subscriptions renew automatically at the end of each month or year until cancelled. You can cancel at any time in Settings → Plan → Manage billing; the brand stays on Pro until the end of the period you have paid for, then returns to Free. We do not refund part periods unless the law requires it.',
     'Payments are processed by Stripe. If a payment fails we will retry it, and we may move the brand to Free if it remains unpaid.',
     'We may change prices with at least 30 days’ notice by email. A change takes effect from your next renewal after the notice period; you can cancel before then.',

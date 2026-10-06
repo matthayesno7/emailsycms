@@ -47,7 +47,7 @@ export async function takeUsage(ws: string, kind: UsageKind, n = 1): Promise<Tak
     const customer = p.row?.stripe_customer_id as string | undefined;
     const interval = (p.row?.interval as 'month' | 'year') || 'month';
     if (!row.ok && kind === 'design' && PLANS[plan].overage && customer && overagePriceFor(interval)) {
-      const room = overageDesigns(plan, p.row?.overage_cap_pence ?? 5000);
+      const room = overageDesigns(plan, p.row?.overage_cap_pence ?? 5000, p.row?.currency === 'usd' ? 'usd' : 'gbp');
       if (room > 0) {
         const r2 = await take(db, ws, kind, n, base + room);
         if (r2?.ok) {

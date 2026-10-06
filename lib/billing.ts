@@ -2,7 +2,7 @@
 // has its own Stripe customer and subscription, so its invoices, VAT details and extra
 // designs stay separate. Free brands never touch Stripe.
 import { createAdminClient } from './supabase/admin';
-import { effectivePlan, type Billing, type Interval, type Plan } from './plans';
+import { effectivePlan, type Billing, type Interval, type Plan, isCurrency } from './plans';
 import { overagePriceFor, priceFor, stripe } from './stripe';
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -31,6 +31,7 @@ export function toBilling(row: Record<string, any> | null): Billing {
     cancel_at_period_end: !!row?.cancel_at_period_end,
     overage_cap_pence: row?.overage_cap_pence ?? 5000,
     has_customer: !!row?.stripe_customer_id,
+    currency: isCurrency(row?.currency) ? row!.currency : null,
   };
 }
 
@@ -72,6 +73,7 @@ export async function syncSubscription(db: Db, sub: any, wsHint?: string) {
     subscription_status: sub.status,
     current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
     cancel_at_period_end: !!sub.cancel_at_period_end,
+    ...(isCurrency(sub.currency) ? { currency: sub.currency } : {}),
     updated_at: new Date().toISOString(),
   }, { onConflict: 'workspace_id' });
   // Upgraded: anything waiting under Free's organising pace goes back in the queue now.
