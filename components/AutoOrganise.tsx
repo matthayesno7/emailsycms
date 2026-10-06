@@ -48,7 +48,7 @@ export default function AutoOrganise({ ws, toast, canUpgrade }: { ws: string; to
 
       <div className="ao-meter" aria-label={`${pct}% organised`}><i style={{ width: `${pct}%` }} /></div>
       <div className="ao-stats">
-        <span><b>{p.organised.toLocaleString()}</b> organised</span>
+        <span><b>{p.organised.toLocaleString()}</b> organised in your library</span>
         {p.waiting > 0 && <span><b>{p.waiting.toLocaleString()}</b> in progress…</span>}
         {p.not_yet > 0 && <span><b>{p.not_yet.toLocaleString()}</b> not organised yet</span>}
         {!!p.paused && <span><b>{p.paused.toLocaleString()}</b> waiting until the 1st</span>}
@@ -84,7 +84,7 @@ export default function AutoOrganise({ ws, toast, canUpgrade }: { ws: string; to
       </div>
       {usage && (
         <div className="ao-usage">
-          <div className="label">This month</div>
+          <div className="label">This month ({new Date().toLocaleDateString('en-GB', { month: 'long' })})</div>
           {usage.map((u) => {
             // Studio designs (and organising on Free) have a plan allowance; the rest is unlimited (fair use).
             if (u.kind !== 'design' && !(u.kind === 'tag' && plan === 'free')) return (
@@ -97,7 +97,7 @@ export default function AutoOrganise({ ws, toast, canUpgrade }: { ws: string; to
             const pc = u.cap ? Math.min(100, Math.round((u.used / u.cap) * 100)) : 100;
             return (
               <div key={u.kind} className={'ao-urow' + (pc >= 100 ? ' full' : pc >= 80 ? ' near' : '')}>
-                <span>{u.label[0].toUpperCase() + u.label.slice(1)}</span>
+                <span>{u.kind === 'tag' ? 'New files organised' : u.label[0].toUpperCase() + u.label.slice(1)}</span>
                 <div className="ao-meter small" aria-label={`${pc}% used`}><i style={{ width: `${pc}%` }} /></div>
                 <span className="muted">{u.used.toLocaleString()} of {u.cap.toLocaleString()}</span>
               </div>
