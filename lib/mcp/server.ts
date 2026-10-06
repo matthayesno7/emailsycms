@@ -2,9 +2,10 @@
 // transport. Each POST carries one message (or a batch) and gets a JSON reply.
 import { isAvailable, lifecycleForClaude } from '../lifecycle';
 import { MAX_IMAGE_BYTES, MAX_IMPORT_BYTES } from '../plans';
-import { ASPECTS, PURPOSES, brandPrompt, designsFor, generateImages, hasImageGen, routeFor, type Aspect, type Purpose, type Ref } from '../imageGen';
+import { PURPOSES } from '../models';
 import { planOf } from '../billing';
-import { VIDEO_ASPECTS, VIDEO_DESIGNS, VIDEO_SECONDS, downloadVideo, hasVideoGen, pollVideo, startVideo } from '../videoGen';
+import { VIDEO_ASPECTS, VIDEO_SECONDS } from '../videoGen';
+import { clipStatus, makeImages, startClip } from '../makeMedia';
 import { limitMessage, takeUsage } from '../usage';
 import { BLOCK_TYPES, isReadDesign } from '../blockTypes';
 import { productAsBlock } from '../products';
@@ -341,54 +342,6 @@ export function publicAsset(a: AssetRow, ws?: Workspace) {
 }
 
 
-// ---------- video jobs ----------
-type ClipMeta = { name: string; prompt: string | null; model: string | null; aspect: string | null; seconds: number | null; source: string | null; kitVersion: number | null };
-const savingClips = new Set<string>();
-
-async function clipFor(ctx: Ctx, wsId: string, job: string): Promise<AssetRow | null> {
-  if (!ctx.db || !job) return null;
-  const { data } = await ctx.db.from('assets').select('*').eq('workspace_id', wsId).eq('provenance->>job', job).limit(1).maybeSingle();
-  return (data as AssetRow) || null;
-}
-
-async function saveClip(ctx: Ctx, ws: Workspace, job: string, uri: string, m: ClipMeta): Promise<AssetRow | { error: string }> {
-  if (savingClips.has(job)) return { error: 'Already saving this clip. Check again in a moment.' };
-  savingClips.add(job);
-  try {
-    const existing = await clipFor(ctx, ws.id, job);
-    if (existing) return existing;
-    const got = await downloadVideo(uri);
-    if ('error' in got) return got;
-    const path = `${ws.id}/generated/${crypto.randomUUID()}.mp4`;
-    await ctx.repo.upload(path, got.buf, got.mime);
-    return await ctx.repo.insertAsset({
-      workspace_id: ws.id, kind: 'video', name: m.name, storage_path: path, mime: got.mime, bytes: got.buf.length, width: null, height: null,
-      origin: 'generated', status: 'draft', created_by: ctx.userId, fields: {},
-      provenance: { via: 'mise-video', job, prompt: m.prompt, model: m.model, aspect_ratio: m.aspect, seconds: m.seconds, source_asset_ids: m.source ? [m.source] : [], brand_kit_version: m.kitVersion, generated_at: new Date().toISOString() },
-      figma: null,
-    });
-  } finally {
-    savingClips.delete(job);
-  }
-}
-
-// Keep polling in the background and save the clip when it's ready (check_video picks it up after a restart).
-function watchClip(ctx: Ctx, ws: Workspace, job: string, m: ClipMeta) {
-  (async () => {
-    const until = Date.now() + 12 * 60_000;
-    while (Date.now() < until) {
-      await new Promise((r) => setTimeout(r, 10_000));
-      const st = await pollVideo(job);
-      if ('error' in st) { console.error('[video]', job, st.error); return; }
-      if (st.done) {
-        const r = await saveClip(ctx, ws, job, st.uri, m);
-        if ('error' in r) console.error('[video] save', job, r.error);
-        return;
-      }
-    }
-    console.warn('[video] gave up waiting', job);
-  })().catch((e) => console.error('[video]', job, e?.message));
-}
 
 async function allowedAsset(ctx: Ctx, id: string) {
   if (!id || typeof id !== 'string') return { error: 'Pass an asset id.' };
@@ -680,96 +633,27 @@ export async function callTool(name: string, args: Record<string, any>, ctx: Ctx
     case 'generate_image': {
       const w = await ownWorkspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
-      if (!hasImageGen()) return toolError('Image generation isn’t switched on for this Mise yet. Use Figma (Weave) if it’s connected, or ask the user to make the image in Mise Studio.');
-      if (ctx.db && (await planOf(ctx.db, w.ws.id)).plan === 'free') return toolError('Making new images is on Pro. The brand’s owner can start a 7-day free trial in Mise → Settings → Plan & usage.');
-      const prompt = String(args.prompt || '').trim().slice(0, 3000);
-      if (!prompt) return toolError('Say what image to make.');
-      // Reference images: the email-ready copy is plenty and keeps the request small.
-      const refs: Ref[] = [];
-      const refIds: string[] = [];
-      for (const id of (Array.isArray(args.reference_asset_ids) ? args.reference_asset_ids : []).slice(0, 4)) {
-        const a = await ctx.repo.getAsset(String(id));
-        if (!a || a.workspace_id !== w.ws.id || !isAvailable(a)) continue;
-        const path = a.images?.email?.path || a.storage_path;
-        if (!path || /svg|video/.test(a.mime || '')) continue;
-        const url = await ctx.repo.signedUrl(path);
-        const got = url ? await fetchLimited(url, { accept: 'image/*', maxBytes: 8_000_000, fetchImpl: ctx.fetchImpl }) : null;
-        if (got && !('error' in got)) { refs.push({ mime: got.type || 'image/jpeg', data: got.buf, label: a.name }); refIds.push(a.id); }
-      }
-      const kitRow = await ctx.repo.getBrandKit(w.ws.id);
-      const product = args.source_product_pid ? (await ctx.repo.listAssets([w.ws.id], { kind: 'product', query: String(args.source_product_pid), limit: 20 })).find((h) => h.pid === String(args.source_product_pid)) || null : null;
-      const full = brandPrompt(prompt, (kitRow?.kit as any) || null, { hasProduct: !!product || refs.length > 0 });
-      const aspect = (ASPECTS as readonly string[]).includes(String(args.aspect_ratio)) ? (args.aspect_ratio as Aspect) : '1:1';
-      const count = Math.max(1, Math.min(4, Math.floor(Number(args.count) || 1)));
-      const route = routeFor((PURPOSES as readonly string[]).includes(String(args.purpose)) ? (args.purpose as Purpose) : 'auto', { prompt, refs: refs.length, aspect });
-      const designs = designsFor(route, count);
-      const take = await takeUsage(w.ws.id, 'design', designs);
-      if (!take.ok) return toolError(limitMessage('design', take));
-      const out = await generateImages({ prompt: full, refs: route.api === 'imagen' ? [] : refs, aspect, route, count });
-      if ('error' in out) return toolError(out.error);
-      const ext = out.mime.includes('png') ? 'png' : out.mime.includes('webp') ? 'webp' : 'jpg';
-      const base = String(args.name || prompt).trim().slice(0, 110) || 'New image';
-      const saved: Record<string, unknown>[] = [];
-      for (const [i, buf] of out.bufs.entries()) {
-        const path = `${w.ws.id}/generated/${crypto.randomUUID()}.${ext}`;
-        await ctx.repo.upload(path, buf, out.mime);
-        const size = imageSize(buf);
-        const row = await ctx.repo.insertAsset({
-          workspace_id: w.ws.id, kind: 'image', name: out.bufs.length > 1 ? `${base} (${i + 1})` : base,
-          storage_path: path, mime: out.mime, bytes: buf.length, width: size?.w ?? null, height: size?.h ?? null,
-          origin: 'generated', status: 'draft', created_by: ctx.userId, fields: {},
-          provenance: { via: 'mise-image', prompt, model: out.model, purpose: out.route.purpose, aspect_ratio: aspect, source_product_pid: product?.pid || null, source_asset_ids: [...new Set([...(product ? [product.id] : []), ...refIds])], brand_kit_version: kitRow?.version ?? null, generated_at: new Date().toISOString() },
-          figma: null,
-        });
-        saved.push({ ...publicAsset(row, w.ws), image_url: await ctx.repo.signedUrl(path) });
-      }
-      return text({ ok: true, model: out.model, purpose: out.route.purpose, designs_used: designs, assets: saved, next: 'Saved as drafts in Mise for the team to approve. To try another take, call generate_image again with a changed prompt; for exact words on the image use purpose text.' });
+      const r = await makeImages(ctx.repo, ctx.db, {
+        wsId: w.ws.id, userId: ctx.userId, prompt: args.prompt, referenceIds: Array.isArray(args.reference_asset_ids) ? args.reference_asset_ids.map(String) : [],
+        pid: args.source_product_pid ? String(args.source_product_pid) : null, aspect: args.aspect_ratio, purpose: args.purpose, count: args.count, name: args.name,
+      });
+      if ('error' in r) return toolError(r.code === 'off' ? `${r.error} Use Figma (Weave) if it’s connected, or ask the user to make it in Mise Studio.` : r.error);
+      return text({ ok: true, model: r.model, purpose: r.purpose, designs_used: r.designs, assets: r.assets.map((m) => ({ ...publicAsset(m.row, w.ws), image_url: m.url })), next: 'Saved as drafts in Mise for the team to approve. To try another take, call generate_image again with a changed prompt; for exact words on the image use purpose text.' });
     }
     case 'generate_video': {
       const w = await ownWorkspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
-      if (!hasVideoGen()) return toolError('Video isn’t switched on for this Mise yet.');
-      if (ctx.db && (await planOf(ctx.db, w.ws.id)).plan === 'free') return toolError('Making video is on Pro. The brand’s owner can start a 7-day free trial in Mise → Settings → Plan & usage.');
-      const prompt = String(args.prompt || '').trim().slice(0, 3000);
-      if (!prompt) return toolError('Describe the clip to make.');
-      let image: Ref | null = null;
-      let source: string | null = null;
-      if (args.reference_asset_id) {
-        const a = await ctx.repo.getAsset(String(args.reference_asset_id));
-        if (!a || a.workspace_id !== w.ws.id || !isAvailable(a)) return toolError('reference_asset_id isn’t an available asset in this workspace.');
-        const path = a.images?.email?.path || a.storage_path;
-        if (!path || /svg|video/.test(a.mime || '')) return toolError('That asset can’t be animated: pass a photo or image.');
-        const url = await ctx.repo.signedUrl(path);
-        const got = url ? await fetchLimited(url, { accept: 'image/*', maxBytes: 8_000_000, fetchImpl: ctx.fetchImpl }) : null;
-        if (!got || 'error' in got) return toolError('Couldn’t read that image.');
-        image = { mime: got.type || 'image/jpeg', data: got.buf, label: a.name };
-        source = a.id;
-      }
-      const kitRow = await ctx.repo.getBrandKit(w.ws.id);
-      const full = brandPrompt(prompt, (kitRow?.kit as any) || null, { hasProduct: !!image });
-      const aspect = (VIDEO_ASPECTS as readonly string[]).includes(String(args.aspect_ratio)) ? (args.aspect_ratio as '16:9' | '9:16') : '16:9';
-      const seconds = (VIDEO_SECONDS as readonly number[]).includes(Number(args.seconds)) ? Number(args.seconds) : 8;
-      const take = await takeUsage(w.ws.id, 'design', VIDEO_DESIGNS);
-      if (!take.ok) return toolError(limitMessage('design', take));
-      const started = await startVideo({ prompt: full, image, aspect, seconds });
-      if ('error' in started) return toolError(started.error);
-      const meta: ClipMeta = { name: String(args.name || prompt).trim().slice(0, 120) || 'New video', prompt, model: started.model, aspect, seconds, source, kitVersion: kitRow?.version ?? null };
-      watchClip(ctx, w.ws, started.job, meta);
-      return text({ ok: true, job_id: started.job, designs_used: VIDEO_DESIGNS, next: 'Making the clip: it usually takes one to three minutes. Call check_video with this job_id; it saves to Mise as a draft by itself when ready.' });
+      const r = await startClip(ctx.repo, ctx.db, { wsId: w.ws.id, userId: ctx.userId, prompt: args.prompt, referenceId: args.reference_asset_id ? String(args.reference_asset_id) : null, aspect: args.aspect_ratio, seconds: args.seconds, name: args.name });
+      if ('error' in r) return toolError(r.error);
+      return text({ ok: true, job_id: r.job, designs_used: r.designs, next: 'Making the clip: it usually takes one to three minutes. Call check_video with this job_id; it saves to Mise as a draft by itself when ready.' });
     }
     case 'check_video': {
       const w = await ownWorkspace(ctx, args.workspace_id);
       if ('error' in w) return toolError(w.error);
-      const job = String(args.job_id || '');
-      const saved = await clipFor(ctx, w.ws.id, job);
-      if (saved) return text({ ok: true, ready: true, asset: { ...publicAsset(saved, w.ws), video_url: saved.storage_path ? await ctx.repo.signedUrl(saved.storage_path) : null }, next: 'Saved as a draft in Mise for the team to approve.' });
-      const st = await pollVideo(job);
-      if ('error' in st) return toolError(st.error);
-      if (!st.done || savingClips.has(job)) return text({ ok: true, ready: false, next: 'Still making. Check again in about 30 seconds.' });
-      // Ready but not saved (the server restarted while it was being made): save it now.
-      const row = await saveClip(ctx, w.ws, job, st.uri, { name: 'New video', prompt: null, model: null, aspect: null, seconds: null, source: null, kitVersion: null });
-      if ('error' in row) return toolError(row.error);
-      return text({ ok: true, ready: true, asset: { ...publicAsset(row, w.ws), video_url: row.storage_path ? await ctx.repo.signedUrl(row.storage_path) : null }, next: 'Saved as a draft in Mise for the team to approve.' });
+      const r = await clipStatus(ctx.repo, ctx.db, w.ws.id, ctx.userId, String(args.job_id || ''));
+      if ('error' in r) return toolError(r.error);
+      if (!r.ready) return text({ ok: true, ready: false, next: 'Still making. Check again in about 30 seconds.' });
+      return text({ ok: true, ready: true, asset: { ...publicAsset(r.asset.row, w.ws), video_url: r.asset.url }, next: 'Saved as a draft in Mise for the team to approve.' });
     }
     case 'add_generated_asset': {
       const w = await ownWorkspace(ctx, args.workspace_id);

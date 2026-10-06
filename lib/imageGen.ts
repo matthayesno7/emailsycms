@@ -8,28 +8,23 @@
 // Env: GEMINI_API_KEY (Google AI Studio). Optional overrides: GEMINI_IMAGE_MODEL (product),
 // GEMINI_IMAGE_PRO_MODEL (text), GEMINI_IMAGE_FAST_MODEL (quick).
 import type { BrandKit } from './brandKit';
+import { JOBS, pickJob, type Job, type Purpose } from './models';
 
 export const hasImageGen = () => !!process.env.GEMINI_API_KEY;
 export const IMAGE_MODEL = () => process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image';
 
-export const PURPOSES = ['auto', 'product', 'text', 'quick'] as const;
-export type Purpose = (typeof PURPOSES)[number];
-type Route = { purpose: Exclude<Purpose, 'auto'>; model: string; api: 'gemini' | 'imagen'; size: '1K' | '2K'; designs: number; label: string };
+export { PURPOSES, type Purpose } from './models';
+type Route = { purpose: Job; model: string; api: 'gemini' | 'imagen'; size: '1K' | '2K'; designs: number; label: string };
 
-// Which model does which job, and what it counts against the brand's Studio designs.
-const ROUTES: Record<Exclude<Purpose, 'auto'>, () => Route> = {
-  product: () => ({ purpose: 'product', model: IMAGE_MODEL(), api: 'gemini', size: '2K', designs: 1, label: 'Product in a scene' }),
-  text: () => ({ purpose: 'text', model: process.env.GEMINI_IMAGE_PRO_MODEL || 'gemini-3-pro-image-preview', api: 'gemini', size: '2K', designs: 2, label: 'Exact text or hero shot' }),
-  quick: () => ({ purpose: 'quick', model: process.env.GEMINI_IMAGE_FAST_MODEL || 'imagen-4.0-fast-generate-001', api: 'imagen', size: '1K', designs: 1, label: 'Quick variations' }),
+// Which model does which job (names and costs in models.ts).
+const ROUTES: Record<Job, () => Route> = {
+  product: () => ({ purpose: 'product', model: IMAGE_MODEL(), api: 'gemini', size: '2K', designs: JOBS.product.designs, label: JOBS.product.label }),
+  text: () => ({ purpose: 'text', model: process.env.GEMINI_IMAGE_PRO_MODEL || 'gemini-3-pro-image-preview', api: 'gemini', size: '2K', designs: JOBS.text.designs, label: JOBS.text.label }),
+  quick: () => ({ purpose: 'quick', model: process.env.GEMINI_IMAGE_FAST_MODEL || 'imagen-4.0-fast-generate-001', api: 'imagen', size: '1K', designs: JOBS.quick.designs, label: JOBS.quick.label }),
 };
-const IMAGEN_ASPECTS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
 
-// Pick the model. Auto: references → product; quoted words → text; otherwise product's model (good all-rounder).
-// Imagen can't take references or every aspect, so those fall back to the product model.
 export function routeFor(purpose: Purpose | undefined, o: { prompt: string; refs: number; aspect: Aspect }): Route {
-  let p: Exclude<Purpose, 'auto'> = purpose && purpose !== 'auto' ? purpose : o.refs ? 'product' : /["“][^"“”]{2,}["”]/.test(o.prompt) ? 'text' : 'product';
-  if (p === 'quick' && (o.refs > 0 || !IMAGEN_ASPECTS.includes(o.aspect))) p = 'product';
-  return ROUTES[p]();
+  return ROUTES[pickJob(purpose, o)]();
 }
 export const designsFor = (r: Route, count: number) => r.designs * count;
 

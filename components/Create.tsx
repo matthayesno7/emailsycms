@@ -5,6 +5,8 @@ import { openUpgrade } from './Billing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import Studio, { formatFor } from './Studio';
+import MediaResults, { type MadeItem } from './MediaResults';
+import { JOBS, VIDEO_JOB, PURPOSES, pickJob, nearestAspect, type Purpose } from '@/lib/models';
 import type { StudioBrand } from './DesignCanvas';
 import { CATEGORIES, MOCKS, PROMPTS, USE_LABEL, fillPrompt, type PromptCategory } from '@/lib/prompts';
 import { normaliseKit, type BrandKitRow } from '@/lib/brandKit';
@@ -13,16 +15,21 @@ import { Icon } from './icons';
 import type { Asset, Ws } from './Library';
 
 // Quick formats for the composer, drawn at their real proportions.
-const FORMATS: { label: string; size: [number, number]; ask: string; video?: boolean }[] = [
+const FORMATS: { label: string; size: [number, number]; ask: string }[] = [
   { label: 'Email hero', size: [1200, 600], ask: 'an email hero banner, 1200×600' },
   { label: 'LinkedIn banner', size: [1128, 191], ask: 'a LinkedIn company banner, 1128×191' },
   { label: 'LinkedIn post', size: [1200, 627], ask: 'a LinkedIn post image, 1200×627' },
   { label: 'Instagram post', size: [1080, 1350], ask: 'an Instagram post, 1080×1350' },
   { label: 'Story', size: [1080, 1920], ask: 'an Instagram story, 1080×1920' },
   { label: 'Square ad', size: [1080, 1080], ask: 'a square social ad, 1080×1080' },
-  { label: 'Product reel', size: [1080, 1920], ask: 'a 6-second vertical product video, 1080×1920', video: true },
-  { label: 'Animated banner', size: [1200, 600], ask: 'an animated email banner, 1200×600, under 4 seconds', video: true },
 ];
+// Video comes out in the two shapes the video model makes.
+const VIDEO_FORMATS: { label: string; aspect: '9:16' | '16:9'; size: [number, number] }[] = [
+  { label: 'Reel or story', aspect: '9:16', size: [1080, 1920] },
+  { label: 'Landscape banner', aspect: '16:9', size: [1920, 1080] },
+];
+type Mode = 'design' | 'photo' | 'video';
+const MODES: [Mode, string][] = [['design', 'Design'], ['photo', 'Photo'], ['video', 'Video']];
 
 // One-click starters for the composer: words, and the size they suit (index into FORMATS).
 const TRIES: { text: string; fmt: number }[] = [
@@ -50,6 +57,18 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const [live, setLive] = useState<boolean | null>(null); // can the Studio design here (API key set)?
   const [studio, setStudio] = useState<{ brief: string; size: { w: number; h: number } } | null>(null);
   useEffect(() => { fetch('/api/design').then((r) => r.json()).then((j) => setLive(!!j.enabled)).catch(() => setLive(false)); }, []);
+  // Photos and video made in Mise itself, with the right model for the job.
+  const [mode, setMode] = useState<Mode>('design');
+  const [media, setMedia] = useState<{ image: boolean; video: boolean }>({ image: false, video: false });
+  useEffect(() => { fetch('/api/make').then((r) => r.json()).then((j) => setMedia({ image: !!j.image, video: !!j.video })).catch(() => {}); }, []);
+  const [purpose, setPurpose] = useState<Purpose>('auto');
+  const [modelOpen, setModelOpen] = useState(false);
+  const [count, setCount] = useState(1);
+  const [vfmt, setVfmt] = useState(0);
+  const [seconds, setSeconds] = useState(8);
+  const [refId, setRefId] = useState('');
+  const [made, setMade] = useState<MadeItem[]>([]);
+  const [making, setMaking] = useState(false);
   useEffect(() => {
     if (!autoBrief || live === null) return;
     if (live) setStudio({ brief: autoBrief, size: formatFor(autoBrief) });
@@ -87,8 +106,8 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const srcOf = (id: string) => { const a = items.find((i) => i.id === id); return a?.storage_path ? urls[a.storage_path] : undefined; };
 
   const fill = { brand: ws.name, figma: ws.figma_file_url };
-  // Motion, video and "from Figma" ideas need Figma until Mise makes video itself: hide them for brands without a Figma file.
-  const needsFigma = (p: (typeof PROMPTS)[number]) => p.id === 'kit-figma' || p.uses.some((u) => u === 'motion' || u === 'ai-video');
+  // Motion and "from Figma" ideas need Figma (and video, until it's switched on): hide them for brands without a Figma file.
+  const needsFigma = (p: (typeof PROMPTS)[number]) => p.id === 'kit-figma' || p.uses.includes('motion') || (p.uses.includes('ai-video') && !media.video);
   const shown = PROMPTS.filter((p) => (cat === 'all' || p.category === cat) && (!!ws.figma_file_url || !needsFigma(p)));
 
   const text = (() => {
@@ -104,7 +123,40 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const chosen = fmt !== null ? FORMATS[fmt] : null;
   const pickedIdea = picked ? PROMPTS.find((p) => p.id === picked) : null;
   const pickedLive = !!pickedIdea && LIVE.has(MOCKS[pickedIdea.id]?.layout) && !pickedIdea.uses.some((u) => u === 'ai-image' || u === 'ai-video' || u === 'motion');
-  const canDesign = !!live && !chosen?.video && (!picked || pickedLive);
+  const canDesign = mode === 'design' && !!live && (!picked || pickedLive);
+  const canMake = (mode === 'photo' && media.image) || (mode === 'video' && media.video);
+  const refs = useMemo(() => items.filter((i) => ['image', 'product', 'logo'].includes(i.kind) && i.storage_path && !/video|svg/.test(i.mime || '') && ((i as any).lifecycle || 'active') === 'active'), [items]);
+  const refAsset = refs.find((r) => r.id === refId);
+  const prompt = (picked ? clean(ask) : ask).trim();
+  const photoSize = chosen ? { w: chosen.size[0], h: chosen.size[1] } : formatFor(ask);
+  const photoAspect = nearestAspect(photoSize.w, photoSize.h);
+  const job = pickJob(purpose, { prompt, refs: refId ? 1 : 0, aspect: photoAspect });
+  const cost = mode === 'video' ? VIDEO_JOB.designs : JOBS[job].designs * count;
+
+  function upd(key: string, patch: Partial<MadeItem>) { setMade((all) => all.map((m) => (m.key === key ? { ...m, ...patch } : m))); }
+  async function make(again?: MadeItem) {
+    const what = again ? again.prompt : prompt;
+    const kind = again ? again.kind : mode === 'video' ? 'video' : 'photo';
+    if (!what) { box.current?.focus(); return; }
+    const key = crypto.randomUUID();
+    setMade((all) => [{ key, kind, prompt: what, model: kind === 'video' ? VIDEO_JOB.model : JOBS[job].model, designs: cost, status: 'making', assets: [] }, ...all]);
+    setMaking(true);
+    try {
+      const r = kind === 'video'
+        ? await fetch('/api/make/video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, prompt: what, reference_id: refId || null, aspect: VIDEO_FORMATS[vfmt].aspect, seconds }) })
+        : await fetch('/api/make', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, prompt: what, reference_ids: refId ? [refId] : [], aspect: photoAspect, purpose, count }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 402) { setMade((all) => all.filter((m) => m.key !== key)); openUpgrade({ reason: 'media' }); return; }
+      if (!r.ok) { upd(key, { status: 'failed', error: j.error || 'Couldn’t make it. Try again.' }); return; }
+      if (kind === 'video') upd(key, { job: j.job, model: j.model, designs: j.designs });
+      else { upd(key, { status: 'ready', model: j.model, designs: j.designs, assets: j.assets }); onSaved(); }
+    } catch {
+      upd(key, { status: 'failed', error: 'Couldn’t reach Mise. Try again.' });
+    } finally {
+      setMaking(false);
+    }
+  }
+  function openMade(id: string) { const a = items.find((i) => i.id === id); if (a) onOpen(a); else { onSaved(); onReview(); } }
   // Free: one Studio run. A different brief after it opens the trial pop-up straight away,
   // instead of starting designs that can't be made.
   const [freeRun, setFreeRun] = useState<{ free: boolean; run: string | null }>({ free: false, run: null });
@@ -122,7 +174,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   function design() {
     const brief = picked ? clean(ask) : [ask.trim(), chosen ? `Format: ${chosen.ask}.` : ''].filter(Boolean).join(' ');
     if (!brief) return;
-    const size = pickedIdea ? { w: MOCKS[pickedIdea.id].size[0], h: MOCKS[pickedIdea.id].size[1] } : chosen && !chosen.video ? { w: chosen.size[0], h: chosen.size[1] } : formatFor(brief);
+    const size = pickedIdea ? { w: MOCKS[pickedIdea.id].size[0], h: MOCKS[pickedIdea.id].size[1] } : chosen ? { w: chosen.size[0], h: chosen.size[1] } : formatFor(brief);
     startStudio(brief, size);
   }
   function designIdea(id: string) {
@@ -135,6 +187,8 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     const idea = PROMPTS.find((x) => x.id === id)!;
     if (live && LIVE.has(MOCKS[id]?.layout) && !idea.uses.some((u) => u === 'ai-image' || u === 'ai-video' || u === 'motion')) { designIdea(id); return; }
     const p = PROMPTS.find((x) => x.id === id)!;
+    const m: Mode = idea.uses.includes('ai-video') && media.video ? 'video' : idea.uses.includes('ai-image') && media.image && !idea.uses.includes('motion') ? 'photo' : 'design';
+    setMode(m);
     setPicked(id); setFmt(null); setAsk(fillPrompt(p.prompt, fill));
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => box.current?.focus({ preventScroll: true }), 300);
@@ -144,7 +198,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const openInClaude = (t: string) => openClaude(t);
 
   const steps = [
-    { done: connected, label: 'Connect Claude', note: 'Mise + Figma', go: onConnect },
+    { done: connected, label: 'Connect Claude', note: 'Optional: use Mise in Claude', go: onConnect },
     { done: kit?.status === 'approved', label: kit ? 'Approve your brand kit' : 'Brand kit', note: kit ? 'It’s a draft' : 'From your site or Figma', go: onBrandKit },
     { done: pool.length > 0, label: 'Add images', note: 'Photos, products, logos', go: undefined },
   ];
@@ -166,17 +220,22 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
 
       <section className="cr-hero">
         <h1>What do you want to make?</h1>
-        <p className="cr-lede">Describe it in a sentence. Mise designs three options in your brand, with your photos.</p>
+        <p className="cr-lede">{mode === 'photo' ? 'Describe the shot. Mise makes new photography in your brand’s style, and keeps your product exactly as it is.'
+          : mode === 'video' ? 'Describe the clip, or bring a photo to life. Mise makes a short video with sound, in your brand’s style.'
+          : 'Describe it in a sentence. Mise designs three options in your brand, with your photos.'}</p>
 
         <div className={'cr-compose' + (picked ? ' picked' : '')}>
           <div className="cr-sec">
+            <div className="seg cr-modes" role="group" aria-label="What to make">
+              {MODES.map(([m, l]) => <button key={m} type="button" aria-pressed={mode === m} onClick={() => { setMode(m); setModelOpen(false); }}>{l}</button>)}
+            </div>
             <div className="cr-label"><i>1</i>Describe it</div>
             {picked && <div className="cr-picked"><span>Idea: {PROMPTS.find((p) => p.id === picked)?.title}</span><button type="button" className="linkish" onClick={() => { setPicked(null); setAsk(''); }}>Clear</button></div>}
             <textarea ref={box} className="cr-input" rows={picked ? 4 : 2} value={ask} onChange={(e) => setAsk(e.target.value)}
               aria-label="Describe what you want to make"
-              placeholder="e.g. A LinkedIn banner for our autumn launch, warm and simple"
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && text) { e.preventDefault(); if (canDesign) design(); else openInClaude(text); } }} />
-            {!picked && !ask.trim() && (
+              placeholder={mode === 'photo' ? 'e.g. Our trainers on a wet London street at dusk, soft reflections' : mode === 'video' ? 'e.g. Slow push-in on the product on a marble counter, morning light, gentle café sounds' : 'e.g. A LinkedIn banner for our autumn launch, warm and simple'}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && text) { e.preventDefault(); if (canMake) make(); else if (canDesign) design(); else openInClaude(text); } }} />
+            {!picked && !ask.trim() && mode === 'design' && (
               <div className="cr-tries"><span>Try:</span>
                 {TRIES.map((t) => <button key={t.text} type="button" className="cr-try" onClick={() => { setAsk(t.text); setFmt(t.fmt); box.current?.focus(); }}>{t.text}</button>)}
               </div>
@@ -200,7 +259,55 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
             )}
           </div>
 
-          {!picked && (
+          {mode !== 'design' && canMake && (
+            <div className="cr-sec cr-sec-line">
+              <div className="cr-label"><i>2</i>{mode === 'video' ? 'Shape and length' : 'Size'} <span className="cr-opt">· {mode === 'video' ? 'reels and stories are 9:16' : 'optional, we’ll pick one from your words'}</span></div>
+              <div className="cr-sizes" role="group" aria-label="Size">
+                {mode === 'video' ? VIDEO_FORMATS.map((f, i) => (
+                  <button key={f.label} type="button" className="cr-size" aria-pressed={vfmt === i} onClick={() => setVfmt(i)}>
+                    <span className="cr-shape" style={f.aspect === '9:16' ? { width: 9, height: 16 } : { width: 18, height: 10 }} aria-hidden /><b>{f.label}</b>
+                  </button>
+                )) : <>
+                  <button type="button" className="cr-size" aria-pressed={fmt === null} onClick={() => setFmt(null)}><b>Auto</b></button>
+                  {FORMATS.map((f, i) => {
+                    const r = f.size[0] / f.size[1];
+                    const w = r >= 1 ? 18 : Math.max(8, Math.round(16 * r)), h = r >= 1 ? Math.max(4, Math.round(18 / r)) : 16;
+                    return <button key={f.label} type="button" className="cr-size" aria-pressed={fmt === i} onClick={() => setFmt(fmt === i ? null : i)}><span className="cr-shape" style={{ width: w, height: h }} aria-hidden /><b>{f.label}</b></button>;
+                  })}
+                </>}
+              </div>
+              <div className="cr-row">
+                <span>{mode === 'video' ? 'Bring a photo to life' : 'Start from a photo'}</span>
+                {refAsset && src(refAsset) && <img className="cr-ref" src={src(refAsset)} alt="" />}
+                <select className="in" value={refId} onChange={(e) => setRefId(e.target.value)} aria-label="Start from a photo">
+                  <option value="">{mode === 'video' ? 'No, just my words' : 'None'}</option>
+                  {refs.slice(0, 400).map((a) => <option key={a.id} value={a.id}>{a.kind === 'product' && a.pid ? `${a.pid} · ` : ''}{a.name}</option>)}
+                </select>
+                {mode === 'video' ? (
+                  <select className="in" value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} aria-label="Length">
+                    {[4, 6, 8].map((n) => <option key={n} value={n}>{n} seconds</option>)}
+                  </select>
+                ) : (
+                  <select className="in" value={count} onChange={(e) => setCount(Number(e.target.value))} aria-label="How many">
+                    {[1, 2, 4].map((n) => <option key={n} value={n}>{n === 1 ? '1 take' : `${n} takes`}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className="cr-model">
+                {mode === 'video'
+                  ? <span>Mise will use <b>{VIDEO_JOB.model}</b> · {VIDEO_JOB.designs} designs</span>
+                  : <span>Mise will use <b>{JOBS[job].model}</b> · {JOBS[job].label.toLowerCase()} · {cost} design{cost === 1 ? '' : 's'}</span>}
+                {mode === 'photo' && !modelOpen && <button type="button" className="linkish" onClick={() => setModelOpen(true)}>Change model</button>}
+                {mode === 'photo' && modelOpen && (
+                  <select className="in" value={purpose} onChange={(e) => setPurpose(e.target.value as Purpose)} aria-label="Model">
+                    {PURPOSES.map((p) => <option key={p} value={p}>{p === 'auto' ? 'Auto: Mise picks' : `${JOBS[p].model}: ${JOBS[p].good}`}</option>)}
+                  </select>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!picked && mode === 'design' && (
             <div className="cr-sec cr-sec-line">
               <div className="cr-label"><i>2</i>Size <span className="cr-opt">· optional, we’ll pick one from your words</span></div>
               <div className="cr-sizes" role="group" aria-label="Size">
@@ -210,8 +317,8 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
                   const w = r >= 1 ? 18 : Math.max(8, Math.round(16 * r)), h = r >= 1 ? Math.max(4, Math.round(18 / r)) : 16;
                   return (
                     <button key={f.label} type="button" className="cr-size" aria-pressed={fmt === i} title={`${f.size[0]}×${f.size[1]}`} onClick={() => setFmt(fmt === i ? null : i)}>
-                      {f.video ? <span className="cr-play" aria-hidden>▶</span> : <span className="cr-shape" style={{ width: w, height: h }} aria-hidden />}
-                      <b>{f.label}</b>{f.video && <span className="cr-via">with Claude</span>}
+                      <span className="cr-shape" style={{ width: w, height: h }} aria-hidden />
+                      <b>{f.label}</b>
                     </button>
                   );
                 })}
@@ -226,18 +333,27 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
                 : <span>No brand kit yet · <u>set it up</u></span>}
             </button>
             <span className="spacer" />
-            {canDesign ? (
+            {canMake ? (
+              <button className="primary cr-go" type="button" disabled={making} onClick={() => make()}>
+                {mode === 'video' ? 'Make video' : count > 1 ? `Make ${count} photos` : 'Make photo'} <span aria-hidden>→</span>
+              </button>
+            ) : canDesign ? (
               <button className="primary cr-go" type="button" onClick={() => (text ? design() : box.current?.focus())}>Design 3 options <span aria-hidden>→</span></button>
             ) : <>
               <button className="btn" type="button" disabled={!text} onClick={() => copy(text)}>Copy</button>
               <button className="primary cr-go" type="button" onClick={() => (text ? openInClaude(text) : box.current?.focus())}><Icon.Sparkle size={16} />Make it in Claude</button>
             </>}
           </div>
-          {!canDesign && (chosen?.video || (picked && !pickedLive) || live === false) && (
-            <p className="cr-note">{chosen?.video || (picked && !pickedLive) ? 'Video and new photography are made by Claude in Figma, then saved here. They’re edited in Figma too.'
-              : 'Designs are made by Claude in Figma. Add ANTHROPIC_API_KEY on the server to design right here.'}</p>
+          {!canMake && !canDesign && (
+            <p className="cr-note">{mode === 'video' ? 'Video isn’t switched on in this Mise yet, so Claude makes it with your Mise brand kit and saves it here.'
+              : mode === 'photo' ? 'New photography isn’t switched on in this Mise yet, so Claude makes it with your Mise brand kit and saves it here.'
+              : picked && !pickedLive ? 'This idea is made by Claude with your Mise brand kit, then saved here.'
+              : 'Designs are made by Claude. Add ANTHROPIC_API_KEY on the server to design right here.'}</p>
           )}
         </div>
+
+        <MediaResults items={made} wsId={ws.id} onUpdate={upd} onOpen={openMade}
+          onAgain={(m) => { setMode(m.kind === 'video' ? 'video' : 'photo'); make(m); }} />
 
         {steps.some((s) => !s.done) && (
           <div className="cr-steps" aria-label="Setup">
@@ -284,7 +400,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
             );
           })}
         </div>
-        <p className="tip cr-foot">Designs made here are edited here. AI photos and video are made by Claude in Figma (using your Figma Weave credits; Claude shows the cost and asks first), land here as drafts, and are edited in Figma.</p>
+        <p className="tip cr-foot">Everything made here lands in Review as a draft. Mise picks the best AI model for each job (the model is shown on every result); designs are edited here, photos and video can be remade with a changed description.</p>
       </section>
     </div>
   );
