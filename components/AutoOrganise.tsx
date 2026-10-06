@@ -46,15 +46,21 @@ export default function AutoOrganise({ ws, toast, canUpgrade }: { ws: string; to
       <p className="tip">Every image, logo and product photo gets a description, tags, its colours (matched to your brand kit), any text in it, an on-brand check against your imagery rules, and a link to the product it shows. It happens a few seconds after upload. Edit tags or descriptions on any asset: your edits always win.</p>
       {!p.enabled && <p className="err">Turned off: add ANTHROPIC_API_KEY to the server (Railway → Variables) and redeploy.</p>}
 
-      <div className="ao-meter" aria-label={`${pct}% organised`}><i style={{ width: `${pct}%` }} /></div>
-      <div className="ao-stats">
-        <span><b>{p.organised.toLocaleString()}</b> organised in your library</span>
-        {p.waiting > 0 && <span><b>{p.waiting.toLocaleString()}</b> in progress…</span>}
-        {p.not_yet > 0 && <span><b>{p.not_yet.toLocaleString()}</b> not organised yet</span>}
-        {!!p.paused && <span><b>{p.paused.toLocaleString()}</b> waiting until the 1st</span>}
-        {p.failed > 0 && <span className="bad"><b>{p.failed}</b> couldn’t be read</span>}
-        <span className="muted">of {p.total.toLocaleString()} files</span>
-      </div>
+      {/* Status of the library, not a limit: uploads are unlimited on every plan. */}
+      {p.organised === p.total && p.total > 0 ? (
+        <p className="ao-done">All {p.total.toLocaleString()} file{p.total === 1 ? ' is' : 's are'} organised and searchable.</p>
+      ) : (
+        <>
+          <div className="ao-meter" aria-label={`${pct}% organised`}><i style={{ width: `${pct}%` }} /></div>
+          <div className="ao-stats">
+            <span><b>{p.organised.toLocaleString()}</b> of {p.total.toLocaleString()} files organised</span>
+            {p.waiting > 0 && <span><b>{p.waiting.toLocaleString()}</b> in progress…</span>}
+            {p.not_yet > 0 && <span><b>{p.not_yet.toLocaleString()}</b> not organised yet</span>}
+            {!!p.paused && <span><b>{p.paused.toLocaleString()}</b> waiting until the 1st</span>}
+            {p.failed > 0 && <span className="bad"><b>{p.failed}</b> couldn’t be read</span>}
+          </div>
+        </>
+      )}
 
       <div className="actions left">
         {p.not_yet > 0 && <button className="primary" type="button" disabled={busy || !p.enabled} onClick={() => act('backfill')}>
@@ -84,26 +90,22 @@ export default function AutoOrganise({ ws, toast, canUpgrade }: { ws: string; to
       </div>
       {usage && (
         <div className="ao-usage">
-          <div className="label">This month ({new Date().toLocaleDateString('en-GB', { month: 'long' })})</div>
-          {usage.map((u) => {
-            // Studio designs (and organising on Free) have a plan allowance; the rest is unlimited (fair use).
-            if (u.kind !== 'design' && !(u.kind === 'tag' && plan === 'free')) return (
-              <div key={u.kind} className="ao-urow">
-                <span>{u.label[0].toUpperCase() + u.label.slice(1)}</span>
-                <span />
-                <span className="muted">{u.used.toLocaleString()} · unlimited</span>
-              </div>
-            );
+          {(() => {
+            const u = usage.find((x) => x.kind === 'tag');
+            if (plan !== 'free' || !u) return <p className="tip">Uploads are unlimited, and every new file is organised as soon as it’s added.</p>;
             const pc = u.cap ? Math.min(100, Math.round((u.used / u.cap) * 100)) : 100;
             return (
-              <div key={u.kind} className={'ao-urow' + (pc >= 100 ? ' full' : pc >= 80 ? ' near' : '')}>
-                <span>{u.kind === 'tag' ? 'New files organised' : u.label[0].toUpperCase() + u.label.slice(1)}</span>
-                <div className="ao-meter small" aria-label={`${pc}% used`}><i style={{ width: `${pc}%` }} /></div>
-                <span className="muted">{u.used.toLocaleString()} of {u.cap.toLocaleString()}</span>
-              </div>
+              <>
+                <div className="label">AI organising this month</div>
+                <div className={'ao-urow' + (pc >= 100 ? ' full' : pc >= 80 ? ' near' : '')}>
+                  <span>New uploads organised</span>
+                  <div className="ao-meter small" aria-label={`${pc}% of this month's organising used`}><i style={{ width: `${pc}%` }} /></div>
+                  <span className="muted">{u.used.toLocaleString()} of {u.cap.toLocaleString()}</span>
+                </div>
+                <p className="tip">You can upload as many files as you like. On Free, Mise’s AI organises the first {u.cap.toLocaleString()} new uploads each month; any more are ready to use straight away and get organised from the 1st. Pro organises every file as it’s added.</p>
+              </>
             );
-          })}
-          <p className="tip">{plan === 'free' ? 'Files, storage and search are unlimited. Organising (500 files a month) and Studio designs reset on the 1st; see Settings → Plan.' : 'Files, storage, organising and search are unlimited. Studio designs reset on the 1st; see Settings → Plan.'}</p>
+          })()}
         </div>
       )}
       <p className="tip">Not used: face recognition. Mise never identifies people from their faces.</p>
