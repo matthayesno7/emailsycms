@@ -112,6 +112,7 @@ export const PRIVACY: Section[] = [
     '- Resend: sending email (EU).',
     '- Anthropic: AI for organising files, brand kits and Studio designs (US).',
     '- Voyage AI: AI search (US).',
+    '- Google (Gemini API): making new images when you ask for them (US).',
     '- Google, Dropbox and Box: only when you choose to import files from them, or sign in with Google.',
     'We may also share data if the law requires it, to protect our rights or users, or as part of a sale or reorganisation of our business (with the same protections).',
   ] },

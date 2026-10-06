@@ -87,14 +87,18 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const srcOf = (id: string) => { const a = items.find((i) => i.id === id); return a?.storage_path ? urls[a.storage_path] : undefined; };
 
   const fill = { brand: ws.name, figma: ws.figma_file_url };
-  const shown = PROMPTS.filter((p) => cat === 'all' || p.category === cat);
+  // Motion, video and "from Figma" ideas need Figma until Mise makes video itself: hide them for brands without a Figma file.
+  const needsFigma = (p: (typeof PROMPTS)[number]) => p.id === 'kit-figma' || p.uses.some((u) => u === 'motion' || u === 'ai-video');
+  const shown = PROMPTS.filter((p) => (cat === 'all' || p.category === cat) && (!!ws.figma_file_url || !needsFigma(p)));
 
   const text = (() => {
     const t = ask.trim();
     if (picked) return t;
     if (!t && fmt === null) return '';
     const f = fmt !== null ? FORMATS[fmt] : null;
-    return `For ${ws.name}: ${t || `make ${f?.ask}`}${t && f ? `. Make it ${f.ask}` : ''}. Use our Mise brand kit and assets, make it in Figma${ws.figma_file_url ? ` (${ws.figma_file_url})` : ''}, and save the result to Mise.`;
+    // With a Figma file, Claude builds it there; without, it uses Mise's own tools (Studio layouts, generate_image).
+    const how = ws.figma_file_url ? `make it in Figma (${ws.figma_file_url})` : 'make it with Mise’s own tools (its image model for any new imagery; no Figma)';
+    return `For ${ws.name}: ${t || `make ${f?.ask}`}${t && f ? `. Make it ${f.ask}` : ''}. Use our Mise brand kit and assets, ${how}, and save the result to Mise.`;
   })();
   const blanks = { product: text.includes('[product]'), image: text.includes('[image]') };
   const chosen = fmt !== null ? FORMATS[fmt] : null;

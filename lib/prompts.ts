@@ -108,7 +108,16 @@ export const PROMPTS: PromptExample[] = [
 
 export type Fill = { brand: string; product?: string | null; pid?: string | null; image?: string | null; figma?: string | null };
 
+// Without a Figma file, the same requests are made with Mise's own tools (Studio, generate_image).
+const NO_FIGMA = ' We don’t use Figma: make it with Mise (its image model for any new imagery) and save the result to Mise.';
 export function fillPrompt(p: string, f: Fill) {
+  if (!f.figma) {
+    p = p.replace(/ Keep the headline as live text in Figma, save/g, ' Save').replace(/ Keep the headline as live text in Figma,/g, '')
+      .replace(/,? from our design system in \{figma\}/g, ' in our brand style')
+      .replace(/ in \{figma\}/g, '')
+      .replace(/\{figma\}/g, 'our brand kit');
+    if (!/brand kit for \{brand\} from our Figma/.test(p)) p = p.replace(/\s*$/, NO_FIGMA);
+  }
   return p
     .replace(/ \(PID \{pid\}\)/g, f.pid ? ` (PID ${f.pid})` : '')
     .replace(/"\{image\}"/g, f.image ? `"${f.image}"` : '[image]')
