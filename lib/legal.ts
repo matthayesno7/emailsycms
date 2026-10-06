@@ -7,7 +7,7 @@ export const COMPANY = {
   trading: 'Mise',
   number: '15834771',
   address: '86-90 Paul Street, London, England, EC2A 4NE',
-  ico: '[ICO registration number]',
+  ico: '', // add once registered, and put the sentence back in PRIVACY → Who we are
   email: 'hello@misedam.com',
   updated: '6 October 2026',
 };
@@ -83,7 +83,7 @@ export const TERMS: Section[] = [
 
 export const PRIVACY: Section[] = [
   { h: 'Who we are', p: [
-    `Mise is run by ${C.name} (company number ${C.number}), ${C.address} (“we”, “us”). For personal data about our customers and website visitors, we are the controller. We are registered with the UK Information Commissioner’s Office (registration ${C.ico}).`,
+    `Mise is run by ${C.name} (company number ${C.number}), ${C.address} (“we”, “us”). For personal data about our customers and website visitors, we are the controller.`,
     'For personal data inside the content our customers put into Mise (for example, people in photos, or names in product data), our customer is the controller and we process it on their behalf.',
     `Contact us about privacy at ${C.email}.`,
   ] },
