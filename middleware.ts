@@ -23,7 +23,7 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
-  const open = path.startsWith('/login') || path.startsWith('/auth') || path === '/terms' || path === '/privacy';
+  const open = path.startsWith('/login') || path.startsWith('/auth') || path === '/terms' || path === '/privacy' || path === '/help' || path.startsWith('/help/');
   if (!user && !open) {
     // Keep what the landing page asked for (?site=, ?plan=, ?connect=) through sign-in.
     const keep = new URLSearchParams();

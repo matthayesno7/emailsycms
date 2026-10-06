@@ -1454,3 +1454,47 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .act-what q{color:var(--ink)}
 .act-what q::before{content:'“'}.act-what q::after{content:'”'}
 @media (max-width:640px){.act-row{flex-direction:column;gap:2px}.act-when{width:auto}}
+
+/* Help centre (/help) */
+.hc{max-width:880px}
+.hc-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:24px}
+.hc-top .legal-mark{margin:0}
+.hc-crumb{font-size:14px;color:var(--ink-3)}
+.hc-crumb a{color:var(--ink-2)}
+.hc-open{font-size:14px}
+.hc-search{width:100%;font-size:16px;padding:12px 16px;border-radius:12px;margin:8px 0 8px}
+.hc-sec h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin:28px 0 10px}
+.hc-grid,.hc-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.hc-results{margin-top:14px}
+.hc-card{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-decoration:none;color:var(--ink-2);background:var(--bg);font-size:14px;line-height:1.45}
+.hc-card b{color:var(--ink);font-size:15px}
+.hc-card:hover{border-color:var(--ink-3)}
+.hc-body h2{font-size:21px;margin:30px 0 10px;scroll-margin-top:20px}
+.hc-body h3{font-size:17px;margin:22px 0 8px;color:var(--ink);scroll-margin-top:20px}
+.hc-body p,.hc-body ul,.hc-body ol{margin:0 0 12px}
+.hc-body li{margin:3px 0}
+.hc-body code{font-family:var(--mono);font-size:.9em;background:var(--surface);padding:1px 5px;border-radius:5px}
+.hc-body pre{background:var(--surface);padding:12px 14px;border-radius:10px;overflow:auto;margin:0 0 14px}
+.hc-body pre code{background:none;padding:0}
+.hc-table{overflow-x:auto;margin:0 0 16px}
+.hc-body table{border-collapse:collapse;width:100%;font-size:14.5px}
+.hc-body th,.hc-body td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+.hc-body th{color:var(--ink);font-weight:600;background:var(--surface)}
+.hc-body a,.hc-after a{color:var(--accent)}
+.hc-after{margin-top:36px;border-top:1px solid var(--line);padding-top:20px;display:flex;flex-direction:column;gap:16px}
+.hc-after h2{font-size:16px;margin:0 0 6px}
+.hc-after ul{margin:0;padding-left:18px}
+.hc-next span{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+
+/* Settings → Help: Ask Mise */
+.help-ask{max-width:760px}
+.ha-turn{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.ha-q{align-self:flex-end;background:var(--surface);border-radius:14px 14px 4px 14px;padding:9px 14px;max-width:85%;font-size:14.5px}
+.ha-a{border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:12px 16px;font-size:14.5px;line-height:1.6;background:var(--bg)}
+.ha-a > :last-child{margin-bottom:0}
+.ha-form{display:flex;gap:8px;align-items:flex-end;margin-top:12px}
+.ha-form textarea{flex:1;resize:vertical;min-height:52px}
+.ha-starters{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.ha-more{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px;padding-top:18px;border-top:1px solid var(--line)}
+.ha-more ul{margin:6px 0 12px;padding-left:18px;font-size:14px}
+@media (max-width:640px){.ha-more{grid-template-columns:1fr}}

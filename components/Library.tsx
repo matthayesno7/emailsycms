@@ -11,7 +11,7 @@ import BlockEditor, { FitPreview, Preview, previewWidth } from './BlockEditor';
 import { Icon, Wire, ART } from './icons';
 import Feedback from './Feedback';
 import GettingStarted from './GettingStarted';
-import { Modal, HelpFigma, HelpFeed, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
+import { Modal, Members, Connector, BlockTypePicker, WorkspaceSettings } from './Modals';
 import BrandKitView from './BrandKit';
 import Create from './Create';
 import ImportSources from './ImportSources';
@@ -30,6 +30,7 @@ import { reviewQueue } from '@/lib/review';
 import { PlanSettings, UpgradeModal, openUpgrade, type UpgradeAsk } from './Billing';
 import LibrarySync from './LibrarySync';
 import Activity from './Activity';
+import HelpAsk from './help/HelpAsk';
 import { can, NEEDS, roleError } from '@/lib/roles';
 import { fromRows } from '@/lib/feedParse';
 import ProductFeeds from './ProductFeeds';
@@ -1007,6 +1008,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
         </nav>
 
         <div className="fill" />
+        <button className="nav" aria-current={page === 'settings' && settingsTab === 'help'} type="button" onClick={() => openSettings('help')}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .8c0 1.8-2.5 2.2-2.5 3.8" /><path d="M12 17h.01" /></svg>Help</button>
         <button className="nav" type="button" onClick={() => setModal('feedback')}><Icon.Chat />Feedback</button>
         <button className="nav" type="button" aria-current={page === 'settings'} onClick={() => openSettings(!connected ? 'claude' : 'workspace')}><Icon.Settings />Settings
           {needsSetup && <span className="count dotnote" title={!connected ? 'Claude isn’t connected yet' : 'No Figma file connected'}>•</span>}
@@ -1074,7 +1076,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} enterprise={plan === 'enterprise'} />}
                 {settingsTab === 'activity' && can.admin(curWs.role) && plan === 'enterprise' && <Activity supabase={supabase} ws={curWs} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
-                {settingsTab === 'help' && <div className="helpcols"><div><HelpFigma /></div><div><HelpFeed /></div></div>}
+                {settingsTab === 'help' && <HelpAsk wsId={curWs.id} onFeedback={() => setModal('feedback')} />}
               </div>
             </div>
           ) : page === 'sharing' && curWs ? (
