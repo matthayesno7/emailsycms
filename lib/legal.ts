@@ -187,11 +187,11 @@ export const SECURITY: Section[] = [
     '- Photos and video that AI makes from scratch are drafts until a person approves them.',
   ] },
   { h: 'Our own access', p: [
-    'Access to production systems is limited to the people who run Mise, protected by multi-factor authentication, and used only to operate the service, fix problems or help when you ask. [Confirm before publishing: MFA is on for Supabase, Railway, Stripe, GitHub, Cloudflare and Google accounts.]',
+    'Access to production systems is limited to the people who run Mise, protected by multi-factor authentication, and used only to operate the service, fix problems or help when you ask.',
     'We don’t look at your content unless you ask us to, or we need to in order to keep the service safe or meet a legal obligation.',
   ] },
   { h: 'Backups, retention and deletion', p: [
-    'The database is backed up automatically every day. [Confirm the retention on your Supabase plan, for example 7 days, and state it here.] Files are stored on Amazon S3 through Supabase Storage, which is designed for very high durability.',
+    'The database is backed up automatically every day, and each backup is kept for 7 days. Files are stored on Amazon S3 through Supabase Storage, which is designed for very high durability.',
     'Every edit to a file keeps the previous version, so changes can be undone.',
     'When a brand is deleted, its content is removed from the live service within 30 days and from backups within a further 90 days.',
   ] },
