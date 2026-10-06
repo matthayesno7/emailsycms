@@ -170,8 +170,18 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
   const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast(t); } };
   const when = (d?: string) => (d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never');
   const link = fresh || '<your Mise link>';
-  const cmdMise = `claude mcp add --transport http mise "${link}"`;
+  const cmdMise = `claude mcp add -s user --transport http mise "${link}"`;
   const cmdFigma = 'claude mcp add --transport http figma https://mcp.figma.com/mcp';
+  // A brief for Claude Code with the link already in it, so the agent can do the whole setup itself.
+  const brief = fresh ? [
+    'Set up the Mise connector for me in Claude Code.',
+    '',
+    `1. Run: claude mcp add -s user --transport http mise "${fresh}"`,
+    '   If "mise" already exists, run claude mcp remove -s user mise first, then add it again.',
+    '2. Run claude mcp list and check that mise shows as Connected. If it shows failed or needs authentication, tell me to create a new link in Mise › Settings › Claude.',
+    '3. Ask me whether I design in Figma. If yes, run: claude mcp add -s user --transport http figma https://mcp.figma.com/mcp and tell me to sign in to Figma through /mcp after restarting.',
+    '4. Tell me to restart Claude Code (type /exit, then run claude again). To test, I can then say "show me my Mise brand kit".',
+  ].join('\n') : '';
   const Cmd = ({ text }: { text: string }) => (
     <div className="cmd"><code>{text}</code><button className="btn quiet" type="button" onClick={() => copy(text)}>Copy</button></div>
   );
@@ -179,7 +189,7 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
   return (
     <div className={full ? 'connect' : ''}>
       {full ? <div className="head"><h1>Connect Claude</h1></div> : <h2>Claude connector</h2>}
-      <p className="tip cn-lede">Mise gives Claude your brand kit and assets, and a place to save what it makes. Figma is where Claude designs, animates and runs image and video models. Connect both once, then everything happens in a chat.</p>
+      <p className="tip cn-lede">Mise gives Claude your brand kit and assets, makes new images, video and designs on brand, and saves everything back to your library. Connect it once, then it all happens in a chat. Design in Figma? Connect that too and Claude can build there as well.</p>
 
       <div className="seg" role="group" aria-label="App">
         <button type="button" aria-pressed={app === 'claude'} onClick={() => setApp('claude')}>Claude (web and desktop)</button>
@@ -202,13 +212,26 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
         {app === 'claude' ? (
           <>
             <li><b>Add it to Claude</b><span>In Claude, open <a href="https://claude.ai/settings/connectors" target="_blank" rel="noreferrer">Settings → Connectors</a> → <em>Add custom connector</em>. Name it <em>Mise</em> and paste your link.</span></li>
-            <li><b>Add Figma</b><span>In the same place, add the <em>Figma</em> connector from the directory and sign in. Claude designs, animates and generates images and video there.</span></li>
+            <li><b>Optional: add Figma</b><span>If you design in Figma, add the <em>Figma</em> connector from the directory in the same place and sign in, so Claude can build in your Figma files too. You don’t need it: Mise makes images, video and designs itself.</span></li>
             <li><b>Start a new chat</b><span>Connectors load when a chat starts. Then pick anything from the prompt library on the Create page.</span></li>
           </>
         ) : (
           <>
-            <li><b>Add Mise</b><span>Run this in your terminal{fresh ? '' : ' (create a link first, it fills in here)'}:</span><Cmd text={cmdMise} /></li>
-            <li><b>Add Figma</b><span>Then sign in when Claude Code asks (<code>/mcp</code>):</span><Cmd text={cmdFigma} /></li>
+            <li>
+              <b>Add Mise</b>
+              {fresh ? (
+                <>
+                  <span>Easiest: copy this setup brief and paste it into Claude Code. Your link is already in it, so Claude adds Mise and checks it’s connected.</span>
+                  <div className="actions"><button className="primary" type="button" onClick={() => copy(brief)}>Copy setup brief</button></div>
+                  <span>Or run this in your terminal yourself:</span>
+                </>
+              ) : (
+                <span>Create a link above and a setup brief for Claude Code appears here, with your link already in it. Or run this in your terminal (your link fills in once you create it):</span>
+              )}
+              <Cmd text={cmdMise} />
+            </li>
+            <li><b>Optional: add Figma</b><span>If you design in Figma, add it too, then sign in through <code>/mcp</code>:</span><Cmd text={cmdFigma} /></li>
+            <li><b>Restart Claude Code</b><span>Type <code>/exit</code>, then run <code>claude</code> again: connectors load when a session starts.</span></li>
             <li><b>Ask for something</b><span>Start <code>claude</code> and paste a prompt from the Create page. The prompts also show up in Claude Code’s <code>/</code> menu under Mise.</span></li>
           </>
         )}
