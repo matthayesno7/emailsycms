@@ -51,7 +51,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
   initial?: Variant[]; // skip designing and show these (editing a saved design, previews, tests)
   editOf?: Asset | null; // editing this saved design: saving its variant makes a new version of it
   onBrief: (brief: string, size: { w: number; h: number }) => void;
-  onClose: () => void; onSaved: () => void; onOpenAsset: (id: string) => void; toast: (m: string) => void;
+  onClose: () => void; onSaved: (id?: string, size?: { w: number; h: number }) => void; onOpenAsset: (id: string) => void; toast: (m: string) => void;
 }) {
   const [variants, setVariants] = useState<Variant[]>(initial || []);
   const [sel, setSel] = useState<string | null>(null);
@@ -163,7 +163,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
         });
         if (error) throw error;
         patch(v.key, { savedId: editOf!.id, busy: undefined });
-        onSaved();
+        onSaved(editOf!.id, v.size);
         toast(`Saved as version ${(editOf!.version || 1) + 1}. The previous version is kept.`);
         return editOf!.id;
       }
@@ -175,7 +175,7 @@ export default function Studio({ ws, userId, supabase, brand, fonts, srcOf, brie
       }).select('id').single();
       if (error) throw error;
       patch(v.key, { savedId: data.id, busy: undefined });
-      onSaved();
+      onSaved(data.id as string, v.size);
       toast('Saved to your library');
       return data.id as string;
     } catch (err: any) {

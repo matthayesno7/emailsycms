@@ -5,7 +5,7 @@ import { openUpgrade } from './Billing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import Studio, { formatFor } from './Studio';
-import MediaResults, { type MadeItem } from './MediaResults';
+import Board, { type Start } from './Board';
 import { JOBS, VIDEO_JOB, PURPOSES, pickJob, nearestAspect, type Purpose } from '@/lib/models';
 import type { StudioBrand } from './DesignCanvas';
 import { CATEGORIES, MOCKS, PROMPTS, USE_LABEL, fillPrompt, type PromptCategory } from '@/lib/prompts';
@@ -43,19 +43,43 @@ const TRIES: { text: string; fmt: number }[] = [
 // Ideas the Studio can design right here (single-canvas designs; AI photos and video go to Claude).
 const LIVE = new Set(['hero', 'strip', 'post', 'story', 'thumb', 'slide']);
 
-export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed }: {
+export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed, plan = 'free', startAssets, onStartAssetsUsed }: {
   ws: Ws; userId: string; supabase: SupabaseClient; onSaved: () => void;
   items: Asset[]; urls: Record<string, string>; kit: BrandKitRow | null; connected: boolean;
   onConnect: () => void; onBrandKit: () => void; onReview: () => void; onOpen: (a: Asset) => void; toast: (m: string) => void;
   autoBrief?: string | null; onAutoUsed?: () => void; // first designs after sign-up
+  plan?: string;
+  startAssets?: string[] | null; onStartAssetsUsed?: () => void; // "Open in Create" from a file or a selection
 }) {
+  // ---------- boards: everything is made and edited on one ----------
+  const [board, setBoard] = useState<string | null>(null);
+  const [start, setStart] = useState<Start | null>(null);
+  const [boards, setBoards] = useState<{ id: string; name: string; items: any[]; updated_at: string }[] | null>(null);
+  useEffect(() => {
+    if (board) return;
+    supabase.from('boards').select('id, name, items, updated_at').eq('workspace_id', ws.id).order('updated_at', { ascending: false }).limit(12)
+      .then(({ data }) => setBoards(data || []));
+  }, [ws.id, board, supabase]);
+  async function newBoard(name: string, s: Start | null) {
+    const { data, error } = await supabase.from('boards').insert({ workspace_id: ws.id, name: name.trim().slice(0, 80) || 'Untitled board', created_by: userId }).select('id').single();
+    if (error || !data) { toast('Couldn’t start a board. Try again.'); return; }
+    setStart(s); setBoard(data.id as string);
+    window.scrollTo({ top: 0 });
+  }
+  useEffect(() => {
+    if (!startAssets?.length) return;
+    const first = items.find((i) => i.id === startAssets[0]);
+    newBoard(first ? first.name : 'New board', { mode: 'photo', assets: startAssets });
+    onStartAssetsUsed?.();
+  }, [startAssets]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [cat, setCat] = useState<PromptCategory | 'all'>('all');
   const [ask, setAsk] = useState('');
   const [fmt, setFmt] = useState<number | null>(null);
   const [picked, setPicked] = useState<string | null>(null); // prompt id loaded into the composer
   const box = useRef<HTMLTextAreaElement>(null);
   const [live, setLive] = useState<boolean | null>(null); // can the Studio design here (API key set)?
-  const [studio, setStudio] = useState<{ brief: string; size: { w: number; h: number } } | null>(null);
+  const [studio, setStudio] = useState<{ brief: string; size: { w: number; h: number }; done?: (id: string, size?: { w: number; h: number }) => void } | null>(null);
   useEffect(() => { fetch('/api/design').then((r) => r.json()).then((j) => setLive(!!j.enabled)).catch(() => setLive(false)); }, []);
   // Photos and video made in Mise itself, with the right model for the job.
   const [mode, setMode] = useState<Mode>('design');
@@ -67,11 +91,9 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const [vfmt, setVfmt] = useState(0);
   const [seconds, setSeconds] = useState(8);
   const [refId, setRefId] = useState('');
-  const [made, setMade] = useState<MadeItem[]>([]);
-  const [making, setMaking] = useState(false);
   useEffect(() => {
     if (!autoBrief || live === null) return;
-    if (live) setStudio({ brief: autoBrief, size: formatFor(autoBrief) });
+    if (live) newBoard(autoBrief, { mode: 'design', prompt: autoBrief, size: formatFor(autoBrief) });
     else setAsk(autoBrief);
     onAutoUsed?.();
   }, [autoBrief, live]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -133,30 +155,12 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const job = pickJob(purpose, { prompt, refs: refId ? 1 : 0, aspect: photoAspect });
   const cost = mode === 'video' ? VIDEO_JOB.designs : JOBS[job].designs * count;
 
-  function upd(key: string, patch: Partial<MadeItem>) { setMade((all) => all.map((m) => (m.key === key ? { ...m, ...patch } : m))); }
-  async function make(again?: MadeItem) {
-    const what = again ? again.prompt : prompt;
-    const kind = again ? again.kind : mode === 'video' ? 'video' : 'photo';
-    if (!what) { box.current?.focus(); return; }
-    const key = crypto.randomUUID();
-    setMade((all) => [{ key, kind, prompt: what, model: kind === 'video' ? VIDEO_JOB.model : JOBS[job].model, designs: cost, status: 'making', assets: [] }, ...all]);
-    setMaking(true);
-    try {
-      const r = kind === 'video'
-        ? await fetch('/api/make/video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, prompt: what, reference_id: refId || null, aspect: VIDEO_FORMATS[vfmt].aspect, seconds }) })
-        : await fetch('/api/make', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, prompt: what, reference_ids: refId ? [refId] : [], aspect: photoAspect, purpose, count }) });
-      const j = await r.json().catch(() => ({}));
-      if (r.status === 402) { setMade((all) => all.filter((m) => m.key !== key)); openUpgrade({ reason: 'media' }); return; }
-      if (!r.ok) { upd(key, { status: 'failed', error: j.error || 'Couldn’t make it. Try again.' }); return; }
-      if (kind === 'video') upd(key, { job: j.job, model: j.model, designs: j.designs });
-      else { upd(key, { status: 'ready', model: j.model, designs: j.designs, assets: j.assets }); onSaved(); }
-    } catch {
-      upd(key, { status: 'failed', error: 'Couldn’t reach Mise. Try again.' });
-    } finally {
-      setMaking(false);
-    }
+  // Photos and video start a board: the composer's words (and photo, if one is chosen) go onto it.
+  function make() {
+    if (!prompt) { box.current?.focus(); return; }
+    const m = mode === 'video' ? 'video' : 'photo';
+    newBoard(prompt, { mode: m, prompt, size: chosen ? { w: chosen.size[0], h: chosen.size[1] } : undefined, assets: refId ? [refId] : undefined });
   }
-  function openMade(id: string) { const a = items.find((i) => i.id === id); if (a) onOpen(a); else { onSaved(); onReview(); } }
   // Free: one Studio run. A different brief after it opens the upgrade pop-up straight away,
   // instead of starting designs that can't be made.
   const [freeRun, setFreeRun] = useState<{ free: boolean; run: string | null }>({ free: false, run: null });
@@ -164,12 +168,17 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     fetch(`/api/billing?workspace_id=${ws.id}`).then((r) => (r.ok ? r.json() : null))
       .then((j) => j && setFreeRun({ free: j.billing?.plan === 'free', run: j.free?.studio_run || null })).catch(() => {});
   }, [ws.id]);
-  function startStudio(brief: string, size: { w: number; h: number }) {
+  // The designer, on top of a board. Free: one Create run, so a different brief opens the upgrade pop-up.
+  function openDesigner(brief: string, size: { w: number; h: number }, done?: (id: string, size?: { w: number; h: number }) => void) {
     const key = runKey(brief);
-    if (freeRun.free && freeRun.run && freeRun.run !== key) { openUpgrade({ reason: 'studio' }); return; }
+    if (freeRun.free && freeRun.run && freeRun.run !== key) { openUpgrade({ reason: 'studio' }); return false; }
     if (freeRun.free && !freeRun.run) setFreeRun({ free: true, run: key });
-    setStudio({ brief, size });
-    window.scrollTo({ top: 0 });
+    setStudio({ brief, size, done });
+    return true;
+  }
+  function startStudio(brief: string, size: { w: number; h: number }) {
+    if (board) { openDesigner(brief, size, studio?.done); return; }
+    newBoard(brief, { mode: 'design', prompt: brief, size });
   }
   function design() {
     const brief = picked ? clean(ask) : [ask.trim(), chosen ? `Format: ${chosen.ask}.` : ''].filter(Boolean).join(' ');
@@ -203,13 +212,22 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     { done: pool.length > 0, label: 'Add images', note: 'Photos, products, logos', go: undefined },
   ];
 
-  if (studio) {
+  if (board) {
     return (
-      <div className="create">
+      <div className="create on-board">
         {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
-        <Studio ws={ws} userId={userId} supabase={supabase} brand={studioBrand} fonts={fonts} srcOf={srcOf}
-          brief={studio.brief} size={studio.size} onBrief={(brief, size) => startStudio(brief, size)}
-          onClose={() => setStudio(null)} onSaved={onSaved} onOpenAsset={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }} toast={toast} />
+        <Board key={board} boardId={board} ws={ws} supabase={supabase} items={items} urls={urls} plan={plan} start={start} onStarted={() => setStart(null)}
+          onBack={() => { setBoard(null); setStudio(null); }} onOpen={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }}
+          onDesign={openDesigner} toast={toast} />
+        {studio && (
+          <div className="bd-studio">
+            <Studio ws={ws} userId={userId} supabase={supabase} brand={studioBrand} fonts={fonts} srcOf={srcOf}
+              brief={studio.brief} size={studio.size} onBrief={(brief, size) => startStudio(brief, size)}
+              onClose={() => setStudio(null)}
+              onSaved={(id, size) => { onSaved(); if (id && studio.done) { studio.done(id, size); setStudio(null); } }}
+              onOpenAsset={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }} toast={toast} />
+          </div>
+        )}
       </div>
     );
   }
@@ -334,7 +352,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
             </button>
             <span className="spacer" />
             {canMake ? (
-              <button className="primary cr-go" type="button" disabled={making} onClick={() => make()}>
+              <button className="primary cr-go" type="button" onClick={() => make()}>
                 {mode === 'video' ? 'Make video' : count > 1 ? `Make ${count} photos` : 'Make photo'} <span aria-hidden>→</span>
               </button>
             ) : canDesign ? (
@@ -352,8 +370,6 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
           )}
         </div>
 
-        <MediaResults items={made} wsId={ws.id} onUpdate={upd} onOpen={openMade}
-          onAgain={(m) => { setMode(m.kind === 'video' ? 'video' : 'photo'); make(m); }} />
 
         {steps.some((s) => !s.done) && (
           <div className="cr-steps" aria-label="Setup">
@@ -364,6 +380,26 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
             ))}
           </div>
         )}
+      </section>
+
+      <section>
+        <div className="cr-h">
+          <h2>Your boards</h2>
+          <span className="tip">Make and change things on a board: bring in files, ask for new versions, and keep everything you tried in one place.</span>
+        </div>
+        <div className="cr-boards">
+          <button type="button" className="cr-board new" onClick={() => newBoard('Untitled board', null)}><span className="cr-board-img">+</span><b>New board</b><small>Start empty and add files</small></button>
+          {(boards || []).map((b) => {
+            const first = (b.items || []).find((it: any) => it.asset_id && items.some((a) => a.id === it.asset_id));
+            const a = first ? items.find((x) => x.id === first.asset_id) : null;
+            return (
+              <button key={b.id} type="button" className="cr-board" onClick={() => { setStart(null); setBoard(b.id); }}>
+                <span className="cr-board-img">{a && src(a) ? <img src={src(a)} alt="" /> : null}</span>
+                <b>{b.name}</b><small>{(b.items || []).filter((x: any) => x.asset_id).length} files · {new Date(b.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</small>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       <section>
@@ -400,7 +436,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
             );
           })}
         </div>
-        <p className="tip cr-foot">Everything made here lands in Review as a draft. Mise picks the best AI model for each job (the model is shown on every result); designs are edited here, photos and video can be remade with a changed description.</p>
+        <p className="tip cr-foot">Everything starts a board, where you can keep changing it. What AI makes lands in Review as a draft. Mise picks the best AI model for each job and shows it on every result.</p>
       </section>
     </div>
   );

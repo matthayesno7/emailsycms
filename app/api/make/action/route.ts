@@ -1,7 +1,7 @@
 import { member } from '@/lib/makeAuth';
 import { runAction } from '@/lib/runAction';
 
-// "Make…" on library images: POST { workspace_id, action, asset_ids[], choice?, detail?, sizes? }
+// Board actions on library images: POST { workspace_id, action, asset_ids[], choice?, detail?, sizes? }
 // AI results are saved as drafts for Review; resized copies keep the original's status.
 export const runtime = 'nodejs';
 export const maxDuration = 300;

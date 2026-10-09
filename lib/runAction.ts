@@ -1,4 +1,4 @@
-// Runs a "Make…" action (lib/actions.ts) on library images. Server only.
+// Runs a board action (lib/actions.ts) on library images. Server only.
 // Resize is a plain crop (no AI, saved as copies like the photo editor's "Save as copy").
 // The rest use Create's makers, so the same models, plan rules, design counting, drafts and provenance apply.
 import type { SupabaseClient } from '@supabase/supabase-js';

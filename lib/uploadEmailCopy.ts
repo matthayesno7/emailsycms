@@ -1,5 +1,5 @@
 // The email-ready copy (max 1200px wide) of an edited or new image, uploaded next to it. Server only.
-// Its own file so the Claude connector (lib/mcp/more.ts) and "Make…" (lib/runAction.ts) share it
+// Its own file so the Claude connector (lib/mcp/more.ts) and board actions (lib/runAction.ts) share it
 // without importing each other.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emailCopy } from './serverImage';

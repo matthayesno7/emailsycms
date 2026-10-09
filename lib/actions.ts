@@ -1,8 +1,8 @@
-// "Make…" on a library image: one-click things to do with a picture you already have (resize for social,
-// a new scene, new light, a clean background, translated words, a mock-up, a short clip).
+// Things to do with a picture you already have, on a Create board: resize for social, a new scene,
+// new light, a clean background, translated words, a mock-up, a short clip, or any change in words.
 // Safe for the browser. The server (lib/runAction.ts) runs them with Create's models and rules.
 
-export type ActionId = 'resize' | 'scene' | 'light' | 'background' | 'translate' | 'mockup' | 'animate';
+export type ActionId = 'resize' | 'scene' | 'light' | 'background' | 'translate' | 'mockup' | 'animate' | 'edit';
 export type ActionDef = {
   id: ActionId; title: string; blurb: string;
   kind: 'resize' | 'image' | 'video';
@@ -39,7 +39,11 @@ export const ACTIONS: ActionDef[] = [
   { id: 'animate', kind: 'video', batch: false, designsPerTake: 10, title: 'Animate', blurb: 'A short clip with sound, from this picture.',
     choices: ['Slow push-in', 'Gentle parallax', 'Product turntable', 'Light sweeping across'],
     ask: { label: 'Anything else? (optional)', placeholder: 'Steam rising from the cup, soft café sounds' } },
+  // Whatever someone types with a picture selected. Not a chip: it's the board's text box.
+  { id: 'edit', kind: 'image', batch: true, takes: 2, designsPerTake: 1, title: 'Change it with words', blurb: 'Say what should change.',
+    ask: { label: 'What should change?', placeholder: 'Make it autumn, add steam to the coffee' } },
 ];
+export const SUGGESTED = ACTIONS.filter((a) => a.id !== 'edit');
 export const actionById = (id: unknown) => ACTIONS.find((a) => a.id === id) || null;
 
 // What one source photo costs in designs (shown on the button).
@@ -60,6 +64,7 @@ export function actionPrompt(id: ActionId, choice: string, detail: string, brand
     case 'translate': return `Translate every piece of text in this image into ${c}. Keep everything else identical: layout, typefaces, sizes, colours, imagery and spacing. Use natural, correct ${c}, with the right characters and accents. Do not add or remove anything else.`;
     case 'mockup': return `A realistic photo of this exact image shown as a ${c.toLowerCase()} in a believable real-world setting. The image itself must appear unchanged, undistorted apart from natural perspective, and fully visible. ${d ? `${d}. ` : ''}No other branding.`;
     case 'animate': return `Animate this exact image: ${c}${d ? `. ${d}` : ''}. Subtle, smooth, premium motion; keep the subject, product, logo and any text unchanged and steady.`;
+    case 'edit': return `Edit this image: ${d}. Change only what that asks for and keep everything else as it is. ${KEEP}`;
     default: return d || c;
   }
 }

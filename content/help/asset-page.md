@@ -13,7 +13,7 @@ Click any file on **Assets** to open its page. Use **←** and **→** to move b
 - **The name**: click to rename it.
 - **Where it came from** (Uploaded, From the feed, Made in Create, Generated, Made in Figma), its size, file size, format and version.
 - **Edit**: see [Editing images and designs](editing).
-- **Make…**: new versions of the picture: resize for social, a new scene, new light or season, a clean background, translated words, a mock-up or a short clip. See [Make…](create-photos-video#start-from-a-picture-you-already-have-make).
+- **Open in Create**: puts the picture on a board where you can resize it for social, give it a new scene, light or season, clean the background, translate the words, mock it up, animate it or describe any other edit. See [Make and edit pictures you already have](create-photos-video#make-and-edit-pictures-you-already-have).
 - **Download**:
   - **Original file**, exactly as uploaded.
   - **Web, 2000px** and **Email-ready, 1200px**, each as JPG, PNG or WebP. These only appear when the original is bigger than that.

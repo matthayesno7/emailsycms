@@ -29,11 +29,18 @@ Mise picks the best AI model for each job and shows which one it used on every r
 
 A clip takes one to three minutes. You can carry on working; it saves itself.
 
-## Where results go
-Results appear under the composer, each tagged **Made with {model}**. Photos and videos are saved to **Review** as **drafts**: approve them to use or share them. **Make another** tries again with the same description.
+## Where results go: boards
+Everything you make in Create opens on a **board**: a canvas where your pictures, the results and a chat with Mise sit side by side. Drag to move things, scroll or pinch to zoom, and drag the empty canvas to pan. Boards save themselves; find them again under **Your boards** on Create.
 
-## Start from a picture you already have: Make…
-Open any photo, logo or product and click **Make…** (or select several on Assets and click **Make…** in the bar at the bottom). Pick what you want:
+Each result is tagged **Made with {model}** and saved to **Review** as a **draft**: approve it to use or share it. Type in the chat on the right to make more ("two more, closer up") without starting again.
+
+## Make and edit pictures you already have
+Bring pictures onto a board in any of these ways:
+- On a photo, logo or product, click **Open in Create**.
+- On Assets, select up to 20 and click **Open in Create** in the bar at the bottom.
+- On a board, click **Add files** to bring in more from your library.
+
+Then select one or more pictures on the board (shift-click to add) and either click an action under the chat or just say what you want, like "make it autumn" or "remove the cup on the left". Results land next to the picture they came from.
 
 | Action | What it does | Counts as |
 |---|---|---|
@@ -43,9 +50,10 @@ Open any photo, logo or product and click **Make…** (or select several on Asse
 | **Clean background** | The subject on plain white, your brand colour or a studio backdrop. | 2 designs per photo |
 | **Translate the words** | Every word in the picture in another language, same layout. | 2 designs per photo |
 | **Mock it up** | See it on a billboard, a phone, a shop window or a magazine page. | 2 designs per photo |
+| **Edit** | Anything else you type in the chat. Mise changes only what you ask for. | 2 designs per photo |
 | **Animate** | A short clip with sound from the picture (one at a time). | 10 designs |
 
-Up to 10 pictures at once (Animate: one). Everything AI makes is saved to **Review** as drafts; resized copies keep the original's status, tags and folder. Make… is on **Pro**. Resizing needs an editor, admin or owner; contributors can use the AI actions, and what they make waits for review as usual.
+Up to 10 pictures at once (Animate: one). Everything AI makes is saved to **Review** as drafts; resized copies keep the original's status, tags and folder. Boards are on **Pro**. Resizing needs an editor, admin or owner; contributors can use the AI actions, and what they make waits for review as usual. Removing something from a board never deletes it from your library.
 
 ## Which model Mise uses
 | Job | Model | Counts as |
