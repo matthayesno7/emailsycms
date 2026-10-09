@@ -1795,3 +1795,12 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .bd-cap{font-size:calc(13px / max(var(--z,1),1));margin-top:calc(8px / max(var(--z,1),1))}
 .bd-cap em{font-size:calc(11px / max(var(--z,1),1))}
 .bd-editing{top:70px}
+/* Products on a board: the details under the photo */
+.bd-prod>*{flex:none}
+.bd-prod{display:flex;flex-direction:column;gap:4px;padding:10px 2px 0;overflow:hidden;box-sizing:border-box;color:var(--ink)}
+.bd-prod em{font-style:normal;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.bd-prod b{font-size:15px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bd-prod .price{font-size:14px;font-weight:600}
+.bd-prod p{margin:0;font-size:12.5px;line-height:1.4;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bd-prod .cta{align-self:flex-start;margin-top:4px;font-size:11.5px;font-weight:600;border:1px solid var(--line-strong);border-radius:999px;padding:2px 9px}
+.bd-prod small{font-size:10.5px;color:var(--ink-3);font-family:var(--mono, ui-monospace, monospace)}

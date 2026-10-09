@@ -19,6 +19,7 @@ export type BoardItem = {
   pending?: { kind: 'photo' | 'video'; job?: string; label: string };
   error?: string;
   design?: DesignState;
+  product?: boolean;          // a product: its name, price and copy show under the photo
 };
 export type Turn = {
   id: string; role: 'you' | 'mise'; text: string; at: string;
@@ -30,7 +31,8 @@ export type Board = { id: string; workspace_id: string; name: string; items: Boa
 
 export const ITEM_W = 280;
 export const GAP = 40;
-const H = (i: BoardItem) => i.w / (i.ratio || 1);
+export const PRODUCT_INFO_H = 168; // the product details under the photo, in world units
+const H = (i: BoardItem) => i.w / (i.ratio || 1) + (i.product ? PRODUCT_INFO_H : 0);
 
 const overlaps = (a: { x: number; y: number; w: number; h: number }, b: BoardItem) =>
   a.x < b.x + b.w + GAP / 2 && b.x < a.x + a.w + GAP / 2 && a.y < b.y + H(b) + GAP / 2 && b.y < a.y + a.h + GAP / 2;
@@ -38,14 +40,14 @@ const overlaps = (a: { x: number; y: number; w: number; h: number }, b: BoardIte
 // Where new things go: in a row to the right of what they were made from, or on a new row under
 // everything. Never on top of something already there: if the row is taken, the results drop below
 // whatever is in the way, still lined up with what they came from.
-export function place(items: BoardItem[], ratios: number[], from?: BoardItem | null): { x: number; y: number; w: number; ratio: number }[] {
+export function place(items: BoardItem[], ratios: number[], from?: BoardItem | null, extra: number[] = []): { x: number; y: number; w: number; ratio: number }[] {
   const out: { x: number; y: number; w: number; ratio: number }[] = [];
   const all = [...items];
   const rowX = from ? from.x + from.w + GAP : 0;
   let x = rowX;
   let y = from ? from.y : items.length ? Math.max(...items.map((i) => i.y + H(i))) + GAP * 2 : 0;
-  for (const r of ratios) {
-    const w = (r || 1) >= 2.5 ? Math.round(ITEM_W * 1.6) : ITEM_W, h = w / (r || 1); // wide banners get more room
+  for (const [k, r] of ratios.entries()) {
+    const w = (r || 1) >= 2.5 ? Math.round(ITEM_W * 1.6) : ITEM_W, h = w / (r || 1) + (extra[k] || 0); // wide banners get more room
     let hit: BoardItem | undefined, guard = 0;
     while ((hit = all.find((b) => overlaps({ x, y, w, h }, b))) && guard++ < 500) {
       y = hit.y + H(hit) + GAP;
@@ -53,7 +55,7 @@ export function place(items: BoardItem[], ratios: number[], from?: BoardItem | n
     }
     const p = { x, y, w, ratio: r || 1 };
     out.push(p);
-    all.push({ id: `tmp${out.length}`, ...p });
+    all.push({ id: `tmp${out.length}`, ...p, ratio: w / h });
     x += w + GAP;
   }
   return out;

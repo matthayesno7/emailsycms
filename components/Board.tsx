@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SOCIAL_SIZES, SUGGESTED, actionById, actionDesigns, type ActionDef, type ActionId } from '@/lib/actions';
-import { bounds, itemHeight, place, uid, type BoardItem, type DesignState, type Turn } from '@/lib/boards';
+import { PRODUCT_INFO_H, bounds, itemHeight, place, uid, type BoardItem, type DesignState, type Turn } from '@/lib/boards';
+import { DEFAULT_CTA } from '@/lib/products';
 import { modelName, nearestAspect } from '@/lib/models';
 import { FORMATS as DESIGN_FORMATS, assetsUsed, formatFor, type Spec } from '@/lib/design';
 import { exportPng } from '@/lib/exportDesign';
@@ -84,7 +85,8 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
     supabase.from('boards').select('*').eq('id', boardId).maybeSingle().then(({ data }) => {
       if (off || !data) return;
       // A design that was still being made when the board was left: it won't arrive now.
-      const items = (data.items || []).map((c: BoardItem) => (!c.design ? c
+      const kinds = new Map(library.map((x) => [x.id, x.kind]));
+      const items = (data.items || []).map((c: BoardItem) => (!c.design ? (c.asset_id && !c.product && kinds.get(c.asset_id) === 'product' ? { ...c, product: true } : c)
         : c.design.status === 'refining' ? { ...c, design: { ...c.design, status: 'ready' as const } }
         : c.design.status === 'loading' ? { ...c, design: { ...c.design, status: 'error' as const, error: 'This one didn’t finish. Try again.' } } : c));
       setName(data.name); setCards(items); setThread(data.thread || []); setLoaded(true);
@@ -134,8 +136,8 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
   function addAssets(ids: string[], from?: BoardItem | null) {
     const list = ids.map((id) => byId.get(id)).filter(Boolean) as Asset[];
     if (!list.length) return [];
-    const spots = place(cardsRef.current, list.map(ratioOf), from);
-    const add: BoardItem[] = list.map((a, i) => ({ id: uid(), asset_id: a.id, name: a.name, ...spots[i] }));
+    const spots = place(cardsRef.current, list.map(ratioOf), from, list.map((a) => (a.kind === 'product' ? PRODUCT_INFO_H : 0)));
+    const add: BoardItem[] = list.map((a, i) => ({ id: uid(), asset_id: a.id, name: a.name, ...spots[i], ...(a.kind === 'product' ? { product: true } : {}) }));
     cardsRef.current = [...cardsRef.current, ...add]; // so the next placement sees these straight away
     setCards((all) => [...all, ...add]);
     return add;
@@ -216,6 +218,11 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
       error: !n,
     });
   }
+
+  // How a file is named to the AI: products bring their name, price and copy, so designs can use them.
+  const describe = (a: Asset) => a.kind === 'product'
+    ? `the product “${a.name}”${a.price ? `, price ${a.price}` : ''}${a.fields?.eyebrow ? `, label “${a.fields.eyebrow}”` : ''}${a.fields?.description ? `, description “${String(a.fields.description).slice(0, 200)}”` : ''}${a.fields?.cta ? `, button “${a.fields.cta}”` : ''} (its photo)`
+    : `the photo “${a.name}”`;
 
   // ---------- designs ----------
   const setDesign = (id: string, p: Partial<DesignState> | ((d: DesignState) => Partial<DesignState>)) =>
@@ -369,11 +376,12 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
     return add;
   }
 
-  async function runWords(prompt: string, m: Mode, size?: { w: number; h: number }) {
+  // shown: what the person typed, when the prompt sent to the AI has more in it (product details).
+  async function runWords(prompt: string, m: Mode, size?: { w: number; h: number }, shown?: string) {
     const p = prompt.trim(); if (!p) return;
     if (!(m === 'design' ? caps.design : m === 'photo' ? caps.image : caps.video)) { onClaude(p); return; } // not switched on here: Claude makes it
-    say({ role: 'you', text: p });
-    autoName(p);
+    say({ role: 'you', text: shown || p, refs: shown ? selAssets.map((a) => a.id) : undefined });
+    autoName(shown || p);
     if (m === 'design') { await runDesign(p, size || formatFor(p)); return; }
     if (plan === 'free') { openUpgrade({ reason: 'media' }); return; }
     if (m === 'video') {
@@ -407,8 +415,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
     } else if (selImages.length && mode === 'video') {
       runAction('animate', 'Slow push-in', t);
     } else if (selImages.length && mode === 'design') {
-      const names = selAssets.slice(0, 4).map((a) => `“${a.name}”`).join(', ');
-      runWords(`${t}. Use ${selAssets.length === 1 ? 'the photo' : 'the photos'} ${names}.`, 'design');
+      runWords(`${t}. Use ${selAssets.slice(0, 4).map(describe).join('; ')}.`, 'design', undefined, t);
     } else if (selImages.length) {
       if (/\b(animate|video|clip|motion)\b/i.test(t)) runAction('animate', 'Slow push-in', t);
       else if (/\b(resize|sizes|instagram sizes|social sizes)\b/i.test(t)) runAction('resize');
@@ -575,7 +582,16 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
                     : src ? (video ? <video src={src} muted loop playsInline autoPlay /> : <img src={src} alt={a?.fields?.alt || a?.name || ''} draggable={false} />)
                     : <span className="bd-wait">Not in the library any more</span>}
                 </div>
-                {!c.pending && <div className="bd-cap"><span>{a?.name || c.name || ''}</span>{a?.status === 'draft' && <em>Draft</em>}</div>}
+                {c.product && a?.kind === 'product' ? (
+                  <div className="bd-prod" style={{ height: PRODUCT_INFO_H }}>
+                    {a.fields?.eyebrow && <em>{a.fields.eyebrow}</em>}
+                    <b>{a.name}</b>
+                    {a.price && <span className="price">{a.price}</span>}
+                    {a.fields?.description && <p>{a.fields.description}</p>}
+                    {(a.fields?.cta ?? DEFAULT_CTA) && <span className="cta">{a.fields?.cta ?? DEFAULT_CTA}</span>}
+                    {a.pid && <small>PID {a.pid}</small>}
+                  </div>
+                ) : !c.pending && <div className="bd-cap"><span>{a?.name || c.name || ''}</span>{a?.status === 'draft' && <em>Draft</em>}</div>}
               </div>
             );
           })}
