@@ -6,7 +6,8 @@
 export function normaliseSite(input: string): string | null {
   let s = input.trim().toLowerCase().replace(/\/+$/, '');
   if (!s) return null;
-  if (!/^https?:\/\//.test(s)) s = `https://${s}`;
+  // No scheme: https, except local testing addresses, which run on http.
+  if (!/^https?:\/\//.test(s)) s = `${/^(localhost|127\.0\.0\.1)(:|$)/.test(s) ? 'http' : 'https'}://${s}`;
   const m = s.match(/^(https?):\/\/(\*\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)*)(:\d{1,5})?(?:\/.*)?$/);
   if (!m) return null;
   const [, scheme, star = '', host, port = ''] = m;

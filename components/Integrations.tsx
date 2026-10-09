@@ -7,7 +7,7 @@ import type { Ws } from './Library';
 // Mise picker and get permanent links to approved files. Admins and owners; Pro and Enterprise.
 type Key = { id: string; name: string; key_prefix: string; origins: string[]; created_at: string; last_used_at: string | null; revoked_at: string | null };
 const when = (d?: string | null) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never');
-const show = (o: string) => o.replace(/^https:\/\//, '');
+const show = (o: string) => o.replace(/^https:\/\//, ''); // http:// stays visible, so it's clear which is which
 
 export default function Integrations({ ws, toast }: { ws: Ws; toast: (m: string) => void }) {
   const [keys, setKeys] = useState<Key[] | null>(null);
@@ -98,7 +98,7 @@ export default function Integrations({ ws, toast }: { ws: Ws; toast: (m: string)
           <input id="ik-name" className="in" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bloomreach" required />
           <label className="label" htmlFor="ik-sites">Sites that show the picker</label>
           <textarea id="ik-sites" className="in mono" rows={3} value={sites} onChange={(e) => setSites(e.target.value)} placeholder={'*.bloomreach.com\napp.exponea.com'} required />
-          <p className="tip">One per line. <code>*.example.com</code> covers every subdomain; add <code>example.com</code> too if the tool uses it. Ask the tool’s team if you’re not sure.</p>
+          <p className="tip">One per line. <code>*.example.com</code> covers every subdomain; add <code>example.com</code> too if the tool uses it. Addresses are https unless you write <code>http://</code> (for local testing, <code>localhost:8000</code> is http). Ask the tool’s team if you’re not sure.</p>
           <div className="actions"><button className="primary" type="submit" disabled={busy || !name.trim() || !sites.trim()}>{busy ? 'Creating…' : 'Create key'}</button></div>
         </form>
       )}
