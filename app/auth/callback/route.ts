@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { publicOrigin } from '@/lib/origin';
+import { onSignIn } from '@/lib/emails/send';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -17,6 +18,9 @@ export async function GET(request: Request) {
       const next = searchParams.get('next') || '';
       if (/^\/(p|s)\/[\w-]+(\/[\w-]+)?$/.test(next)) return NextResponse.redirect(`${origin}${next}`);
       await supabase.rpc('bootstrap');
+      // A brand-new account: the welcome email and a note to Matt (once; never holds up sign-in).
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) void onSignIn(user.id, request.headers.get('cf-ipcountry'));
       // From the landing page: /?site=…&plan=…&connect=… (nothing else is allowed through).
       if (/^\/\?(?:(?:site|plan|connect)=[^&#]*&?){1,3}$/.test(next)) return NextResponse.redirect(`${origin}${next}`);
       return NextResponse.redirect(`${origin}/`);
