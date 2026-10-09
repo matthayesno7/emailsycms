@@ -27,6 +27,10 @@ const ACTIONS: Record<string, { label: string; group: string }> = {
   'portal.unpublished': { label: 'Unpublished a portal', group: 'Sharing' },
   'portal.access_changed': { label: 'Changed portal access', group: 'Sharing' },
   'portal.deleted': { label: 'Deleted a portal', group: 'Sharing' },
+  'integration.created': { label: 'Connected a tool:', group: 'Sharing' },
+  'integration.changed': { label: 'Changed the sites for', group: 'Sharing' },
+  'integration.turned_off': { label: 'Turned off the tool', group: 'Sharing' },
+  'integration.picked': { label: 'Picked files in', group: 'Sharing' },
   'brand_kit.saved': { label: 'Saved the brand kit', group: 'Brand' },
   'brand_kit.approved': { label: 'Approved the brand kit', group: 'Brand' },
   'feed.synced': { label: 'Synced products from', group: 'Brand' },
@@ -45,10 +49,12 @@ function detail(e: Entry) {
     case 'feed.synced': return `${d.products ?? 0} products${d.added ? ` · ${d.added} new` : ''}${d.removed ? ` · ${d.removed} gone` : ''}`;
     case 'share.created': return d.expires_at ? `expires ${new Date(d.expires_at).toLocaleDateString('en-GB')}` : '';
     case 'portal.access_changed': return `${d.from} → ${d.to}`;
+    case 'integration.created': case 'integration.changed': return (d.sites || []).map((x: string) => x.replace(/^https:\/\//, '')).join(', ');
+    case 'integration.picked': return `${d.count ?? 0} ${d.count === 1 ? 'file' : 'files'}${d.assets?.length ? `: ${d.assets.slice(0, 5).join(', ')}${d.count > 5 ? '…' : ''}` : ''}${d.site ? ` · ${String(d.site).replace(/^https?:\/\//, '')}` : ''}`;
     default: return '';
   }
 }
-const who = (e: Entry) => e.actor_email || (e.via === 'mise' ? 'Mise (Claude connector or automation)' : 'Someone');
+const who = (e: Entry) => e.actor_email || (e.action === 'integration.picked' ? `Someone in ${e.target_name || 'a connected tool'}` : e.via === 'mise' ? 'Mise (Claude connector or automation)' : 'Someone');
 const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const csvCell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 

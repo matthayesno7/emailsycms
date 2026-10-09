@@ -154,7 +154,7 @@ export const SECURITY: Section[] = [
     '- Your files and data are stored in the EU.',
     '- Everything is encrypted in transit (TLS) and at rest (AES-256).',
     '- Every brand is walled off from every other at the database level, not just in the app.',
-    '- Files are private. Every view and download goes through a link that expires within minutes.',
+    '- Files are private. Every view and download goes through a link that expires within minutes, except files you choose to put into another tool through an integration (see below).',
     '- No passwords to leak: people sign in with Google or a one-time email link.',
     '- Your content is never used to train AI, and Mise never identifies people from their faces.',
     '- Enterprise adds roles (owner, admin, editor, contributor, viewer) and an activity log you can export.',
@@ -174,6 +174,7 @@ export const SECURITY: Section[] = [
     '- Your team: only people invited to a brand can see it. On Enterprise, roles control what each person can do, and the same rules apply in the app, through Claude and in the database.',
     '- People you share with: only the files in the links and portals you create, in the formats you allow. Links can have a passcode, an expiry date and downloads switched off, and can be turned off at any time. Portals can be limited to an invite list of emails or company domains, with visitors confirming their email.',
     '- Claude: only through a person’s own connector link, with that person’s role, and only in their brands. Links can be turned off instantly in Settings.',
+    '- Connected tools (Pro and Enterprise): tools an admin connects in Settings › Integrations can show approved, available files in the Mise picker, only on the sites listed for that tool. A file picked there gets a permanent link that anyone with it can open, so the other tool can show it. The link always serves the current version and stops working when the file is archived, expires, goes obsolete or is deleted. Keys are stored only as hashes and can be turned off instantly.',
     'Share and portal pages are hidden from search engines, and their views and downloads are recorded for the brand that shared them.',
   ] },
   { h: 'Signing in', p: [

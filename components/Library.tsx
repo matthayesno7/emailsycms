@@ -29,6 +29,7 @@ import Review from './Review';
 import { reviewQueue } from '@/lib/review';
 import { PlanSettings, UpgradeModal, openUpgrade, type UpgradeAsk } from './Billing';
 import LibrarySync from './LibrarySync';
+import Integrations from './Integrations';
 import Activity from './Activity';
 import HelpAsk from './help/HelpAsk';
 import { can, NEEDS, roleError } from '@/lib/roles';
@@ -129,7 +130,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
     if (r === 'connected') { setBoxReturn(true); setModal('import'); }
     else setTimeout(() => toast(r === 'cancelled' ? 'Box wasn’t connected.' : 'Couldn’t connect Box. Try again.'), 300);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [settingsTab, setSettingsTab] = useState<'workspace' | 'plan' | 'members' | 'activity' | 'claude' | 'help'>('workspace');
+  const [settingsTab, setSettingsTab] = useState<'workspace' | 'plan' | 'members' | 'activity' | 'integrations' | 'claude' | 'help'>('workspace');
   const [upgrade, setUpgrade] = useState<UpgradeAsk | null>(null);  // the upgrade pop-up, and why it opened
   const [limitHit, setLimitHit] = useState<{ message: string; reason?: string } | null>(null);  // out of Studio designs this month
   const [plan, setPlan] = useState<Plan>('free');
@@ -1062,7 +1063,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             <div className="settings-page">
               <div className="head"><h1>Settings</h1></div>
               <div className="seg tabs" role="tablist">
-                {([['workspace', 'Brand workspace'], ['plan', 'Plan & usage'], ['members', 'Team'], ...(can.admin(curWs.role) && plan === 'enterprise' ? [['activity', 'Activity'] as const] : []), ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
+                {([['workspace', 'Brand workspace'], ['plan', 'Plan & usage'], ['members', 'Team'], ...(can.admin(curWs.role) && plan === 'enterprise' ? [['activity', 'Activity'] as const] : []), ...(can.admin(curWs.role) ? [['integrations', 'Integrations'] as const] : []), ['claude', 'Claude'], ['help', 'Help']] as const).map(([k, l]) => (
                   <button key={k} type="button" role="tab" aria-pressed={settingsTab === k} onClick={() => setSettingsTab(k)}>{l}{k === 'claude' && !connected ? ' •' : ''}</button>
                 ))}
               </div>
@@ -1077,6 +1078,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                 {settingsTab === 'plan' && <PlanSettings key={curWs.id} ws={curWs} toast={toast} />}
                 {settingsTab === 'members' && <Members supabase={supabase} ws={curWs} userId={userId} toast={toast} enterprise={plan === 'enterprise'} />}
                 {settingsTab === 'activity' && can.admin(curWs.role) && plan === 'enterprise' && <Activity supabase={supabase} ws={curWs} />}
+                {settingsTab === 'integrations' && can.admin(curWs.role) && <Integrations key={curWs.id} ws={curWs} toast={toast} />}
                 {settingsTab === 'claude' && <Connector supabase={supabase} toast={toast} full />}
                 {settingsTab === 'help' && <HelpAsk wsId={curWs.id} onFeedback={() => setModal('feedback')} />}
               </div>

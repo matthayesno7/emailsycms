@@ -45,6 +45,7 @@ Mise keeps every logo, photo, product shot and design for your brand in one plac
 - [Connect Claude](claude-connector)
 - [What Claude can do with Mise](claude-tools)
 - [Using Mise with Figma](figma)
+- [Use Mise inside other tools](integrations)
 
 ## Team and admin
 - [Team, invites and roles](team-and-roles)

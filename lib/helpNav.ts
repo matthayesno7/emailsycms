@@ -18,6 +18,7 @@ const SHORT: Record<string, string> = {
   'what-recipients-see': 'What recipients see',
   'claude-tools': 'What Claude can do',
   'figma': 'Figma',
+  'integrations': 'Mise in other tools',
   'team-and-roles': 'Team and roles',
   'plans': 'Plans',
   'billing': 'Billing',

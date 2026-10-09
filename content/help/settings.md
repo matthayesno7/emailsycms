@@ -15,6 +15,7 @@ Open **Settings** at the bottom of the sidebar. The tabs are:
 | **Plan & usage** | Your plan, files and designs used, the cap for extra designs, upgrade or manage billing, and the **Library** section (how much is organised and searchable). See [Plans](plans) and [Billing](billing). |
 | **Team** | People and roles. See [Team, invites and roles](team-and-roles). |
 | **Activity** | Enterprise only, admins and owners. See [Activity log](activity-log). |
+| **Integrations** | Admins and owners: keys that let other tools show the Mise picker. See [Use Mise inside other tools](integrations). |
 | **Claude** | Your connector link and setup. See [Connect Claude](claude-connector). |
 | **Help** | Ask Mise a question, or browse this help centre. Also opens from **Help** in the sidebar. |
 

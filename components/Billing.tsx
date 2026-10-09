@@ -166,7 +166,7 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
 
 // ---------- the upgrade pop-up ----------
 // One plan, one button, opened right where the free plan holds something back.
-export type UpgradeReason = 'portal' | 'files' | 'studio' | 'share' | 'edit' | 'organise' | 'designs' | 'media' | 'lifecycle' | 'brand' | 'general';
+export type UpgradeReason = 'portal' | 'files' | 'studio' | 'share' | 'edit' | 'organise' | 'designs' | 'media' | 'lifecycle' | 'brand' | 'integrations' | 'general';
 export type UpgradeAsk = { reason: UpgradeReason; count?: number; brand?: string };
 
 // Anything in the app can ask for it: the app shell listens and opens the pop-up.
@@ -187,6 +187,7 @@ function pitch(ask: UpgradeAsk, wsName: string, cur: Currency) {
     case 'organise': return { h: 'Organise your whole library today', p: `${ask.count ? `${ask.count.toLocaleString()} file${ask.count === 1 ? ' is' : 's are'}` : 'Some files are'} uploaded but waiting to be organised. On Pro, every file is tagged, described and searchable the moment it’s added. On Free, they carry on from ${nextFirst()}.` };
     case 'media': return { h: 'Make new photos and video', p: `New photography and video, made in your brand’s style with the best AI model for each job, are on Pro. Pro gives you ${designAllowance('pro')} designs a month: a photo is 1, a video clip is 10.` };
     case 'designs': return { h: 'Keep designing', p: `${wsName} has used this month’s ${designAllowance('free')} designs. Pro gives you ${designAllowance('pro')} a month, then ${over} each up to a cap you set. On Free, designs come back on ${nextFirst()}.` };
+    case 'integrations': return { h: 'Use your library inside other tools', p: 'Let Bloomreach, your CMS or email builder pick approved files straight from Mise, with permanent links that always show the latest version and stop when a file’s licence runs out.' };
     case 'lifecycle': return { h: 'Never use an expired image again', p: 'Add the date a photo’s licence runs out and Mise blocks it on the day: no downloads, no shares, not used in Create or by Claude. Mark old files obsolete and point people to the replacement.' };
     case 'brand': return { h: `Add ${ask.brand || 'another brand'}`, p: 'Your free plan covers one brand. Each extra brand gets its own library, brand kit, portals and designs.' };
     default: return { h: 'Get your whole brand working', p: 'Everything in Free, without the waiting.' };

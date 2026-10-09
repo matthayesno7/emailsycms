@@ -31,6 +31,7 @@ Everything in Free, plus:
 - **Editing**: crop, resize and adjust photos, change designs with words, and restore any version.
 - **Licence expiry dates**, with expired files blocked automatically, and **obsolete files** pointing to their replacement.
 - **Daily sync** of your Shopify store and product feeds.
+- **Integrations**: the Mise picker inside Bloomreach and other tools, with permanent links to approved files.
 - More brands: each extra brand is its own Pro subscription.
 
 ## Enterprise: from $12,500 a year
