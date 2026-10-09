@@ -14,19 +14,24 @@ export const PLANS = {
   enterprise: { name: 'Enterprise', files: Infinity, designs: 1000, organise: 50000, overage: true, portals: Infinity, badge: false, lifecycle: true },
 } as const;
 
-// Two currencies: GBP for the UK, USD everywhere else. Amounts in minor units (pence, cents),
+// Currencies: USD for everyone (GBP only for brands that subscribed before 9 Oct 2026). Amounts in minor units (pence, cents),
 // excluding VAT or sales tax. The same Stripe prices carry both (currency_options).
 export type Currency = 'gbp' | 'usd';
+// Pro is yearly only (9 Oct 2026): $3,750 a year per brand, in US dollars for everyone. The monthly
+// amounts and GBP stay only so brands that subscribed before then still show what they pay.
+export const ANNUAL_ONLY = true;
 export const PRICES: Record<Currency, { month: number; year: number; overage: number }> = {
-  gbp: { month: 14900, year: 149000, overage: 50 },   // £149 a month or £1,490 a year per brand; 50p per extra design
-  usd: { month: 19900, year: 199000, overage: 60 },   // $199 a month or $1,990 a year per brand; 60¢ per extra design
+  gbp: { month: 14900, year: 149000, overage: 50 },   // legacy: £149 a month or £1,490 a year; 50p per extra design
+  usd: { month: 19900, year: 375000, overage: 60 },   // $3,750 a year per brand (legacy $199 a month); 60¢ per extra design
 };
+export const ENTERPRISE_FROM_USD = 15000;            // Enterprise starts at $15,000 a year
 export const PRICE = PRICES.gbp; // existing GBP brands
 export const isCurrency = (c: unknown): c is Currency => c === 'gbp' || c === 'usd';
 // Visitors in the UK see and pay GBP; everyone else USD. Cloudflare's country header decides; without
 // it, a British English browser counts as the UK.
-export const currencyFor = (country?: string | null, lang?: string | null): Currency =>
-  country ? (String(country).toUpperCase() === 'GB' ? 'gbp' : 'usd') : /\ben-GB\b/i.test(lang || '') ? 'gbp' : 'usd';
+// Since 9 Oct 2026 every new subscription is in US dollars, the UK included. (The arguments stay so
+// callers don't change; GBP brands keep their currency through their billing row.)
+export const currencyFor = (_country?: string | null, _lang?: string | null): Currency => 'usd';
 export const currencyOf = (h: Headers) => currencyFor(h.get('cf-ipcountry'), h.get('accept-language'));
 export const money = (minor: number, cur: Currency = 'gbp') =>
   `${cur === 'usd' ? '$' : '£'}${(minor / 100).toLocaleString(cur === 'usd' ? 'en-US' : 'en-GB', { minimumFractionDigits: minor % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;

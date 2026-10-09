@@ -11,14 +11,14 @@ Only **owners** of a brand can upgrade it and manage its billing. Each brand has
 
 ## Upgrade to Pro
 1. Settings → **Plan & usage** → **Upgrade {brand}**, or click **Upgrade to Pro** in any upgrade pop-up.
-2. Choose monthly ($199) or yearly ($1,990, two months free). In the pop-up, click "or $1,990 a year" to switch.
+2. Pro is **$3,750 a year** per brand, billed yearly.
 3. Pay with Stripe's secure checkout. It asks for your card and billing address, and lets you add a VAT or tax number and a promotion code.
 4. You're back in Mise: "Welcome to Pro. It can take a few seconds to show."
 
 You're charged straight away. There's no trial: Free is the way to try Mise.
 
 ## Currency
-Prices are in US dollars. UK customers see and pay the equivalent in pounds at checkout (£149 a month or £1,490 a year). A brand keeps the currency it first paid in, and Mise shows prices in that currency from then on.
+Prices are in US dollars for everyone, including the UK. Brands that subscribed in pounds before 9 October 2026 keep paying in pounds.
 
 ## Tax
 Prices exclude tax. VAT or sales tax is added at checkout where it applies, based on your billing address. Add your VAT or tax number at checkout, or later under **Manage billing**, to show it on invoices.
@@ -47,8 +47,8 @@ Payments aren't refunded for part of a period, unless the law requires it. See t
 ## Failed payments
 If a payment fails, Plan & usage shows "payment failed, Stripe is retrying", and Stripe tries again over the following days. Update your card in **Manage billing**. If it stays unpaid, the brand moves to Free.
 
-## Monthly to yearly
-To switch an existing subscription between monthly and yearly, send a request through **Feedback** and it's switched for you, with the difference worked out.
+## Monthly subscriptions
+Pro is sold yearly. Brands already on a monthly plan stay on it. To move to yearly, send a request through **Feedback** and it's switched for you, with the difference worked out.
 
 ## Enterprise
 Enterprise is billed by invoice under your agreement, so **Plan & usage** shows your Enterprise account and how many of its brands are in use, with no card or checkout. For changes to your agreement, [book a call](https://calendar.notion.so/meet/matthayes/3363f4yal).

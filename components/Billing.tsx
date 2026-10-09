@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { designAllowance, FREE_FILES, money, PRICES, symbol, type Billing, type Currency, type Interval } from '@/lib/plans';
+import { ANNUAL_ONLY, designAllowance, FREE_FILES, money, PRICES, symbol, type Billing, type Currency, type Interval } from '@/lib/plans';
 import type { Ws } from './Library';
 import AutoOrganise from './AutoOrganise';
 
@@ -125,7 +125,7 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
         <section className="plan-upgrade">
           <div className="pu-head">
             <h3>Pro</h3>
-            <span className="pu-price"><b>{fmt(P.month)}</b> / month per brand{s.trial_days ? <span className="trial-pill">{s.trial_days}-day free trial</span> : null}</span>
+            <span className="pu-price"><b>{fmt(P.year)}</b> / year per brand{s.trial_days ? <span className="trial-pill">{s.trial_days}-day free trial</span> : null}</span>
           </div>
           <ul className="upsell-list">{proAdds(cur).map((t) => <li key={t}>{t}</li>)}</ul>
           {!s.stripe ? <p className="tip">Billing isn’t switched on yet.</p>
@@ -133,7 +133,7 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
             : (
               <div className="plan-actions">
                 <button className="primary" type="button" onClick={() => openUpgrade({ reason: 'general' })}>{s.trial_days ? `Start ${s.trial_days}-day free trial` : `Upgrade ${ws.name}`}</button>
-                <p className="tip">or {fmt(P.year)} a year (2 months free). Plus applicable taxes. Cancel any time.</p>
+                <p className="tip">Billed yearly, about {fmt(Math.round(P.year / 12 / 100) * 100)} a month. Plus applicable taxes.</p>
               </div>
             )}
         </section>
@@ -205,7 +205,7 @@ const proCard = (cur: Currency) => [
 
 export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: UpgradeAsk; onClose: () => void; toast: (m: string) => void }) {
   const [info, setInfo] = useState<{ role: string | null; stripe: boolean; trial_days: number; plan: string; currency: Currency } | null>(null);
-  const [interval, setPeriod] = useState<Interval>('month');
+  const [interval, setPeriod] = useState<Interval>('year');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     fetch(`/api/billing?workspace_id=${ws.id}`).then((r) => (r.ok ? r.json() : null))
@@ -238,10 +238,12 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
           {trial > 0 && <span className="trial-pill">{trial}-day free trial</span>}
         </div>
         <p className="upsell-sub">
-          {newBrand ? `For ${ask.brand || 'your new brand'}` : `For ${ws.name}`} · plus applicable taxes · cancel any time ·{' '}
-          <button type="button" className="linkish" onClick={() => setPeriod(interval === 'year' ? 'month' : 'year')}>
-            {interval === 'year' ? `or ${fmt(P.month)} a month` : `or ${fmt(P.year)} a year (2 months free)`}
-          </button>
+          {newBrand ? `For ${ask.brand || 'your new brand'}` : `For ${ws.name}`} · billed yearly, about {fmt(Math.round(P.year / 12 / 100) * 100)} a month · plus applicable taxes
+          {!ANNUAL_ONLY && (<>{' · '}
+            <button type="button" className="linkish" onClick={() => setPeriod(interval === 'year' ? 'month' : 'year')}>
+              {interval === 'year' ? `or ${fmt(P.month)} a month` : `or ${fmt(P.year)} a year`}
+            </button>
+          </>)}
         </p>
         <ul className="upsell-list">{proCard(cur).map((f) => <li key={f}>{f}</li>)}</ul>
       </div>
@@ -249,7 +251,7 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
         : canBuy ? (
           <>
             <button className="primary wide" type="button" disabled={busy} onClick={start}>{busy ? 'Opening checkout…' : trial ? `Start ${trial}-day free trial` : 'Upgrade to Pro'}</button>
-            <p className="upsell-fine">{trial ? `You won’t be charged today. After ${trial} days it’s ${interval === 'year' ? `${fmt(P.year)} a year` : `${fmt(P.month)} a month`} unless you cancel; cancel and you’re back on Free with all your files.` : `Secure checkout with Stripe. ${interval === 'year' ? 'Billed yearly' : 'Billed monthly'}; cancel any time and you’re back on Free with all your files.`} By continuing you agree to the <a href="/terms" target="_blank">Terms</a>.</p>
+            <p className="upsell-fine">{trial ? `You won’t be charged today. After ${trial} days it’s ${interval === 'year' ? `${fmt(P.year)} a year` : `${fmt(P.month)} a month`} unless you cancel; cancel and you’re back on Free with all your files.` : `Secure checkout with Stripe. ${interval === 'year' ? 'Billed yearly' : 'Billed monthly'}. Cancel before it renews and you’re back on Free with all your files.`} By continuing you agree to the <a href="/terms" target="_blank">Terms</a>.</p>
           </>
         ) : !info.stripe ? <p className="tip">Billing isn’t switched on yet.</p>
         : info.plan !== 'free' && !newBrand ? <p className="tip">{ws.name} is already on Pro.</p>

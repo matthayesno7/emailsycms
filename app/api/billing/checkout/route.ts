@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { whoFor } from '@/lib/billingAuth';
 import { billingRow, ensureCustomer, proLineItems } from '@/lib/billing';
-import { currencyOf, effectivePlan, TRIAL_DAYS, trialDaysFor, type Interval } from '@/lib/plans';
+import { ANNUAL_ONLY, effectivePlan, TRIAL_DAYS, trialDaysFor, type Interval } from '@/lib/plans';
 import { hasStripe, stripe } from '@/lib/stripe';
 import { publicOrigin } from '@/lib/origin';
 
@@ -14,7 +14,8 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   if (!hasStripe()) return Response.json({ error: 'Billing isn’t switched on yet.' }, { status: 501 });
   const b = await request.json().catch(() => null);
-  const interval: Interval = b?.interval === 'year' ? 'year' : 'month';
+  // Pro is sold yearly only; the monthly price stays in Stripe for existing subscribers.
+  const interval: Interval = ANNUAL_ONLY || b?.interval === 'year' ? 'year' : 'month';
   const newBrand = typeof b?.new_brand_name === 'string' ? b.new_brand_name.trim().slice(0, 60) : '';
   const who = await whoFor(newBrand ? '' : String(b?.workspace_id || ''));
   if (!who.user) return Response.json({ error: 'Sign in first.' }, { status: 401 });
@@ -22,20 +23,18 @@ export async function POST(request: Request) {
   const origin = publicOrigin(request);
   const db = createAdminClient();
   const tax = process.env.STRIPE_TAX === '1';
-  // Prices are shown in US dollars. Checkout charges USD, except in the UK, where Stripe shows the
-  // price in pounds (the same prices carry both currencies).
-  const uk = currencyOf(request.headers) === 'gbp';
+  // Prices are in US dollars for everyone.
 
   const common = {
     mode: 'subscription',
-    ...(uk ? {} : { currency: 'usd' }),
+    currency: 'usd',
     line_items: proLineItems(interval),
     allow_promotion_codes: 'true',
     billing_address_collection: 'required',
     tax_id_collection: { enabled: 'true' },
     customer_update: { address: 'auto', name: 'auto' },
     ...(tax ? { automatic_tax: { enabled: 'true' } } : {}),
-    locale: uk ? 'en-GB' : 'auto',
+    locale: 'auto',
   };
 
   try {

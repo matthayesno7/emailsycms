@@ -21,7 +21,7 @@ No. Everything works in the Mise app. Claude is optional, for people who want to
 Free is the trial: your brand kit, 50 files and a Create run, with no card. Upgrade when you need more.
 
 **How much does it cost?**
-Free, then $199 a month (or $1,990 a year) per brand on Pro. Enterprise starts at $12,500 a year. See [Plans](plans).
+Free, then $3,750 a year per brand on Pro. Enterprise starts at $15,000 a year. See [Plans](plans).
 
 **Do I pay per person?**
 No. Mise is priced per brand. Invite everyone.

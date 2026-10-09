@@ -20,8 +20,8 @@ No card needed.
 - Archive files.
 - Unlimited people.
 
-## Pro: $199 a month per brand
-Or **$1,990 a year** (two months free). Plus applicable taxes. Charged when you upgrade; cancel any time. UK customers pay in pounds at checkout (£149 a month or £1,490 a year).
+## Pro: $3,750 a year per brand
+Billed yearly, about $313 a month. Plus applicable taxes. Charged when you upgrade. Start on Free first: there's no trial on Pro.
 
 Everything in Free, plus:
 - **Unlimited files**, every one organised and searchable, with no storage limit to think about.
@@ -34,7 +34,7 @@ Everything in Free, plus:
 - **Integrations**: the Mise picker inside Bloomreach and other tools, with permanent links to approved files.
 - More brands: each extra brand is its own Pro subscription.
 
-## Enterprise: from $12,500 a year
+## Enterprise: from $15,000 a year
 For companies with several brands, or a procurement checklist.
 - All your brands on one contract and one invoice. Owners and admins add new brands straight from the app, with no checkout.
 - **Roles**: owner, admin, editor, contributor and viewer. See [Team and roles](team-and-roles).
@@ -59,7 +59,7 @@ The same counts apply to things Claude makes through Mise. Organising files, sea
 Mise shows an upgrade pop-up right where you hit it: adding your 51st file, a second Create brief, changing a design with words, sharing, publishing a portal, editing, licence and obsolete tools, photos and video, or a second brand. **Upgrade to Pro** goes to checkout; **Stay on Free** closes it.
 
 ## Going back to Free
-If you cancel, the brand stays on Pro until the end of the period you paid for, then returns to Free.
+If you cancel, the brand stays on Pro until the end of the year you paid for, then returns to Free.
 - **All your files stay.** You can't add more than Free allows until you upgrade again.
 - **Share links and portals stop opening for people outside your team.** They work again if you upgrade.
 - Editing, photos and video, licence tools and daily feed sync pause.

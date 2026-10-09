@@ -22,7 +22,7 @@ export default function LoginPage() {
   const callback = () => `${window.location.origin}/auth/callback${nextQs ? `?next=${encodeURIComponent(`/?${nextQs}`)}` : ''}`;
   // From the pricing page's Pro button (?plan=pro, or pro-year for yearly): straight to checkout after sign-in.
   const pro = !!intent.plan && /pro/i.test(intent.plan);
-  const yearly = pro && /year|annual/i.test(intent.plan || '');
+  const yearly = pro; // Pro is billed yearly only
   const siteHost = intent.site ? intent.site.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '') : '';
 
   // Invite emails land here with tokens in the URL hash; turn them into a session.
@@ -83,7 +83,7 @@ export default function LoginPage() {
           <form onSubmit={submit}>
             <h1>{pro ? 'Start Mise Pro' : siteHost ? <>Let’s get {siteHost} in order</> : 'Get your brand in order'}</h1>
             <p className="tip">{pro
-              ? <>Create your account or sign in, then upgrade securely with Stripe, {yearly ? 'billed yearly' : 'billed monthly'} per brand. Cancel any time.{siteHost ? <> Then Mise reads <b>{siteHost}</b> and builds your brand kit.</> : null}</>
+              ? <>Create your account or sign in, then upgrade securely with Stripe, {yearly ? 'billed yearly' : 'billed monthly'} per brand.{siteHost ? <> Then Mise reads <b>{siteHost}</b> and builds your brand kit.</> : null}</>
               : siteHost
               ? <>Create your account or sign in. Then Mise reads <b>{siteHost}</b>, builds your brand kit and makes your first designs from it.</>
               : intent.connect === 'claude' ? <>Create your account or sign in, and your connector link for Claude is one click away.</>

@@ -798,7 +798,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       if (curWs.role !== 'owner') { openSettings('plan'); return; }
       try { if (it.site) localStorage.setItem('mise.afterPay', JSON.stringify({ site: it.site, connect: it.connect, at: Date.now() })); } catch {}
       toast('Taking you to secure checkout…');
-      fetch('/api/billing/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: curWs.id, interval: /year|annual/i.test(it.plan) ? 'year' : 'month' }) })
+      fetch('/api/billing/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: curWs.id, interval: 'year' }) })
         .then(async (r) => {
           const j = await r.json().catch(() => ({}));
           if (r.ok && j.url) { location.href = j.url; return; }
