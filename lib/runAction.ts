@@ -6,7 +6,7 @@ import type { Repo } from './mcp/server';
 import { actionById, actionPrompt, SOCIAL_SIZES, type ActionId } from './actions';
 import { makeImages, startClip, type Fail } from './makeMedia';
 import { editImage, describeEdit } from './serverImage';
-import { uploadEmailCopy } from './mcp/more';
+import { uploadEmailCopy } from './uploadEmailCopy';
 import { nearestAspect } from './models';
 import { ASPECTS } from './imageGen';
 import { isAvailable } from './lifecycle';

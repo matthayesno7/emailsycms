@@ -16,6 +16,7 @@ import { imageSize } from '../imageSize';
 import { lifecyclePatch } from '../lifecycle';
 import { MAX_IMAGE_BYTES, MAX_IMPORT_BYTES } from '../plans';
 import { planOf } from '../billing';
+import { uploadEmailCopy } from '../uploadEmailCopy';
 
 export type MoreCtx = Ctx & { db?: SupabaseClient; appUrl?: string };
 
@@ -312,13 +313,6 @@ export async function collectionMembers(ctx: MoreCtx, collectionId: string, wsId
   return new Set(((rows || []) as any[]).filter((a) => matchesRules(a, rules, hits)).map((a) => a.id));
 }
 
-export async function uploadEmailCopy(db: SupabaseClient, wsId: string, buf: Buffer, mime: string) {
-  const e = await emailCopy(buf, mime);
-  if (!e) return {};
-  const path = `${wsId}/email/${crypto.randomUUID()}.${e.format}`;
-  const { error } = await db.storage.from('assets').upload(path, e.buf, { contentType: e.mime });
-  return error ? {} : { email: { path, width: e.width, height: e.height, bytes: e.buf.length, format: e.format } };
-}
 
 const madeIn = (a: AssetRow) => (a.provenance?.via === 'studio' && a.provenance?.spec ? 'create' : a.figma?.file_key || /figma/i.test(a.provenance?.model || '') ? 'figma' : 'upload');
 const ratioOf = (s: unknown) => { const m = String(s || '').match(/^\s*(\d+(?:\.\d+)?)\s*[:x/]\s*(\d+(?:\.\d+)?)\s*$/); return m ? Number(m[1]) / Number(m[2]) : null; };
