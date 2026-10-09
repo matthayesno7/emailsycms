@@ -1,3 +1,4 @@
+import { safe } from '@/lib/safeRoute';
 import { member } from '@/lib/makeAuth';
 import { hasImageGen } from '@/lib/imageGen';
 import { hasVideoGen } from '@/lib/videoGen';
@@ -11,7 +12,7 @@ export async function GET() {
   return Response.json({ image: hasImageGen(), video: hasVideoGen() });
 }
 
-export async function POST(request: Request) {
+export const POST = safe('make', async (request: Request) => {
   const body = await request.json().catch(() => null);
   const m = await member(String(body?.workspace_id || ''));
   if ('error' in m) return m.error;
@@ -22,4 +23,4 @@ export async function POST(request: Request) {
   });
   if ('error' in r) return Response.json({ error: r.error, code: r.code }, { status: r.status });
   return Response.json({ model: r.model, purpose: r.purpose, designs: r.designs, assets: r.assets.map((a) => ({ id: a.row.id, name: a.row.name, url: a.url, width: a.row.width, height: a.row.height })) });
-}
+});

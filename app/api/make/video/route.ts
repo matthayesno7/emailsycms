@@ -1,3 +1,4 @@
+import { safe } from '@/lib/safeRoute';
 import { member } from '@/lib/makeAuth';
 import { clipStatus, startClip } from '@/lib/makeMedia';
 
@@ -5,7 +6,7 @@ import { clipStatus, startClip } from '@/lib/makeMedia';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-export async function POST(request: Request) {
+export const POST = safe('make/video', async (request: Request) => {
   const body = await request.json().catch(() => null);
   const m = await member(String(body?.workspace_id || ''));
   if ('error' in m) return m.error;
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   });
   if ('error' in r) return Response.json({ error: r.error, code: r.code }, { status: r.status });
   return Response.json(r);
-}
+});
 
 export async function GET(request: Request) {
   const u = new URL(request.url);

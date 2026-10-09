@@ -1,3 +1,4 @@
+import { safe } from '@/lib/safeRoute';
 import { can, NEEDS } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
 import { askClaude, hasClaude, jsonFrom, MODEL } from '@/lib/anthropic';
@@ -17,7 +18,7 @@ export async function GET() {
   return Response.json({ enabled: hasClaude(), model: MODEL });
 }
 
-export async function POST(request: Request) {
+export const POST = safe('design', async (request: Request) => {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: 'Sign in first.' }, { status: 401 });
@@ -67,5 +68,5 @@ export async function POST(request: Request) {
   const spec = cleanSpec(jsonFrom(text), allowed);
   if (!spec) return Response.json({ error: 'Claude didn’t return a design. Try again.' }, { status: 502 });
   return Response.json({ spec, size: { w, h }, model: MODEL });
-}
+});
 

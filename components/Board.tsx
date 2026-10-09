@@ -111,6 +111,13 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
   const selAssets = selected.map(assetOf).filter(Boolean) as Asset[];
   const selImages = selected.filter((c) => usable(assetOf(c)) && !c.design);
   const selDesigns = cards.filter((c) => sel.includes(c.id) && c.design?.spec && c.design.status === 'ready');
+  // Selecting photos: what you type changes them, unless you choose Design or Video.
+  const hadImages = useRef(false);
+  useEffect(() => {
+    const has = selImages.length > 0;
+    if (has && !hadImages.current) setMode((m) => (m === 'design' ? 'photo' : m));
+    hadImages.current = has;
+  }, [selImages.length]);
 
   const fit = useCallback(() => {
     const el = cv.current; if (!el) return;
@@ -159,8 +166,14 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
 
   async function post(url: string, body: any) {
     const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, ...body }) }).catch(() => null);
-    const j = await r?.json().catch(() => null);
-    return { ok: !!r?.ok, status: r?.status || 0, j: j || {} };
+    const j: any = (await r?.json().catch(() => null)) || {};
+    const status = r?.status || 0;
+    // No explanation from the server: say what we can from the status.
+    if (!r?.ok && !j.error) j.error = !r ? 'Couldn’t reach Mise. Check your connection and try again.'
+      : status === 401 ? 'You’ve been signed out. Reload the page and sign in again.'
+      : status === 502 || status === 503 || status === 504 ? 'Mise took too long to answer. Try again in a moment.'
+      : `Couldn’t make that (error ${status}). Try again.`;
+    return { ok: !!r?.ok, status, j };
   }
   const blocked = (status: number, j: any, reason: 'media' | 'edit') => {
     if (status === 402 || j?.code === 'upgrade') { openUpgrade({ reason }); return true; }
@@ -358,6 +371,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
 
   async function runWords(prompt: string, m: Mode, size?: { w: number; h: number }) {
     const p = prompt.trim(); if (!p) return;
+    if (!(m === 'design' ? caps.design : m === 'photo' ? caps.image : caps.video)) { onClaude(p); return; } // not switched on here: Claude makes it
     say({ role: 'you', text: p });
     autoName(p);
     if (m === 'design') { await runDesign(p, size || formatFor(p)); return; }
@@ -390,6 +404,11 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
     if (selDesigns.length) {
       refineDesigns(selDesigns, t);
       if (selImages.length) runAction('edit', '', t);
+    } else if (selImages.length && mode === 'video') {
+      runAction('animate', 'Slow push-in', t);
+    } else if (selImages.length && mode === 'design') {
+      const names = selAssets.slice(0, 4).map((a) => `“${a.name}”`).join(', ');
+      runWords(`${t}. Use ${selAssets.length === 1 ? 'the photo' : 'the photos'} ${names}.`, 'design');
     } else if (selImages.length) {
       if (/\b(animate|video|clip|motion)\b/i.test(t)) runAction('animate', 'Slow push-in', t);
       else if (/\b(resize|sizes|instagram sizes|social sizes)\b/i.test(t)) runAction('resize');
@@ -638,9 +657,12 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
               {selAssets.length + selDesigns.length > 5 && <em>+{selAssets.length + selDesigns.length - 5}</em>}
               <button type="button" className="linkish" onClick={() => { setSel([]); setAsk(null); }}>Clear</button>
             </div>
-          ) : (
+          ) : null}
+          {!(selDesigns.length && !selImages.length) && (
             <div className="seg bd-modes" role="group" aria-label="What to make">
-              {(['design', 'photo', 'video'] as Mode[]).map((m) => <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}>{m === 'design' ? 'Design' : m === 'photo' ? 'Photo' : 'Video'}</button>)}
+              {(['design', 'photo', 'video'] as Mode[]).map((m) => <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}
+                title={selImages.length ? (m === 'design' ? 'Designs that use the selected photos' : m === 'photo' ? 'Change the selected photos' : 'A clip from the selected photo') : undefined}>
+                {selImages.length ? (m === 'design' ? 'Design with it' : m === 'photo' ? 'Change it' : 'Animate it') : MODE_LABEL[m]}</button>)}
             </div>
           )}
 
@@ -659,7 +681,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
               </div>
             );
           })()}
-          {selImages.length > 0 && !ask && (
+          {selImages.length > 0 && !ask && mode === 'photo' && (
             <div className="bd-sugs">
               {SUGGESTED.filter((a) => a.batch || selImages.length === 1).map((a) => (
                 <button key={a.id} type="button" title={`${a.blurb} · ${cost(a)}`} onClick={() => (a.kind === 'resize' ? runAction('resize') : setAsk(a))}>{a.title}</button>
@@ -680,12 +702,17 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
 
           <div className="bd-box">
             <textarea className="in" rows={2} value={text} onChange={(e) => setText(e.target.value)} maxLength={1500}
-              placeholder={ask?.ask ? ask.ask.placeholder : selDesigns.length ? 'Say what to change: “darker”, “bigger headline”, “use the knitwear photo”' : selImages.length ? 'Say what to change, e.g. “make it autumn”' : mode === 'design' ? 'e.g. A LinkedIn banner for our autumn launch' : mode === 'photo' ? 'e.g. Our trainers on a wet street at dusk' : 'e.g. Slow push-in on the product, morning light'}
+              placeholder={ask?.ask ? ask.ask.placeholder : selDesigns.length ? 'Say what to change: “darker”, “bigger headline”, “use the knitwear photo”'
+                : selImages.length && mode === 'video' ? 'Describe the motion, e.g. “slow push-in, steam rising, soft café sounds”'
+                : selImages.length && mode === 'design' ? 'e.g. An autumn sale email hero' : selImages.length ? 'Say what to change, e.g. “make it autumn”' : mode === 'design' ? 'e.g. A LinkedIn banner for our autumn launch' : mode === 'photo' ? 'e.g. Our trainers on a wet street at dusk' : 'e.g. Slow push-in on the product, morning light'}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (ask?.ask && text.trim()) { const a = ask; setAsk(null); const t = text; setText(''); runAction(a.id, '', t); } else send(); } }} />
             <button className="primary" type="button" aria-label="Send" disabled={!text.trim()} onClick={() => { if (ask?.ask) { const a = ask; setAsk(null); const t = text; setText(''); runAction(a.id, '', t); } else send(); }}>↑</button>
           </div>
           <div className="bd-foot">
-            <span className="tip">{selDesigns.length ? `Changes ${selDesigns.length === 1 ? 'the selected design' : `${selDesigns.length} designs`}, 1 design each` : selImages.length ? `Changes ${selImages.length === 1 ? 'the selected photo' : `${selImages.length} photos`}, 2 versions each` : mode === 'design' ? 'Three options in your brand kit' : mode === 'photo' ? 'Two takes, in your brand’s style' : 'An 8-second clip with sound'}</span>
+            <span className="tip">{selDesigns.length ? `Changes ${selDesigns.length === 1 ? 'the selected design' : `${selDesigns.length} designs`}, 1 design each`
+              : selImages.length && mode === 'video' ? 'A clip with sound from the selected photo'
+              : selImages.length && mode === 'design' ? 'Three designs that use the selected photos'
+              : selImages.length ? `Changes ${selImages.length === 1 ? 'the selected photo' : `${selImages.length} photos`}, 2 versions each` : mode === 'design' ? 'Three options in your brand kit' : mode === 'photo' ? 'Two takes, in your brand’s style' : 'An 8-second clip with sound'}</span>
             <button type="button" className="linkish" onClick={deleteBoard}>Delete board</button>
           </div>
         </div>

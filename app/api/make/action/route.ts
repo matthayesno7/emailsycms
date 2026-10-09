@@ -1,3 +1,4 @@
+import { safe } from '@/lib/safeRoute';
 import { member } from '@/lib/makeAuth';
 import { runAction } from '@/lib/runAction';
 
@@ -6,7 +7,7 @@ import { runAction } from '@/lib/runAction';
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+export const POST = safe('make/action', async (request: Request) => {
   const b = await request.json().catch(() => null);
   const ws = String(b?.workspace_id || '');
   const m = await member(ws);
@@ -15,4 +16,4 @@ export async function POST(request: Request) {
   const r = await runAction(m.repo, m.db, { wsId: ws, userId: m.user.id, role: me?.role || '', action: b?.action, assetIds: b?.asset_ids, choice: b?.choice, detail: b?.detail, sizes: b?.sizes });
   if ('error' in r) return Response.json({ error: r.error, code: r.code }, { status: r.status });
   return Response.json(r);
-}
+});
