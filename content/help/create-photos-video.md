@@ -32,6 +32,21 @@ A clip takes one to three minutes. You can carry on working; it saves itself.
 ## Where results go
 Results appear under the composer, each tagged **Made with {model}**. Photos and videos are saved to **Review** as **drafts**: approve them to use or share them. **Make another** tries again with the same description.
 
+## Start from a picture you already have: Make…
+Open any photo, logo or product and click **Make…** (or select several on Assets and click **Make…** in the bar at the bottom). Pick what you want:
+
+| Action | What it does | Counts as |
+|---|---|---|
+| **Resize for social** | Instagram post, square, story, LinkedIn, X and email hero sizes in one go, cropped around the focal point. No AI. Saved as copies next to the original. | Nothing |
+| **New scene** | The same product, exactly as it is, somewhere new. Pick a scene or describe one. | 2 designs per photo |
+| **Change the light or season** | Golden hour, studio light, night, autumn, winter, festive… Same shot, new mood. | 2 designs per photo |
+| **Clean background** | The subject on plain white, your brand colour or a studio backdrop. | 2 designs per photo |
+| **Translate the words** | Every word in the picture in another language, same layout. | 2 designs per photo |
+| **Mock it up** | See it on a billboard, a phone, a shop window or a magazine page. | 2 designs per photo |
+| **Animate** | A short clip with sound from the picture (one at a time). | 10 designs |
+
+Up to 10 pictures at once (Animate: one). Everything AI makes is saved to **Review** as drafts; resized copies keep the original's status, tags and folder. Make… is on **Pro**. Resizing needs an editor, admin or owner; contributors can use the AI actions, and what they make waits for review as usual.
+
 ## Which model Mise uses
 | Job | Model | Counts as |
 |---|---|---|

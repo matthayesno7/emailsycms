@@ -312,7 +312,7 @@ export async function collectionMembers(ctx: MoreCtx, collectionId: string, wsId
   return new Set(((rows || []) as any[]).filter((a) => matchesRules(a, rules, hits)).map((a) => a.id));
 }
 
-async function uploadEmailCopy(db: SupabaseClient, wsId: string, buf: Buffer, mime: string) {
+export async function uploadEmailCopy(db: SupabaseClient, wsId: string, buf: Buffer, mime: string) {
   const e = await emailCopy(buf, mime);
   if (!e) return {};
   const path = `${wsId}/email/${crypto.randomUUID()}.${e.format}`;

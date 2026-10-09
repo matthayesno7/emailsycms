@@ -30,6 +30,7 @@ import { reviewQueue } from '@/lib/review';
 import { PlanSettings, UpgradeModal, openUpgrade, type UpgradeAsk } from './Billing';
 import LibrarySync from './LibrarySync';
 import Integrations from './Integrations';
+import MakeMenu from './MakeMenu';
 import Activity from './Activity';
 import HelpAsk from './help/HelpAsk';
 import { can, NEEDS, roleError } from '@/lib/roles';
@@ -134,6 +135,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [upgrade, setUpgrade] = useState<UpgradeAsk | null>(null);  // the upgrade pop-up, and why it opened
   const [limitHit, setLimitHit] = useState<{ message: string; reason?: string } | null>(null);  // out of Studio designs this month
   const [plan, setPlan] = useState<Plan>('free');
+  const [makeFor, setMakeFor] = useState<string[] | null>(null); // "Make…" on these files
   const shownDesignsUpsell = useRef(false);
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
@@ -1270,6 +1272,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onDelete={() => deleteAsset(openAsset)}
           pro={plan !== 'free'}
           replacements={items.filter((i) => i.kind === openAsset.kind && i.id !== openAsset.id && isAvailable(i)).map((i) => ({ id: i.id, name: i.name })).sort((a, b) => a.name.localeCompare(b.name))}
+          onMake={can.add(curWs?.role) ? () => setMakeFor([openAsset.id]) : undefined}
           onUpgrade={(reason) => { if (reason !== 'edit') openEditor(null); openUpgrade({ reason: reason === 'edit' ? 'edit' : 'lifecycle' }); }}
           usedIn={usedIn[openAsset.id] || []}
           onOpenBlock={(b) => showBlock(blockDraft(b))}
@@ -1377,6 +1380,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       {selected.length > 0 && page === 'library' && !openId && !block && (
         <div className="selbar" role="toolbar" aria-label="Selected files">
           <b>{selected.length} selected</b>
+          {can.add(curWs?.role) && items.some((i) => selected.includes(i.id) && ['image', 'logo', 'product'].includes(i.kind) && i.storage_path && !/svg|gif|video/.test(i.mime || '')) && (
+            <button className="btn" type="button" onClick={() => setMakeFor(items.filter((i) => selected.includes(i.id) && ['image', 'logo', 'product'].includes(i.kind) && i.storage_path && !/svg|gif|video/.test(i.mime || '')).map((i) => i.id).slice(0, 10))}><Icon.Sparkle size={15} />Make…</button>
+          )}
           <button className="primary" type="button" onClick={() => setShareTarget({ kind: 'assets', asset_ids: selected, title: `${selected.length} file${selected.length === 1 ? '' : 's'} from ${curWs?.name || 'us'}` })}><Icon.Share size={15} />Share</button>
           {folders.length > 0 && (
             <select className="in" value="" aria-label="Move to folder" onChange={async (e) => {
@@ -1395,6 +1401,12 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           <button className="btn quiet" type="button" onClick={() => setSelected(visible.filter((i) => i.kind !== 'block').map((i) => i.id))}>Select all {visible.filter((i) => i.kind !== 'block').length}</button>
           <button className="btn quiet" type="button" onClick={() => setSelected([])}>Clear</button>
         </div>
+      )}
+      {makeFor && curWs && (
+        <MakeMenu wsId={curWs.id} role={curWs.role} plan={plan} toast={toast}
+          assets={makeFor.map((id) => items.find((i) => i.id === id)).filter((a): a is Asset => !!a).map((a) => ({ id: a.id, name: a.name, thumb: srcOf(a) }))}
+          onClose={() => setMakeFor(null)}
+          onOpen={(id) => { setMakeFor(null); setSelected([]); openEditor(id); }} />
       )}
       {shareTarget && curWs && (
         <>

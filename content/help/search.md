@@ -39,4 +39,4 @@ Files that are archived, expired or obsolete only appear under **No longer avail
 - Videos play when you hover over them.
 
 ## Selecting several files
-Tick the box on a tile. Once anything is selected, clicking tiles adds them. The bar at the bottom lets you **Share**, **Move to…** a folder, **Select all** or **Clear**. Press Esc to clear.
+Tick the box on a tile. Once anything is selected, clicking tiles adds them. The bar at the bottom lets you **Share**, **Make…** new versions (see [Make…](create-photos-video#start-from-a-picture-you-already-have-make)), **Move to…** a folder, **Select all** or **Clear**. Press Esc to clear.

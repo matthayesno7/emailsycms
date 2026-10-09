@@ -28,8 +28,9 @@ const SIZES: [string, string, number | null][] = [['original', 'Original size', 
 // Opens at ?asset=<id>, so it has its own link and Back works.
 // Two ways to change it: Edit (hands-on, free, saves a new version; Studio designs reopen in the
 // Studio with their layout live) and AI edit (prompt-led, coming next).
-export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, design, onDesignSaved, onAddPreset, pro = false, replacements = [], onUpgrade }: {
+export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, design, onDesignSaved, onAddPreset, pro = false, replacements = [], onUpgrade, onMake }: {
   it: Asset;
+  onMake?: () => void; // "Make…": new versions of this picture (resize for social, new scene, animate…)
   folders?: { id: string; name: string }[];
   onShare?: () => Promise<string | null>;
   onEmailCopy?: () => void; // download the email-ready version
@@ -195,7 +196,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         {!editing && (src || isProduct) && (
           <div className="modes" role="group" aria-label="Change this asset">
             {canEdit && <button className="btn" type="button" onClick={startEdit} title={isProduct ? 'Name, label, description, price, button, link and photo' : madeIn === 'create' ? 'Made in Create: change the words, photos and logo here, with the layout live' : madeIn === 'figma' ? 'Made in Figma: say what to change and Claude edits it there' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />{editLabel}</button>}
-            {!isVideo && src && <button className="btn" type="button" disabled title="Remove backgrounds, extend, upscale and change it with words. Coming next."><Icon.Sparkle size={15} />AI edit <em className="soon">Soon</em></button>}
+            {!isVideo && !isSvg && src && onMake && !/gif/.test(it.mime || '') && <button className="btn" type="button" onClick={onMake} title="Resize for social, a new scene, new light, a clean background, translated words, a mock-up or a short clip"><Icon.Sparkle size={15} />Make…</button>}
           </div>
         )}
         {!editing && src && isVideo && <a className="btn" href={src} download={`${it.name.replace(/[^\w.-]+/g, '-')}.${(it.mime || '').includes('webm') ? 'webm' : (it.mime || '').includes('quicktime') ? 'mov' : 'mp4'}`} target="_blank" rel="noreferrer">Download</a>}
