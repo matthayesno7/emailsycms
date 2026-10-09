@@ -14,7 +14,25 @@ import type { Asset, Ws } from './Library';
 // library as a draft (Review) and placed on the board next to what it came from.
 export type Mode = 'design' | 'photo' | 'video';
 // How a board starts: with files (and optionally what to do with them), or with words.
-export type Start = { mode: Mode; prompt?: string; size?: { w: number; h: number }; assets?: string[] };
+// draft: put the words in the prompt for the person to send, rather than running them.
+export type Start = { mode: Mode; prompt?: string; size?: { w: number; h: number }; assets?: string[]; draft?: boolean };
+// What this Mise can make right here (the rest goes to Claude).
+export type Caps = { design: boolean; image: boolean; video: boolean };
+
+// Sizes for the create stage, drawn at their real proportions.
+const FORMATS: { label: string; w: number; h: number }[] = [
+  { label: 'Email hero', w: 1200, h: 600 },
+  { label: 'LinkedIn banner', w: 1128, h: 191 },
+  { label: 'LinkedIn post', w: 1200, h: 627 },
+  { label: 'Instagram post', w: 1080, h: 1350 },
+  { label: 'Story', w: 1080, h: 1920 },
+  { label: 'Square', w: 1080, h: 1080 },
+];
+const VIDEO_FORMATS: { label: string; w: number; h: number }[] = [
+  { label: 'Reel or story', w: 1080, h: 1920 },
+  { label: 'Landscape', w: 1920, h: 1080 },
+];
+const MODE_LABEL: Record<Mode, string> = { design: 'Design', photo: 'Photo', video: 'Video' };
 
 const TRIES: Record<Mode, string[]> = {
   design: ['Autumn sale email hero', 'New arrivals LinkedIn post', 'Instagram story for a product drop'],
@@ -24,8 +42,9 @@ const TRIES: Record<Mode, string[]> = {
 const usable = (a?: Asset | null) => !!a && ['image', 'logo', 'product'].includes(a.kind) && !!a.storage_path && !/svg|gif|video/.test(a.mime || '');
 const now = () => new Date().toISOString();
 
-export default function Board({ boardId, ws, supabase, items: library, urls, plan, start, onStarted, onBack, onOpen, onDesign, toast }: {
+export default function Board({ boardId, ws, supabase, items: library, urls, plan, caps, start, onStarted, onBack, onOpen, onDesign, onClaude, toast }: {
   boardId: string; ws: Ws; supabase: SupabaseClient; items: Asset[]; urls: Record<string, string>; plan: string;
+  caps: Caps; onClaude: (prompt: string) => void;
   start?: Start | null; onStarted?: () => void;
   onBack: () => void; onOpen: (id: string) => void;
   onDesign: (brief: string, size: { w: number; h: number }, done: (id: string, size?: { w: number; h: number }) => void) => boolean;
@@ -41,6 +60,10 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   const [text, setText] = useState('');
   const [ask, setAsk] = useState<ActionDef | null>(null); // a suggestion waiting for its option
   const [adding, setAdding] = useState(false);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null); // the create stage's size (null: from the words)
+  const stageBox = useRef<HTMLTextAreaElement>(null);
+  // A new board takes its name from the first thing made or added to it.
+  const autoName = (t: string) => setName((n) => (!n.trim() || n === 'Untitled board' || n === 'New board' ? t.trim().replace(/\s+/g, ' ').slice(0, 60) : n));
   const cv = useRef<HTMLDivElement>(null);
   const threadEnd = useRef<HTMLDivElement>(null);
   const cardsRef = useRef(cards); cardsRef.current = cards;
@@ -169,6 +192,7 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   async function runWords(prompt: string, m: Mode, size?: { w: number; h: number }) {
     const p = prompt.trim(); if (!p) return;
     say({ role: 'you', text: p });
+    autoName(p);
     if (m === 'design') {
       const ok = onDesign(p, size || formatFor(p), (id, sz) => {
         const spot = place(cardsRef.current, [sz ? sz.w / sz.h : 2])[0];
@@ -182,7 +206,7 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
     }
     if (plan === 'free') { openUpgrade({ reason: 'media' }); return; }
     if (m === 'video') {
-      const vertical = /reel|story|stories|vertical|tiktok|9:16/i.test(p);
+      const vertical = size ? size.h > size.w : /reel|story|stories|vertical|tiktok|9:16/i.test(p);
       const hs = holders(null, [vertical ? 9 / 16 : 16 / 9], { kind: 'video', label: 'Clip' });
       const { ok, status, j } = await post('/api/make/video', { prompt: p, aspect: vertical ? '9:16' : '16:9', seconds: 8 });
       if (blocked(status, j, 'media')) { drop(hs); return; }
@@ -219,6 +243,12 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
     if (!loaded || !start || started.current) return;
     started.current = true;
     setMode(start.mode);
+    if (start.draft) {
+      setText(start.prompt || ''); setSize(start.size || null);
+      setTimeout(() => stageBox.current?.focus(), 60);
+      onStarted?.();
+      return;
+    }
     const add = start.assets?.length ? addAssets(start.assets) : [];
     if (add.length) { setSel(add.map((a) => a.id)); setTimeout(fit, 80); }
     const p = (start.prompt || '').trim();
@@ -309,8 +339,21 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   const cost = (a: ActionDef) => { const d = actionDesigns(a) * (a.batch ? Math.max(1, selImages.length) : 1); return a.kind === 'resize' ? 'No AI' : `${d} design${d === 1 ? '' : 's'}`; };
   const single = selAssets.length === 1 ? selAssets[0] : null;
 
+  // An empty board is the create stage: say what to make, or bring in files. The chat appears once something's on it.
+  const bare = loaded && !cards.length && !thread.length;
+  const can = mode === 'design' ? caps.design : mode === 'photo' ? caps.image : caps.video;
+  function go() {
+    const t = text.trim();
+    if (!t) { stageBox.current?.focus(); return; }
+    if (!can) { onClaude(t); return; }
+    setText(''); runWords(t, mode, size || undefined);
+  }
+  const sizes = mode === 'video' ? VIDEO_FORMATS : FORMATS;
+  const custom = size && !sizes.some((f) => f.w === size.w && f.h === size.h) ? size : null;
+  const shape = (w: number, h: number) => { const r = w / h; return r >= 1 ? { width: 18, height: Math.max(4, Math.round(18 / r)) } : { width: Math.max(8, Math.round(16 * r)), height: 16 }; };
+
   return (
-    <div className="bd">
+    <div className={'bd' + (bare ? ' bare' : '')}>
       <div className="bd-canvas" ref={cv} onPointerDown={downBg} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         <div className="bd-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})` }}>
           {cards.map((c) => {
@@ -330,18 +373,46 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
             );
           })}
         </div>
-        {!cards.length && loaded && (
-          <div className="bd-empty">
-            <b>An empty board</b>
-            <span>Add files from your library to change them, or describe something new on the right.</span>
-            <button className="primary" type="button" onClick={() => setAdding(true)}>Add files</button>
+        {bare && (
+          <div className="bd-stage" onPointerDown={(e) => e.stopPropagation()}>
+            <h2>What do you want to make?</h2>
+            <div className="seg" role="group" aria-label="What to make">
+              {(['design', 'photo', 'video'] as Mode[]).map((m) => <button key={m} type="button" aria-pressed={mode === m} onClick={() => { setMode(m); setSize(null); }}>{MODE_LABEL[m]}</button>)}
+            </div>
+            <div className="bd-stage-box">
+              <textarea ref={stageBox} className="in" rows={3} autoFocus value={text} maxLength={1500} onChange={(e) => setText(e.target.value)}
+                aria-label="Describe what to make"
+                placeholder={mode === 'design' ? 'e.g. A LinkedIn banner for our autumn launch, warm and simple' : mode === 'photo' ? 'e.g. Our trainers on a wet London street at dusk, soft reflections' : 'e.g. Slow push-in on the product on a marble counter, morning light, café sounds'}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } }} />
+            </div>
+            <div className="cr-sizes" role="group" aria-label="Size">
+              {mode !== 'video' && <button type="button" className="cr-size" aria-pressed={!size} onClick={() => setSize(null)}><b>Auto</b></button>}
+              {sizes.map((f) => (
+                <button key={f.label} type="button" className="cr-size" title={`${f.w}×${f.h}`} aria-pressed={!!size && size.w === f.w && size.h === f.h}
+                  onClick={() => setSize(size && size.w === f.w && size.h === f.h ? null : { w: f.w, h: f.h })}>
+                  <span className="cr-shape" style={shape(f.w, f.h)} aria-hidden /><b>{f.label}</b>
+                </button>
+              ))}
+              {custom && <button type="button" className="cr-size" aria-pressed><span className="cr-shape" style={shape(custom.w, custom.h)} aria-hidden /><b>{custom.w}×{custom.h}</b></button>}
+            </div>
+            {!text.trim() && <div className="bd-sugs bd-stage-tries"><span>Try</span>{TRIES[mode].map((t) => <button key={t} type="button" onClick={() => { setText(t); stageBox.current?.focus(); }}>{t}</button>)}</div>}
+            <div className="bd-stage-go">
+              <span className="tip">{!can ? `${MODE_LABEL[mode]} isn’t switched on here yet, so Claude makes it with your brand kit and saves it to Mise.`
+                : mode === 'design' ? 'Three options in your brand kit.' : mode === 'photo' ? 'Two takes in your brand’s style.' : 'A clip with sound, up to 8 seconds.'} Saved to Review as drafts.</span>
+              <button className="primary" type="button" onClick={go}>{!can ? 'Make it in Claude' : mode === 'design' ? 'Design 3 options' : mode === 'photo' ? 'Make 2 photos' : 'Make a clip'} <span aria-hidden>→</span></button>
+            </div>
+            <div className="bd-stage-or"><span>or</span></div>
+            <button type="button" className="bd-stage-add" onClick={() => setAdding(true)}>
+              <span className="bd-stage-plus" aria-hidden>+</span>
+              <span><b>Start from your files</b><small>Bring in photos, logos or products to edit, resize, restyle or animate</small></span>
+            </button>
           </div>
         )}
         <div className="bd-top" onPointerDown={(e) => e.stopPropagation()}>
           <button className="btn quiet" type="button" onClick={onBack}>← Boards</button>
           <input className="bd-name" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} aria-label="Board name" />
         </div>
-        <div className="bd-tools" onPointerDown={(e) => e.stopPropagation()}>
+        {!bare && <div className="bd-tools" onPointerDown={(e) => e.stopPropagation()}>
           <button type="button" className="btn" onClick={() => setAdding(true)}>+ Add files</button>
           <span className="bd-zoom">
             <button type="button" aria-label="Zoom out" onClick={() => zoom(1 / 1.25)}>−</button>
@@ -349,14 +420,14 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
             <button type="button" aria-label="Zoom in" onClick={() => zoom(1.25)}>+</button>
             <button type="button" onClick={fit}>Fit</button>
           </span>
-        </div>
+        </div>}
       </div>
 
-      <aside className="bd-panel" aria-label="Make with AI">
+      {!bare && <aside className="bd-panel" aria-label="Make with AI">
         <div className="bd-thread" aria-live="polite">
           {!thread.length && (
             <div className="bd-hello">
-              <b>What do you want to make?</b>
+              <b>What next?</b>
               <span>Select something on the board and say what to change, or describe something new. Everything is made in your brand and saved to Review as a draft.</span>
             </div>
           )}
@@ -413,9 +484,9 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
             <button type="button" className="linkish" onClick={deleteBoard}>Delete board</button>
           </div>
         </div>
-      </aside>
+      </aside>}
 
-      {adding && <AddFiles library={library} urls={urls} onClose={() => setAdding(false)} onAdd={(ids) => { const add = addAssets(ids); setSel(add.map((a) => a.id)); setAdding(false); setTimeout(fit, 60); }} />}
+      {adding && <AddFiles library={library} urls={urls} onClose={() => setAdding(false)} onAdd={(ids) => { const add = addAssets(ids); if (add[0]) autoName(add[0].name || 'Board'); setSel(add.map((a) => a.id)); setAdding(false); setTimeout(fit, 60); }} />}
     </div>
   );
 }

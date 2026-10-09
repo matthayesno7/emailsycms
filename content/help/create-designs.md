@@ -10,8 +10,8 @@ order: 1
 **Create** turns a sentence into finished, on-brand designs: email heroes, LinkedIn banners and posts, Instagram posts and stories, ads and more. Designs use your brand kit and your approved photos and logos.
 
 ## Make a design
-1. Open **Create** and make sure **Design** is selected at the top.
-2. **Describe it**: "Autumn sale email hero, warm and simple". Or click one of the **Try** suggestions.
+1. Open **Create** and click **New board**. An empty board asks **What do you want to make?**
+2. Make sure **Design** is selected, then **describe it**: "Autumn sale email hero, warm and simple". Or click one of the **Try** suggestions.
 3. **Size** (optional): pick Email hero, LinkedIn banner, LinkedIn post, Instagram post, Story or Square ad, or leave it on **Auto** and Mise picks from your words.
 4. Click **Design 3 options**.
 
@@ -25,14 +25,14 @@ Three designs appear in a few seconds, each in a different style (image-led, spl
 - Change the brief or size at the top and click **Redesign** to start again.
 
 ## Save and use it
-- **Save** adds it to your library ("Saved to your library"). Click **✓ Saved** to open it.
+- **Save** adds it to your library and puts it on the board, so you can keep working on it there.
 - **PNG** downloads it.
 - **Edit in Figma** saves it and asks Claude to rebuild it in your Figma file with live layers.
 
 Designs saved from Create can be edited later from the library: open it and click **Edit**. See [Editing](editing).
 
 ## Start from an idea
-Under **Start from an idea** are ready-made briefs, shown with your own brand and photos: email, social, ads, product shots, video and brand. Click one to design it straight away, **Copy** its prompt, or **Open in Claude**.
+Under **Start from an idea** on Create are ready-made briefs, shown with your own brand and photos: email, social, ads, product shots, video and brand. Click one and it opens on a new board with the brief already written and the size set. Change the words if you like, then make it. **Copy** copies the brief to use in Claude.
 
 ## What it uses
 Only **approved, available** photos, products and logos. Drafts and files that are archived, expired or obsolete are never used.

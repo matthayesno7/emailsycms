@@ -2,44 +2,16 @@
 import { openInClaude as openClaude } from '@/lib/openClaude';
 import { runKey } from '@/lib/plans';
 import { openUpgrade } from './Billing';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import Studio, { formatFor } from './Studio';
-import Board, { type Start } from './Board';
-import { JOBS, VIDEO_JOB, PURPOSES, pickJob, nearestAspect, type Purpose } from '@/lib/models';
+import Board, { type Mode, type Start } from './Board';
 import type { StudioBrand } from './DesignCanvas';
 import { CATEGORIES, MOCKS, PROMPTS, USE_LABEL, fillPrompt, type PromptCategory } from '@/lib/prompts';
 import { normaliseKit, type BrandKitRow } from '@/lib/brandKit';
 import Mock, { type Brand } from './Mock';
-import { Icon } from './icons';
 import type { Asset, Ws } from './Library';
 
-// Quick formats for the composer, drawn at their real proportions.
-const FORMATS: { label: string; size: [number, number]; ask: string }[] = [
-  { label: 'Email hero', size: [1200, 600], ask: 'an email hero banner, 1200×600' },
-  { label: 'LinkedIn banner', size: [1128, 191], ask: 'a LinkedIn company banner, 1128×191' },
-  { label: 'LinkedIn post', size: [1200, 627], ask: 'a LinkedIn post image, 1200×627' },
-  { label: 'Instagram post', size: [1080, 1350], ask: 'an Instagram post, 1080×1350' },
-  { label: 'Story', size: [1080, 1920], ask: 'an Instagram story, 1080×1920' },
-  { label: 'Square ad', size: [1080, 1080], ask: 'a square social ad, 1080×1080' },
-];
-// Video comes out in the two shapes the video model makes.
-const VIDEO_FORMATS: { label: string; aspect: '9:16' | '16:9'; size: [number, number] }[] = [
-  { label: 'Reel or story', aspect: '9:16', size: [1080, 1920] },
-  { label: 'Landscape banner', aspect: '16:9', size: [1920, 1080] },
-];
-type Mode = 'design' | 'photo' | 'video';
-const MODES: [Mode, string][] = [['design', 'Design'], ['photo', 'Photo'], ['video', 'Video']];
-
-// One-click starters for the composer: words, and the size they suit (index into FORMATS).
-const TRIES: { text: string; fmt: number }[] = [
-  { text: 'Autumn sale email hero', fmt: 0 },
-  { text: 'New arrivals LinkedIn post', fmt: 2 },
-  { text: 'Instagram story for a product drop', fmt: 4 },
-];
-
-// The home page: Claude-first and visual. Describe it or pick a design from the library;
-// Claude makes it with the brand kit and assets and saves it back for approval.
 // Ideas the Studio can design right here (single-canvas designs; AI photos and video go to Claude).
 const LIVE = new Set(['hero', 'strip', 'post', 'story', 'thumb', 'slide']);
 
@@ -51,13 +23,13 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   plan?: string;
   startAssets?: string[] | null; onStartAssetsUsed?: () => void; // "Open in Create" from a file or a selection
 }) {
-  // ---------- boards: everything is made and edited on one ----------
+  // Everything in Create happens on a board: a new one opens as the create stage.
   const [board, setBoard] = useState<string | null>(null);
   const [start, setStart] = useState<Start | null>(null);
   const [boards, setBoards] = useState<{ id: string; name: string; items: any[]; updated_at: string }[] | null>(null);
   useEffect(() => {
     if (board) return;
-    supabase.from('boards').select('id, name, items, updated_at').eq('workspace_id', ws.id).order('updated_at', { ascending: false }).limit(12)
+    supabase.from('boards').select('id, name, items, updated_at').eq('workspace_id', ws.id).order('updated_at', { ascending: false }).limit(24)
       .then(({ data }) => setBoards(data || []));
   }, [ws.id, board, supabase]);
   async function newBoard(name: string, s: Start | null) {
@@ -74,27 +46,15 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   }, [startAssets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [cat, setCat] = useState<PromptCategory | 'all'>('all');
-  const [ask, setAsk] = useState('');
-  const [fmt, setFmt] = useState<number | null>(null);
-  const [picked, setPicked] = useState<string | null>(null); // prompt id loaded into the composer
-  const box = useRef<HTMLTextAreaElement>(null);
   const [live, setLive] = useState<boolean | null>(null); // can the Studio design here (API key set)?
   const [studio, setStudio] = useState<{ brief: string; size: { w: number; h: number }; done?: (id: string, size?: { w: number; h: number }) => void } | null>(null);
   useEffect(() => { fetch('/api/design').then((r) => r.json()).then((j) => setLive(!!j.enabled)).catch(() => setLive(false)); }, []);
-  // Photos and video made in Mise itself, with the right model for the job.
-  const [mode, setMode] = useState<Mode>('design');
   const [media, setMedia] = useState<{ image: boolean; video: boolean }>({ image: false, video: false });
   useEffect(() => { fetch('/api/make').then((r) => r.json()).then((j) => setMedia({ image: !!j.image, video: !!j.video })).catch(() => {}); }, []);
-  const [purpose, setPurpose] = useState<Purpose>('auto');
-  const [modelOpen, setModelOpen] = useState(false);
-  const [count, setCount] = useState(1);
-  const [vfmt, setVfmt] = useState(0);
-  const [seconds, setSeconds] = useState(8);
-  const [refId, setRefId] = useState('');
+  // First designs after sign-up: a board that starts designing straight away.
   useEffect(() => {
     if (!autoBrief || live === null) return;
-    if (live) newBoard(autoBrief, { mode: 'design', prompt: autoBrief, size: formatFor(autoBrief) });
-    else setAsk(autoBrief);
+    newBoard(autoBrief, { mode: 'design', prompt: autoBrief, size: formatFor(autoBrief), draft: !live });
     onAutoUsed?.();
   }, [autoBrief, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -132,35 +92,6 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   const needsFigma = (p: (typeof PROMPTS)[number]) => p.id === 'kit-figma' || p.uses.includes('motion') || (p.uses.includes('ai-video') && !media.video);
   const shown = PROMPTS.filter((p) => (cat === 'all' || p.category === cat) && (!!ws.figma_file_url || !needsFigma(p)));
 
-  const text = (() => {
-    const t = ask.trim();
-    if (picked) return t;
-    if (!t && fmt === null) return '';
-    const f = fmt !== null ? FORMATS[fmt] : null;
-    // With a Figma file, Claude builds it there; without, it uses Mise's own tools (Studio layouts, generate_image).
-    const how = ws.figma_file_url ? `make it in Figma (${ws.figma_file_url})` : 'make it with Mise’s own tools (its image model for any new imagery; no Figma)';
-    return `For ${ws.name}: ${t || `make ${f?.ask}`}${t && f ? `. Make it ${f.ask}` : ''}. Use our Mise brand kit and assets, ${how}, and save the result to Mise.`;
-  })();
-  const blanks = { product: text.includes('[product]'), image: text.includes('[image]') };
-  const chosen = fmt !== null ? FORMATS[fmt] : null;
-  const pickedIdea = picked ? PROMPTS.find((p) => p.id === picked) : null;
-  const pickedLive = !!pickedIdea && LIVE.has(MOCKS[pickedIdea.id]?.layout) && !pickedIdea.uses.some((u) => u === 'ai-image' || u === 'ai-video' || u === 'motion');
-  const canDesign = mode === 'design' && !!live && (!picked || pickedLive);
-  const canMake = (mode === 'photo' && media.image) || (mode === 'video' && media.video);
-  const refs = useMemo(() => items.filter((i) => ['image', 'product', 'logo'].includes(i.kind) && i.storage_path && !/video|svg/.test(i.mime || '') && ((i as any).lifecycle || 'active') === 'active'), [items]);
-  const refAsset = refs.find((r) => r.id === refId);
-  const prompt = (picked ? clean(ask) : ask).trim();
-  const photoSize = chosen ? { w: chosen.size[0], h: chosen.size[1] } : formatFor(ask);
-  const photoAspect = nearestAspect(photoSize.w, photoSize.h);
-  const job = pickJob(purpose, { prompt, refs: refId ? 1 : 0, aspect: photoAspect });
-  const cost = mode === 'video' ? VIDEO_JOB.designs : JOBS[job].designs * count;
-
-  // Photos and video start a board: the composer's words (and photo, if one is chosen) go onto it.
-  function make() {
-    if (!prompt) { box.current?.focus(); return; }
-    const m = mode === 'video' ? 'video' : 'photo';
-    newBoard(prompt, { mode: m, prompt, size: chosen ? { w: chosen.size[0], h: chosen.size[1] } : undefined, assets: refId ? [refId] : undefined });
-  }
   // Free: one Studio run. A different brief after it opens the upgrade pop-up straight away,
   // instead of starting designs that can't be made.
   const [freeRun, setFreeRun] = useState<{ free: boolean; run: string | null }>({ free: false, run: null });
@@ -168,7 +99,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     fetch(`/api/billing?workspace_id=${ws.id}`).then((r) => (r.ok ? r.json() : null))
       .then((j) => j && setFreeRun({ free: j.billing?.plan === 'free', run: j.free?.studio_run || null })).catch(() => {});
   }, [ws.id]);
-  // The designer, on top of a board. Free: one Create run, so a different brief opens the upgrade pop-up.
+  // The designer, on top of a board.
   function openDesigner(brief: string, size: { w: number; h: number }, done?: (id: string, size?: { w: number; h: number }) => void) {
     const key = runKey(brief);
     if (freeRun.free && freeRun.run && freeRun.run !== key) { openUpgrade({ reason: 'studio' }); return false; }
@@ -176,35 +107,21 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     setStudio({ brief, size, done });
     return true;
   }
-  function startStudio(brief: string, size: { w: number; h: number }) {
-    if (board) { openDesigner(brief, size, studio?.done); return; }
-    newBoard(brief, { mode: 'design', prompt: brief, size });
-  }
-  function design() {
-    const brief = picked ? clean(ask) : [ask.trim(), chosen ? `Format: ${chosen.ask}.` : ''].filter(Boolean).join(' ');
-    if (!brief) return;
-    const size = pickedIdea ? { w: MOCKS[pickedIdea.id].size[0], h: MOCKS[pickedIdea.id].size[1] } : chosen ? { w: chosen.size[0], h: chosen.size[1] } : formatFor(brief);
-    startStudio(brief, size);
-  }
-  function designIdea(id: string) {
-    const p = PROMPTS.find((x) => x.id === id)!;
-    const m = MOCKS[id];
-    startStudio(clean(fillPrompt(p.prompt, fill)), { w: m.size[0], h: m.size[1] });
-  }
 
-  function usePrompt(id: string) {
+  // An idea opens a new board with its words in the prompt, ready to send or change.
+  function openIdea(id: string) {
     const idea = PROMPTS.find((x) => x.id === id)!;
-    if (live && LIVE.has(MOCKS[id]?.layout) && !idea.uses.some((u) => u === 'ai-image' || u === 'ai-video' || u === 'motion')) { designIdea(id); return; }
-    const p = PROMPTS.find((x) => x.id === id)!;
-    const m: Mode = idea.uses.includes('ai-video') && media.video ? 'video' : idea.uses.includes('ai-image') && media.image && !idea.uses.includes('motion') ? 'photo' : 'design';
-    setMode(m);
-    setPicked(id); setFmt(null); setAsk(fillPrompt(p.prompt, fill));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setTimeout(() => box.current?.focus({ preventScroll: true }), 300);
+    const m = MOCKS[id];
+    const designable = LIVE.has(m?.layout) && !idea.uses.some((u) => u === 'ai-image' || u === 'ai-video' || u === 'motion');
+    const mode: Mode = designable ? 'design' : idea.uses.includes('ai-video') && media.video ? 'video' : idea.uses.includes('ai-image') && media.image && !idea.uses.includes('motion') ? 'photo' : 'design';
+    newBoard(idea.title, { mode, prompt: clean(fillPrompt(idea.prompt, fill)), size: m && mode !== 'video' ? { w: m.size[0], h: m.size[1] } : undefined, draft: true });
   }
-  const fillBlank = (key: 'product' | 'image', a?: Asset) => a && setAsk((t) => t.replace(`[${key}]`, `"${a.name}"${a.pid ? ` (PID ${a.pid})` : ''}`));
   async function copy(t: string) { try { await navigator.clipboard.writeText(t); toast('Copied. Paste it into Claude.'); } catch { toast(t); } }
-  const openInClaude = (t: string) => openClaude(t);
+  // When something can't be made here, Claude makes it with the brand kit and saves it to Mise.
+  const toClaude = (t: string) => {
+    const how = ws.figma_file_url ? `make it in Figma (${ws.figma_file_url})` : 'make it with Mise’s own tools (its image model for any new imagery; no Figma)';
+    openClaude(`For ${ws.name}: ${t}. Use our Mise brand kit and assets, ${how}, and save the result to Mise.`);
+  };
 
   const steps = [
     { done: connected, label: 'Connect Claude', note: 'Optional: use Mise in Claude', go: onConnect },
@@ -216,13 +133,15 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     return (
       <div className="create on-board">
         {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
-        <Board key={board} boardId={board} ws={ws} supabase={supabase} items={items} urls={urls} plan={plan} start={start} onStarted={() => setStart(null)}
+        <Board key={board} boardId={board} ws={ws} supabase={supabase} items={items} urls={urls} plan={plan}
+          caps={{ design: !!live, image: media.image, video: media.video }} onClaude={toClaude}
+          start={start} onStarted={() => setStart(null)}
           onBack={() => { setBoard(null); setStudio(null); }} onOpen={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }}
           onDesign={openDesigner} toast={toast} />
         {studio && (
           <div className="bd-studio">
             <Studio ws={ws} userId={userId} supabase={supabase} brand={studioBrand} fonts={fonts} srcOf={srcOf}
-              brief={studio.brief} size={studio.size} onBrief={(brief, size) => startStudio(brief, size)}
+              brief={studio.brief} size={studio.size} onBrief={(brief, size) => openDesigner(brief, size, studio.done)}
               onClose={() => setStudio(null)}
               onSaved={(id, size) => { onSaved(); if (id && studio.done) { studio.done(id, size); setStudio(null); } }}
               onOpenAsset={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }} toast={toast} />
@@ -236,159 +155,30 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     <div className="create">
       {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
 
-      <section className="cr-hero">
-        <h1>What do you want to make?</h1>
-        <p className="cr-lede">{mode === 'photo' ? 'Describe the shot. Mise makes new photography in your brand’s style, and keeps your product exactly as it is.'
-          : mode === 'video' ? 'Describe the clip, or bring a photo to life. Mise makes a short video with sound, in your brand’s style.'
-          : 'Describe it in a sentence. Mise designs three options in your brand, with your photos.'}</p>
-
-        <div className={'cr-compose' + (picked ? ' picked' : '')}>
-          <div className="cr-sec">
-            <div className="seg cr-modes" role="group" aria-label="What to make">
-              {MODES.map(([m, l]) => <button key={m} type="button" aria-pressed={mode === m} onClick={() => { setMode(m); setModelOpen(false); }}>{l}</button>)}
-            </div>
-            <div className="cr-label"><i>1</i>Describe it</div>
-            {picked && <div className="cr-picked"><span>Idea: {PROMPTS.find((p) => p.id === picked)?.title}</span><button type="button" className="linkish" onClick={() => { setPicked(null); setAsk(''); }}>Clear</button></div>}
-            <textarea ref={box} className="cr-input" rows={picked ? 4 : 2} value={ask} onChange={(e) => setAsk(e.target.value)}
-              aria-label="Describe what you want to make"
-              placeholder={mode === 'photo' ? 'e.g. Our trainers on a wet London street at dusk, soft reflections' : mode === 'video' ? 'e.g. Slow push-in on the product on a marble counter, morning light, gentle café sounds' : 'e.g. A LinkedIn banner for our autumn launch, warm and simple'}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && text) { e.preventDefault(); if (canMake) make(); else if (canDesign) design(); else openInClaude(text); } }} />
-            {!picked && !ask.trim() && mode === 'design' && (
-              <div className="cr-tries"><span>Try:</span>
-                {TRIES.map((t) => <button key={t.text} type="button" className="cr-try" onClick={() => { setAsk(t.text); setFmt(t.fmt); box.current?.focus(); }}>{t.text}</button>)}
-              </div>
-            )}
-            {(blanks.product || blanks.image) && (
-              <div className="cr-blanks">
-                {blanks.product && products.length > 0 && (
-                  <select className="in" value="" onChange={(e) => fillBlank('product', products.find((p) => p.id === e.target.value))}>
-                    <option value="">Choose the product…</option>
-                    {products.slice(0, 300).map((p) => <option key={p.id} value={p.id}>{p.pid} · {p.name}</option>)}
-                  </select>
-                )}
-                {blanks.image && photos.length > 0 && (
-                  <select className="in" value="" onChange={(e) => fillBlank('image', photos.find((p) => p.id === e.target.value))}>
-                    <option value="">Choose the image…</option>
-                    {photos.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                )}
-                <span className="tip">or leave it and Claude will ask.</span>
-              </div>
-            )}
-          </div>
-
-          {mode !== 'design' && canMake && (
-            <div className="cr-sec cr-sec-line">
-              <div className="cr-label"><i>2</i>{mode === 'video' ? 'Shape and length' : 'Size'} <span className="cr-opt">· {mode === 'video' ? 'reels and stories are 9:16' : 'optional, we’ll pick one from your words'}</span></div>
-              <div className="cr-sizes" role="group" aria-label="Size">
-                {mode === 'video' ? VIDEO_FORMATS.map((f, i) => (
-                  <button key={f.label} type="button" className="cr-size" aria-pressed={vfmt === i} onClick={() => setVfmt(i)}>
-                    <span className="cr-shape" style={f.aspect === '9:16' ? { width: 9, height: 16 } : { width: 18, height: 10 }} aria-hidden /><b>{f.label}</b>
-                  </button>
-                )) : <>
-                  <button type="button" className="cr-size" aria-pressed={fmt === null} onClick={() => setFmt(null)}><b>Auto</b></button>
-                  {FORMATS.map((f, i) => {
-                    const r = f.size[0] / f.size[1];
-                    const w = r >= 1 ? 18 : Math.max(8, Math.round(16 * r)), h = r >= 1 ? Math.max(4, Math.round(18 / r)) : 16;
-                    return <button key={f.label} type="button" className="cr-size" aria-pressed={fmt === i} onClick={() => setFmt(fmt === i ? null : i)}><span className="cr-shape" style={{ width: w, height: h }} aria-hidden /><b>{f.label}</b></button>;
-                  })}
-                </>}
-              </div>
-              <div className="cr-row">
-                <span>{mode === 'video' ? 'Bring a photo to life' : 'Start from a photo'}</span>
-                {refAsset && src(refAsset) && <img className="cr-ref" src={src(refAsset)} alt="" />}
-                <select className="in" value={refId} onChange={(e) => setRefId(e.target.value)} aria-label="Start from a photo">
-                  <option value="">{mode === 'video' ? 'No, just my words' : 'None'}</option>
-                  {refs.slice(0, 400).map((a) => <option key={a.id} value={a.id}>{a.kind === 'product' && a.pid ? `${a.pid} · ` : ''}{a.name}</option>)}
-                </select>
-                {mode === 'video' ? (
-                  <select className="in" value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} aria-label="Length">
-                    {[4, 6, 8].map((n) => <option key={n} value={n}>{n} seconds</option>)}
-                  </select>
-                ) : (
-                  <select className="in" value={count} onChange={(e) => setCount(Number(e.target.value))} aria-label="How many">
-                    {[1, 2, 4].map((n) => <option key={n} value={n}>{n === 1 ? '1 take' : `${n} takes`}</option>)}
-                  </select>
-                )}
-              </div>
-              <div className="cr-model">
-                {mode === 'video'
-                  ? <span>Mise will use <b>{VIDEO_JOB.model}</b> · {VIDEO_JOB.designs} designs</span>
-                  : <span>Mise will use <b>{JOBS[job].model}</b> · {JOBS[job].label.toLowerCase()} · {cost} design{cost === 1 ? '' : 's'}</span>}
-                {mode === 'photo' && !modelOpen && <button type="button" className="linkish" onClick={() => setModelOpen(true)}>Change model</button>}
-                {mode === 'photo' && modelOpen && (
-                  <select className="in" value={purpose} onChange={(e) => setPurpose(e.target.value as Purpose)} aria-label="Model">
-                    {PURPOSES.map((p) => <option key={p} value={p}>{p === 'auto' ? 'Auto: Mise picks' : `${JOBS[p].model}: ${JOBS[p].good}`}</option>)}
-                  </select>
-                )}
-              </div>
-            </div>
-          )}
-
-          {!picked && mode === 'design' && (
-            <div className="cr-sec cr-sec-line">
-              <div className="cr-label"><i>2</i>Size <span className="cr-opt">· optional, we’ll pick one from your words</span></div>
-              <div className="cr-sizes" role="group" aria-label="Size">
-                <button type="button" className="cr-size" aria-pressed={fmt === null} onClick={() => setFmt(null)}><b>Auto</b></button>
-                {FORMATS.map((f, i) => {
-                  const r = f.size[0] / f.size[1];
-                  const w = r >= 1 ? 18 : Math.max(8, Math.round(16 * r)), h = r >= 1 ? Math.max(4, Math.round(18 / r)) : 16;
-                  return (
-                    <button key={f.label} type="button" className="cr-size" aria-pressed={fmt === i} title={`${f.size[0]}×${f.size[1]}`} onClick={() => setFmt(fmt === i ? null : i)}>
-                      <span className="cr-shape" style={{ width: w, height: h }} aria-hidden />
-                      <b>{f.label}</b>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="cr-foot">
-            <button type="button" className="cr-using" onClick={onBrandKit} title="Open the brand kit">
-              <span className="cr-sw">{[brand.primary, brand.accent, brand.text].map((c, i) => <i key={i} style={{ background: c }} />)}</span>
-              {kit ? <span>Using the <b>{ws.name}</b> brand kit{kit.status === 'approved' ? '' : ' (draft)'}{photos.length ? ` and ${photos.length} photo${photos.length === 1 ? '' : 's'}` : ''}</span>
-                : <span>No brand kit yet · <u>set it up</u></span>}
-            </button>
-            <span className="spacer" />
-            {canMake ? (
-              <button className="primary cr-go" type="button" onClick={() => make()}>
-                {mode === 'video' ? 'Make video' : count > 1 ? `Make ${count} photos` : 'Make photo'} <span aria-hidden>→</span>
-              </button>
-            ) : canDesign ? (
-              <button className="primary cr-go" type="button" onClick={() => (text ? design() : box.current?.focus())}>Design 3 options <span aria-hidden>→</span></button>
-            ) : <>
-              <button className="btn" type="button" disabled={!text} onClick={() => copy(text)}>Copy</button>
-              <button className="primary cr-go" type="button" onClick={() => (text ? openInClaude(text) : box.current?.focus())}><Icon.Sparkle size={16} />Make it in Claude</button>
-            </>}
-          </div>
-          {!canMake && !canDesign && (
-            <p className="cr-note">{mode === 'video' ? 'Video isn’t switched on in this Mise yet, so Claude makes it with your Mise brand kit and saves it here.'
-              : mode === 'photo' ? 'New photography isn’t switched on in this Mise yet, so Claude makes it with your Mise brand kit and saves it here.'
-              : picked && !pickedLive ? 'This idea is made by Claude with your Mise brand kit, then saved here.'
-              : 'Designs are made by Claude. Add ANTHROPIC_API_KEY on the server to design right here.'}</p>
-          )}
+      <section className="cr-top">
+        <div>
+          <h1>Create</h1>
+          <p className="cr-lede">Make something new from a sentence, or bring in your files and change them. Everything happens on a board, in your brand, with AI beside you.</p>
         </div>
-
-
-        {steps.some((s) => !s.done) && (
-          <div className="cr-steps" aria-label="Setup">
-            {steps.map((s, i) => (
-              <button key={s.label} type="button" className={'cr-step' + (s.done ? ' done' : '')} disabled={!s.go || s.done} onClick={s.go}>
-                <span className="n">{s.done ? '✓' : i + 1}</span><span><b>{s.label}</b><em>{s.done ? 'Done' : s.note}</em></span>
-              </button>
-            ))}
-          </div>
-        )}
+        <button className="primary cr-new" type="button" onClick={() => newBoard('Untitled board', null)}>+ New board</button>
       </section>
 
-      <section>
-        <div className="cr-h">
-          <h2>Your boards</h2>
-          <span className="tip">Make and change things on a board: bring in files, ask for new versions, and keep everything you tried in one place.</span>
+      {steps.some((s) => !s.done) && (
+        <div className="cr-steps left" aria-label="Setup">
+          {steps.map((s, i) => (
+            <button key={s.label} type="button" className={'cr-step' + (s.done ? ' done' : '')} disabled={!s.go || s.done} onClick={s.go}>
+              <span className="n">{s.done ? '✓' : i + 1}</span><span><b>{s.label}</b><em>{s.done ? 'Done' : s.note}</em></span>
+            </button>
+          ))}
         </div>
+      )}
+
+      <section>
         <div className="cr-boards">
-          <button type="button" className="cr-board new" onClick={() => newBoard('Untitled board', null)}><span className="cr-board-img">+</span><b>New board</b><small>Start empty and add files</small></button>
+          <button type="button" className="cr-board new" onClick={() => newBoard('Untitled board', null)}>
+            <span className="cr-board-img"><span className="cr-board-plus">+</span><span className="cr-board-hint">Describe something new<br />or start from your files</span></span>
+            <b>New board</b><small>{boards && !boards.length ? 'Your first board' : 'Start fresh'}</small>
+          </button>
           {(boards || []).map((b) => {
             const first = (b.items || []).find((it: any) => it.asset_id && items.some((a) => a.id === it.asset_id));
             const a = first ? items.find((x) => x.id === first.asset_id) : null;
@@ -405,7 +195,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
       <section>
         <div className="cr-h">
           <h2>Start from an idea</h2>
-          <span className="tip">Previews use your brand kit and images. {live ? 'Click one and it’s designed for you in seconds.' : 'Click one to load it, then make it in Claude.'}</span>
+          <span className="tip">Previews use your brand kit and images. Pick one and it opens on a new board, ready to make or change.</span>
         </div>
         <div className="seg cr-cats" role="group" aria-label="Category">
           {CATEGORIES.map(([c, l]) => <button key={c} type="button" aria-pressed={cat === c} onClick={() => setCat(c)}>{l}</button>)}
@@ -416,8 +206,8 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
             const r = m.size[0] / m.size[1];
             const t = fillPrompt(p.prompt, fill);
             return (
-              <article key={p.id} className={'cr-idea' + (picked === p.id ? ' on' : '')}>
-                <button type="button" className="cr-stage" onClick={() => usePrompt(p.id)} aria-label={`Use: ${p.title}`}>
+              <article key={p.id} className="cr-idea">
+                <button type="button" className="cr-stage" onClick={() => openIdea(p.id)} aria-label={`Use: ${p.title}`}>
                   <div className="cr-fit" style={r >= 4 / 3 ? { width: '86%' } : { height: '86%', aspectRatio: `${r}` }}>
                     <Mock layout={m.layout} size={m.size} brand={brand} images={rotate(pool, p.id)} headline={m.headline} video={m.video} />
                   </div>
@@ -428,15 +218,14 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
                   <div className="cr-uses">{p.uses.filter((u) => u !== 'copy').map((u) => <span key={u} className={'use ' + u} title={USE_LABEL[u]}>{USE_LABEL[u]}</span>)}</div>
                 </div>
                 <div className="cr-mini">
-                  <button type="button" onClick={() => usePrompt(p.id)}>{live && LIVE.has(m.layout) && !p.uses.some((x) => x === 'ai-image' || x === 'ai-video' || x === 'motion') ? 'Design it' : 'Use'}</button>
+                  <button type="button" onClick={() => openIdea(p.id)}>Use</button>
                   <button type="button" onClick={() => copy(t)}>Copy</button>
-                  {!(live && LIVE.has(m.layout) && !p.uses.some((x) => x === 'ai-image' || x === 'ai-video' || x === 'motion')) && <button type="button" onClick={() => openInClaude(t)}>Open in Claude</button>}
                 </div>
               </article>
             );
           })}
         </div>
-        <p className="tip cr-foot">Everything starts a board, where you can keep changing it. What AI makes lands in Review as a draft. Mise picks the best AI model for each job and shows it on every result.</p>
+        <p className="tip cr-foot">What AI makes lands in Review as a draft. Mise picks the best AI model for each job and shows it on every result.</p>
       </section>
     </div>
   );

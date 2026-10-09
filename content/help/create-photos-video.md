@@ -11,26 +11,28 @@ Mise makes new **photos** (a product in a new scene, a seasonal backdrop, a life
 
 Mise picks the best AI model for each job and shows which one it used on every result.
 
+Everything in Create happens on a **board**. Click **New board** and the empty board asks **What do you want to make?**: describe something new, or click **Start from your files** to bring in pictures to change.
+
 ## Make a photo
-1. Open **Create** and choose **Photo** at the top.
+1. On a new board, choose **Photo**.
 2. **Describe the shot**: "Our trainers on a wet London street at dusk, soft reflections".
 3. **Size** (optional): pick one, or leave it on **Auto**.
-4. **Start from a photo** (optional): pick a product or photo. Mise keeps the product **exactly as it is** (shape, colours, logo) and only changes its surroundings.
-5. Choose **1 take**, **2 takes** or **4 takes**.
-6. Click **Make photo**.
+4. Click **Make 2 photos**.
+
+To put a real product in a new scene, start from your files instead: add the product photo, select it and click **New scene**. Mise keeps the product **exactly as it is** (shape, colours, logo) and only changes its surroundings.
 
 ## Make a video
-1. Choose **Video** at the top.
+1. On a new board, choose **Video**.
 2. **Describe the clip**: subject, movement, setting, mood and sound. "Slow push-in on the product on a marble counter, morning light, gentle café sounds."
-3. **Shape**: **Reel or story** (9:16) or **Landscape banner** (16:9).
-4. **Bring a photo to life** (optional): pick a product or photo to animate.
-5. Length: 4, 6 or 8 seconds.
-6. Click **Make video**.
+3. **Shape**: **Reel or story** (9:16) or **Landscape** (16:9).
+4. Click **Make a clip**.
+
+To bring a photo to life, add it to the board, select it and click **Animate**.
 
 A clip takes one to three minutes. You can carry on working; it saves itself.
 
 ## Where results go: boards
-Everything you make in Create opens on a **board**: a canvas where your pictures, the results and a chat with Mise sit side by side. Drag to move things, scroll or pinch to zoom, and drag the empty canvas to pan. Boards save themselves; find them again under **Your boards** on Create.
+Once something is on a board, a chat with Mise opens beside the canvas, so your pictures, the results and the conversation sit side by side. Drag to move things, scroll or pinch to zoom, and drag the empty canvas to pan. Boards save themselves; find them again under **Your boards** on Create.
 
 Each result is tagged **Made with {model}** and saved to **Review** as a **draft**: approve it to use or share it. Type in the chat on the right to make more ("two more, closer up") without starting again.
 
@@ -38,7 +40,7 @@ Each result is tagged **Made with {model}** and saved to **Review** as a **draft
 Bring pictures onto a board in any of these ways:
 - On a photo, logo or product, click **Open in Create**.
 - On Assets, select up to 20 and click **Open in Create** in the bar at the bottom.
-- On a board, click **Add files** to bring in more from your library.
+- On a new board, click **Start from your files**, or **Add files** at any time to bring in more.
 
 Then select one or more pictures on the board (shift-click to add) and either click an action under the chat or just say what you want, like "make it autumn" or "remove the cup on the left". Results land next to the picture they came from.
 
@@ -63,7 +65,7 @@ Up to 10 pictures at once (Animate: one). Everything AI makes is saved to **Revi
 | Quick variations to choose from (no starting photo) | Imagen 4 Fast | 1 design per photo |
 | Video clip | Veo 3.1 Fast | 10 designs per clip |
 
-Mise chooses automatically. To choose yourself, click **Change model** under the composer. Words in quotation marks in your description ("SALE 20% OFF") make Mise use the model that spells words exactly.
+Mise chooses automatically. Words in quotation marks in your description ("SALE 20% OFF") make Mise use the model that spells words exactly.
 
 ## Tips for good results
 - Describe the **setting, light and mood**, not just the object.

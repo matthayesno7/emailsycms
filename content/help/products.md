@@ -69,7 +69,7 @@ Click a product to open it.
 - **Edit** opens the product card editor: Label (30 characters), Name (60), Description (160), Price (16), Button (20; leave empty for no button) and Link. **Crop and adjust the photo** opens the photo tools.
 
 ## Using products
-- In **Create**, choose **Start from a photo** and pick a product: Mise keeps the product exactly as it is and puts it in a new scene. See [Create photos and video](create-photos-video).
+- On the product, click **Open in Create**, then **New scene**: Mise keeps the product exactly as it is and puts it in a new scene. See [Create photos and video](create-photos-video).
 - **Use in a block** makes a Product email block. See [Email blocks](email-blocks).
 - In **Claude**, ask for "a product grid email with our three newest products" and it finds them with Mise.
 

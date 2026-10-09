@@ -29,7 +29,7 @@ On **Assets**, drop a folder of photos and logos anywhere on the page, or click 
 Mise organises each file a few seconds after it lands. A strip at the top of Assets shows progress. More: [Adding files](adding-files), [Products](products).
 
 ## 4. Make your first design
-1. Open **Create**.
+1. Open **Create** and click **New board**.
 2. Describe what you need, for example "Autumn sale email hero", or click one of the **Try** suggestions.
 3. Pick a size, or leave it on **Auto**.
 4. Click **Design 3 options**. Three designs appear in seconds, using your kit and photos.
