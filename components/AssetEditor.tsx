@@ -13,10 +13,8 @@ import AssetAbout from './AssetAbout';
 import AssetLifecycle from './AssetLifecycle';
 import AssetVersions from './AssetVersions';
 import ImageEditor, { type EditResult } from './ImageEditor';
-import DesignEditor from './DesignEditor';
 import ProductEditor from './ProductEditor';
 import FigmaEdit from './FigmaEdit';
-import type { StudioBrand } from './DesignCanvas';
 import type { Asset } from './Library';
 
 const TYPES: [string, string][] = [['image', 'Image'], ['logo', 'Logo'], ['product', 'Product']];
@@ -28,7 +26,7 @@ const SIZES: [string, string, number | null][] = [['original', 'Original size', 
 // Opens at ?asset=<id>, so it has its own link and Back works.
 // Two ways to change it: Edit (hands-on, free, saves a new version; Studio designs reopen in the
 // Studio with their layout live) and AI edit (prompt-led, coming next).
-export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, design, onDesignSaved, onAddPreset, pro = false, replacements = [], onUpgrade, onMake }: {
+export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, onEditDesign, onAddPreset, pro = false, replacements = [], onUpgrade, onMake }: {
   it: Asset;
   onMake?: () => void; // "Open in Create": a new board with this file, to make new versions with AI
   folders?: { id: string; name: string }[];
@@ -44,9 +42,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   kit?: BrandKit | null;
   onSaveEdit?: (r: EditResult, asCopy: boolean) => Promise<boolean>;
   onRevert?: (version: number) => Promise<boolean>;
-  // Studio designs: edited right here with their layout live.
-  design?: { wsId: string; brand: StudioBrand; fonts: string[]; srcOf: (id: string) => string | undefined; library: Asset[]; thumbOf: (a: Asset) => string | undefined };
-  onDesignSaved?: (newId?: string) => void;
+  onEditDesign?: () => void; // designs made in Create are changed on a Create board
   onAddPreset?: (p: TeamPreset) => Promise<boolean>;
   pro?: boolean;                                   // the brand's plan: licence dates and replacements are on Pro
   replacements?: { id: string; name: string }[];   // what an obsolete file can point to
@@ -63,9 +59,9 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   position?: string;
   toast: (m: string) => void;
 }) {
-  const [editing, setEditingRaw] = useState<false | 'image' | 'design' | 'product' | 'figma'>(false);
+  const [editing, setEditingRaw] = useState<false | 'image' | 'product' | 'figma'>(false);
   // Free is a taster: editing files (photo edits, Studio designs, Figma edits) is on Pro.
-  const setEditing = (v: false | 'image' | 'design' | 'product' | 'figma') => {
+  const setEditing = (v: false | 'image' | 'product' | 'figma') => {
     if (v && v !== 'product' && !pro && onUpgrade) { onUpgrade('edit'); return; }
     setEditingRaw(v);
   };
@@ -104,9 +100,12 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   // Where it was made decides where it's edited: made in Create → edited here with its layout;
   // made in Figma (by Claude, or sent there) → edited in Figma; uploaded photos → photo tools here.
   const madeIn: 'create' | 'figma' | 'upload' = isDesign ? 'create' : (it.figma?.file_key || /figma/i.test(it.provenance?.model || '')) ? 'figma' : 'upload';
-  const canEdit = isProduct || (!isVideo && !isSvg && (madeIn === 'figma' ? true : !!src && (isDesign ? !!design && !!supabase : !!onSaveEdit)));
-  const startEdit = () => setEditing(isProduct ? 'product' : madeIn === 'create' ? 'design' : madeIn === 'figma' ? 'figma' : 'image');
-  const editLabel = madeIn === 'figma' && !isProduct ? 'Edit in Figma' : 'Edit';
+  const canEdit = isProduct || (!isVideo && !isSvg && (madeIn === 'figma' ? true : !!src && (isDesign ? !!onEditDesign : !!onSaveEdit)));
+  const startEdit = () => {
+    if (madeIn === 'create' && !isProduct) { if (!pro && onUpgrade) onUpgrade('edit'); else onEditDesign?.(); return; }
+    setEditing(isProduct ? 'product' : madeIn === 'figma' ? 'figma' : 'image');
+  };
+  const editLabel = isProduct ? 'Edit' : madeIn === 'figma' ? 'Edit in Figma' : madeIn === 'create' ? 'Edit design' : 'Edit';
 
   // Keyboard: arrows move between assets (outside text fields and edit mode).
   useEffect(() => {
@@ -195,8 +194,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         )}
         {!editing && (src || isProduct) && (
           <div className="modes" role="group" aria-label="Change this asset">
-            {canEdit && <button className="btn" type="button" onClick={startEdit} title={isProduct ? 'Name, label, description, price, button, link and photo' : madeIn === 'create' ? 'Made in Create: change the words, photos and logo here, with the layout live' : madeIn === 'figma' ? 'Made in Figma: say what to change and Claude edits it there' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />{editLabel}</button>}
-            {!isVideo && !isSvg && src && onMake && !/gif/.test(it.mime || '') && <button className="btn" type="button" onClick={onMake} title="Make new versions with AI on a Create board: resize for social, a new scene, new light, a clean background, translated words, a mock-up, a clip or any change in words"><Icon.Sparkle size={15} />Open in Create</button>}
+            {canEdit && <button className="btn" type="button" onClick={startEdit} title={isProduct ? 'Name, label, description, price, button, link and photo' : madeIn === 'create' ? 'Made in Create: opens on a Create board to change the words or say what to change' : madeIn === 'figma' ? 'Made in Figma: say what to change and Claude edits it there' : 'Crop, resize, rotate and adjust'}><Icon.Palette size={15} />{editLabel}</button>}
+            {!isVideo && !isSvg && src && onMake && !isDesign && !/gif/.test(it.mime || '') && <button className="btn" type="button" onClick={onMake} title="Make new versions with AI on a Create board: resize for social, a new scene, new light, a clean background, translated words, a mock-up, a clip or any change in words"><Icon.Sparkle size={15} />Open in Create</button>}
           </div>
         )}
         {!editing && src && isVideo && <a className="btn" href={src} download={`${it.name.replace(/[^\w.-]+/g, '-')}.${(it.mime || '').includes('webm') ? 'webm' : (it.mime || '').includes('quicktime') ? 'mov' : 'mp4'}`} target="_blank" rel="noreferrer">Download</a>}
@@ -219,11 +218,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
         {!editing && src && !isVideo && !isSvg && <button className="primary" type="button" onClick={copyImage}>Copy image</button>}
       </header>
 
-      {editing === 'design' && design && supabase ? (
-        <DesignEditor it={it} supabase={supabase} {...design} toast={toast}
-          onCancel={() => setEditing(false)}
-          onSaved={(newId) => { setEditing(false); onDesignSaved?.(newId); }} />
-      ) : editing === 'figma' ? (
+      {editing === 'figma' ? (
         <FigmaEdit it={it} src={src} toast={toast} onCancel={() => setEditing(false)} />
       ) : editing === 'product' ? (
         <ProductEditor it={it} src={src} toast={toast} onCancel={() => setEditing(false)} onSave={onPatch}
@@ -305,7 +300,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
                 </div>
                 {it.provenance?.prompt && <p className="tip">“{it.provenance.prompt}”</p>}
                 <p className="tip">{[it.provenance?.model, it.provenance?.style, it.provenance?.source_product_pid && `from product ${it.provenance.source_product_pid}`, it.provenance?.brand_kit_version && `brand kit v${it.provenance.brand_kit_version}`].filter(Boolean).join(' · ')}</p>
-                {madeIn === 'create' && canEdit && <p className="tip">Made in Create, so it’s edited here: <button type="button" className="linkish" onClick={() => setEditing('design')}>change the words, photos or logo</button>.</p>}
+                {madeIn === 'create' && canEdit && <p className="tip">Made in Create, so it’s changed on a Create board: <button type="button" className="linkish" onClick={startEdit}>edit the design</button>.</p>}
                 {madeIn === 'figma' && <p className="tip">Made in Figma, so it’s edited in Figma: <button type="button" className="linkish" onClick={() => setEditing('figma')}>say what to change</button> and Claude does it there.</p>}
               </div>
             )}

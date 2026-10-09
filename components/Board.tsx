@@ -2,9 +2,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SOCIAL_SIZES, SUGGESTED, actionById, actionDesigns, type ActionDef, type ActionId } from '@/lib/actions';
-import { bounds, itemHeight, place, uid, type BoardItem, type Turn } from '@/lib/boards';
+import { bounds, itemHeight, place, uid, type BoardItem, type DesignState, type Turn } from '@/lib/boards';
 import { modelName, nearestAspect } from '@/lib/models';
-import { formatFor } from './Studio';
+import { FORMATS as DESIGN_FORMATS, assetsUsed, formatFor, type Spec } from '@/lib/design';
+import { exportPng } from '@/lib/exportDesign';
+import { emailRendition } from '@/lib/renditions';
+import { loadImg } from '@/lib/images';
+import { runKey } from '@/lib/plans';
+import { openInClaude } from '@/lib/openClaude';
+import DesignCanvas, { type StudioBrand } from './DesignCanvas';
 import { openUpgrade } from './Billing';
 import { Icon } from './icons';
 import type { Asset, Ws } from './Library';
@@ -15,7 +21,8 @@ import type { Asset, Ws } from './Library';
 export type Mode = 'design' | 'photo' | 'video';
 // How a board starts: with files (and optionally what to do with them), or with words.
 // draft: put the words in the prompt for the person to send, rather than running them.
-export type Start = { mode: Mode; prompt?: string; size?: { w: number; h: number }; assets?: string[]; draft?: boolean };
+// designs: saved designs (asset ids) to put on the board as editable designs.
+export type Start = { mode: Mode; prompt?: string; size?: { w: number; h: number }; assets?: string[]; designs?: string[]; draft?: boolean };
 // What this Mise can make right here (the rest goes to Claude).
 export type Caps = { design: boolean; image: boolean; video: boolean };
 
@@ -42,12 +49,14 @@ const TRIES: Record<Mode, string[]> = {
 const usable = (a?: Asset | null) => !!a && ['image', 'logo', 'product'].includes(a.kind) && !!a.storage_path && !/svg|gif|video/.test(a.mime || '');
 const now = () => new Date().toISOString();
 
-export default function Board({ boardId, ws, supabase, items: library, urls, plan, caps, start, onStarted, onBack, onOpen, onDesign, onClaude, toast }: {
-  boardId: string; ws: Ws; supabase: SupabaseClient; items: Asset[]; urls: Record<string, string>; plan: string;
+export default function Board({ boardId, ws, userId, supabase, items: library, urls, plan, caps, brand, fonts, designSrc, start, onStarted, onBack, onOpen, gate, onClaude, onLibrary, toast }: {
+  boardId: string; ws: Ws; userId: string; supabase: SupabaseClient; items: Asset[]; urls: Record<string, string>; plan: string;
   caps: Caps; onClaude: (prompt: string) => void;
+  brand: StudioBrand; fonts: string[]; designSrc: (assetId: string) => string | undefined; // how designs are drawn
   start?: Start | null; onStarted?: () => void;
   onBack: () => void; onOpen: (id: string) => void;
-  onDesign: (brief: string, size: { w: number; h: number }, done: (id: string, size?: { w: number; h: number }) => void) => boolean;
+  gate: (brief: string) => boolean; // false: the free run is used (the upgrade pop-up is open)
+  onLibrary: () => void; // something was saved to the library
   toast: (m: string) => void;
 }) {
   const [name, setName] = useState('Untitled board');
@@ -62,6 +71,7 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   const [adding, setAdding] = useState(false);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null); // the create stage's size (null: from the words)
   const stageBox = useRef<HTMLTextAreaElement>(null);
+  const [editing, setEditing] = useState<string | null>(null); // the design whose words are being edited in place
   // A new board takes its name from the first thing made or added to it.
   const autoName = (t: string) => setName((n) => (!n.trim() || n === 'Untitled board' || n === 'New board' ? t.trim().replace(/\s+/g, ' ').slice(0, 60) : n));
   const cv = useRef<HTMLDivElement>(null);
@@ -73,7 +83,11 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
     let off = false;
     supabase.from('boards').select('*').eq('id', boardId).maybeSingle().then(({ data }) => {
       if (off || !data) return;
-      setName(data.name); setCards(data.items || []); setThread(data.thread || []); setLoaded(true);
+      // A design that was still being made when the board was left: it won't arrive now.
+      const items = (data.items || []).map((c: BoardItem) => (!c.design ? c
+        : c.design.status === 'refining' ? { ...c, design: { ...c.design, status: 'ready' as const } }
+        : c.design.status === 'loading' ? { ...c, design: { ...c.design, status: 'error' as const, error: 'This one didn’t finish. Try again.' } } : c));
+      setName(data.name); setCards(items); setThread(data.thread || []); setLoaded(true);
     });
     return () => { off = true; };
   }, [boardId, supabase]);
@@ -95,7 +109,8 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   const assetOf = (c: BoardItem) => (c.asset_id ? byId.get(c.asset_id) || null : null);
   const selected = cards.filter((c) => sel.includes(c.id) && c.asset_id && !c.pending);
   const selAssets = selected.map(assetOf).filter(Boolean) as Asset[];
-  const selImages = selected.filter((c) => usable(assetOf(c)));
+  const selImages = selected.filter((c) => usable(assetOf(c)) && !c.design);
+  const selDesigns = cards.filter((c) => sel.includes(c.id) && c.design?.spec && c.design.status === 'ready');
 
   const fit = useCallback(() => {
     const el = cv.current; if (!el) return;
@@ -189,21 +204,163 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
     });
   }
 
+  // ---------- designs ----------
+  const setDesign = (id: string, p: Partial<DesignState> | ((d: DesignState) => Partial<DesignState>)) =>
+    setCards((all) => all.map((c) => (c.id === id && c.design ? { ...c, design: { ...c.design, ...(typeof p === 'function' ? p(c.design) : p) } } : c)));
+  async function designCall(d: Pick<DesignState, 'brief' | 'run' | 'size'>, body: Record<string, any>): Promise<{ spec?: Spec; error?: string }> {
+    try {
+      const r = await fetch('/api/design', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace_id: ws.id, brief: d.brief, run: d.run, size: d.size, ...body }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (j.code === 'upgrade') window.dispatchEvent(new CustomEvent('mise:upgrade', { detail: { reason: j.reason } }));
+        if (j.code === 'limit') window.dispatchEvent(new CustomEvent('mise:limit', { detail: { workspace_id: ws.id, message: j.error, reason: j.reason } }));
+        return { error: j.error || 'Something went wrong.' };
+      }
+      return { spec: j.spec };
+    } catch { return { error: 'Couldn’t reach Mise.' }; }
+  }
+  // Three directions for a brief, side by side, each shown as soon as it's ready.
+  async function runDesign(brief: string, size: { w: number; h: number }) {
+    if (!gate(brief)) return;
+    const run = runKey(brief);
+    const spots = place(cardsRef.current, [0, 1, 2].map(() => size.w / size.h));
+    const hs: BoardItem[] = spots.map((p, i) => ({ id: uid(), ...p, design: { size, brief, run, variant: i, status: 'loading' } }));
+    cardsRef.current = [...cardsRef.current, ...hs];
+    setCards((all) => [...all, ...hs]);
+    setTimeout(fit, 60);
+    const got = await Promise.all(hs.map(async (h, i) => {
+      const r = await designCall(h.design!, { variant: i });
+      setDesign(h.id, r.spec ? { status: 'ready', spec: r.spec } : { status: 'error', error: r.error });
+      return !!r.spec;
+    }));
+    const n = got.filter(Boolean).length;
+    say({ role: 'mise', made: hs.map((h) => h.id), error: !n,
+      text: n ? `${n} design${n === 1 ? '' : 's'} in your brand. Select one to change it, double-click to edit the words, and save the one you want to your library.`
+        : 'The designs didn’t come back. Try again, or reword it.' });
+  }
+  async function retryDesign(c: BoardItem) {
+    const d = c.design; if (!d) return;
+    setDesign(c.id, { status: 'loading', error: undefined });
+    const r = await designCall(d, d.spec ? { base: d.spec } : { variant: d.variant || 0 });
+    setDesign(c.id, r.spec ? { status: 'ready', spec: r.spec } : { status: 'error', error: r.error });
+  }
+  async function refineDesigns(list: BoardItem[], instruction: string) {
+    say({ role: 'you', text: instruction, refs: list.map((c) => c.asset_id).filter(Boolean) as string[] });
+    list.forEach((c) => setDesign(c.id, { status: 'refining' }));
+    const res = await Promise.all(list.map(async (c) => {
+      const d = c.design!, base = d.spec!;
+      const r = await designCall(d, { base, instruction });
+      setDesign(c.id, (cur) => (r.spec ? { status: 'ready', spec: r.spec, history: [...(cur.history || []), base].slice(-20), dirty: true } : { status: 'ready' }));
+      return r;
+    }));
+    const ok = res.filter((r) => r.spec).length;
+    say({ role: 'mise', made: list.map((c) => c.id), error: !ok, text: ok ? `Changed ${ok === 1 ? 'it' : `${ok} designs`}. Undo goes back a step. Save when you’re happy.` : res[0]?.error || 'Couldn’t make that change.' });
+  }
+  function everySize(c: BoardItem) {
+    const d = c.design; if (!d?.spec) return;
+    const others = DESIGN_FORMATS.filter((f) => !f.video && !(f.w === d.size.w && f.h === d.size.h));
+    const spots = place(cardsRef.current, others.map((f) => f.w / f.h), c);
+    const hs: BoardItem[] = spots.map((p, i) => ({ id: uid(), ...p, design: { size: { w: others[i].w, h: others[i].h }, brief: d.brief, run: d.run, label: others[i].label, status: 'loading' } }));
+    cardsRef.current = [...cardsRef.current, ...hs];
+    setCards((all) => [...all, ...hs]);
+    say({ role: 'you', text: `Every size: ${d.spec.name}` });
+    Promise.all(hs.map(async (h) => {
+      const r = await designCall(h.design!, { base: d.spec });
+      setDesign(h.id, r.spec ? { status: 'ready', spec: r.spec } : { status: 'error', error: r.error });
+    })).then(() => say({ role: 'mise', made: hs.map((h) => h.id), text: `${others.length} more sizes, next to the original. Save the ones you need.` }));
+  }
+  function undoDesign(c: BoardItem) {
+    const h = c.design?.history || []; const prev = h[h.length - 1];
+    if (prev) setDesign(c.id, { spec: prev, history: h.slice(0, -1), dirty: true });
+  }
+  function designText(c: BoardItem, i: number, text: string) {
+    const d = c.design; if (!d?.spec || !text) return;
+    const layers = d.spec.layers.map((l, j) => (j === i && (l.type === 'text' || l.type === 'button') ? { ...l, text } : l));
+    if (JSON.stringify(layers) !== JSON.stringify(d.spec.layers)) setDesign(c.id, { spec: { ...d.spec, layers }, history: [...(d.history || []), d.spec].slice(-20), dirty: true });
+  }
+  const png = (d: DesignState) => exportPng({ spec: d.spec!, size: d.size, brand, srcOf: designSrc, fonts });
+  const [saving, setSaving] = useState<string[]>([]);
+  // Save to the library: a new file the first time, a new version of it after that (the old one is kept).
+  async function saveDesign(c: BoardItem): Promise<string | null> {
+    const d = c.design; if (!d?.spec) return null;
+    if (c.asset_id && !d.dirty) return c.asset_id;
+    setSaving((s) => [...s, c.id]);
+    try {
+      const blob = await png(d);
+      const path = `${ws.id}/generated/${crypto.randomUUID()}.png`;
+      const up = await supabase.storage.from('assets').upload(path, blob, { contentType: 'image/png' });
+      if (up.error) throw up.error;
+      const url = URL.createObjectURL(blob);
+      let email: any = null;
+      try { email = await emailRendition(supabase, ws.id, await loadImg(url), { mime: 'image/png', bytes: blob.size }); } catch {} finally { URL.revokeObjectURL(url); }
+      const file = { storage_path: path, mime: 'image/png', width: d.size.w, height: d.size.h, bytes: blob.size, images: email ? { email } : {} };
+      const alt = d.spec.layers.filter((l) => l.type === 'text').map((l: any) => l.text).join('. ').slice(0, 150);
+      let id = c.asset_id || null;
+      if (id) {
+        const prev = byId.get(id);
+        const { error } = await supabase.rpc('asset_new_version', { p_asset: id, p_file: file, p_note: 'Edited on a Create board',
+          p_provenance: { ...(prev?.provenance || {}), via: 'studio', spec: d.spec, size: d.size, source_asset_ids: assetsUsed(d.spec), edited_at: now() } });
+        if (error) throw error;
+        await supabase.from('assets').update({ fields: { ...(prev?.fields || {}), alt } }).eq('id', id);
+        toast(`Saved as a new version of “${d.spec.name}”. The previous one is kept.`);
+      } else {
+        const { data, error } = await supabase.from('assets').insert({
+          workspace_id: ws.id, kind: 'image', name: d.spec.name, ...file, origin: 'generated', status: 'approved', created_by: userId, fields: { alt },
+          provenance: { via: 'studio', prompt: d.brief, model: 'Mise Studio (Claude)', spec: d.spec, size: d.size, source_asset_ids: assetsUsed(d.spec), generated_at: now() },
+        }).select('id').single();
+        if (error) throw error;
+        id = data.id as string;
+        toast('Saved to your library');
+      }
+      setCards((all) => all.map((x) => (x.id === c.id ? { ...x, asset_id: id!, name: d.spec!.name, design: { ...x.design!, dirty: false } } : x)));
+      onLibrary();
+      return id;
+    } catch (err: any) {
+      toast(`Couldn’t save${err?.message ? `: ${err.message}` : ''}`);
+      return null;
+    } finally { setSaving((s) => s.filter((x) => x !== c.id)); }
+  }
+  async function downloadDesign(c: BoardItem) {
+    const d = c.design; if (!d?.spec) return;
+    try {
+      const blob = await png(d);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = `${d.spec.name.replace(/[^\w-]+/g, '-').toLowerCase()}-${d.size.w}x${d.size.h}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch (err: any) { toast(err?.message || 'Couldn’t export.'); }
+  }
+  async function designToFigma(c: BoardItem) {
+    const id = await saveDesign(c); if (!id) return;
+    const prompt = `Rebuild my Mise design "${c.design!.spec!.name}" (asset id ${id}) in Figma as editable layers${ws.figma_file_url ? ` in ${ws.figma_file_url}` : ''}: live text in our brand fonts, our brand kit colours, and the photos pushed from Mise. Its layout is in the asset's provenance.spec.`;
+    try { await navigator.clipboard.writeText(prompt); } catch {}
+    openInClaude(prompt);
+  }
+  // Double-click a design: zoom in on it and edit its words where they are.
+  function editWords(c: BoardItem) {
+    const el = cv.current; if (!el || !c.design?.spec) return;
+    setSel([c.id]); setEditing(c.id);
+    const h = itemHeight(c);
+    const s = Math.min(4, Math.max(0.3, Math.min((el.clientWidth - 160) / c.w, (el.clientHeight - 200) / h)));
+    setView({ s, x: (el.clientWidth - c.w * s) / 2 - c.x * s, y: (el.clientHeight - h * s) / 2 - c.y * s });
+  }
+  // Saved designs from the library, back on the board to change.
+  function addDesigns(ids: string[]) {
+    const list = ids.map((id) => byId.get(id)).filter((a) => a?.provenance?.spec) as Asset[];
+    if (!list.length) return [];
+    const sizes = list.map((a) => a.provenance.size || { w: a.width || 1200, h: a.height || 600 });
+    const spots = place(cardsRef.current, sizes.map((z) => z.w / z.h));
+    const add: BoardItem[] = list.map((a, i) => ({ id: uid(), asset_id: a.id, name: a.name, ...spots[i],
+      design: { spec: a.provenance.spec, size: sizes[i], brief: a.provenance.prompt || a.name, run: runKey(a.provenance.prompt || a.name), status: 'ready' } }));
+    cardsRef.current = [...cardsRef.current, ...add];
+    setCards((all) => [...all, ...add]);
+    return add;
+  }
+
   async function runWords(prompt: string, m: Mode, size?: { w: number; h: number }) {
     const p = prompt.trim(); if (!p) return;
     say({ role: 'you', text: p });
     autoName(p);
-    if (m === 'design') {
-      const ok = onDesign(p, size || formatFor(p), (id, sz) => {
-        const spot = place(cardsRef.current, [sz ? sz.w / sz.h : 2])[0];
-        const it: BoardItem = { id: uid(), asset_id: id, ...spot };
-        cardsRef.current = [...cardsRef.current, it];
-        setCards((all) => [...all, it]);
-        say({ role: 'mise', text: 'Saved the design to your library and put it on the board.', made: [it.id] });
-      });
-      if (ok) say({ role: 'mise', text: 'Designing three options in your brand. Pick one, change it if you like, and save it to put it on the board.' });
-      return;
-    }
+    if (m === 'design') { await runDesign(p, size || formatFor(p)); return; }
     if (plan === 'free') { openUpgrade({ reason: 'media' }); return; }
     if (m === 'video') {
       const vertical = size ? size.h > size.w : /reel|story|stories|vertical|tiktok|9:16/i.test(p);
@@ -230,7 +387,10 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   function send() {
     const t = text.trim(); if (!t) return;
     setText('');
-    if (selImages.length) {
+    if (selDesigns.length) {
+      refineDesigns(selDesigns, t);
+      if (selImages.length) runAction('edit', '', t);
+    } else if (selImages.length) {
       if (/\b(animate|video|clip|motion)\b/i.test(t)) runAction('animate', 'Slow push-in', t);
       else if (/\b(resize|sizes|instagram sizes|social sizes)\b/i.test(t)) runAction('resize');
       else runAction('edit', '', t);
@@ -250,6 +410,10 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
       return;
     }
     const add = start.assets?.length ? addAssets(start.assets) : [];
+    if (start.designs?.length) {
+      const ds = addDesigns(start.designs);
+      if (ds.length) { setSel(ds.map((d) => d.id)); setTimeout(fit, 80); }
+    }
     if (add.length) { setSel(add.map((a) => a.id)); setTimeout(fit, 80); }
     const p = (start.prompt || '').trim();
     // Words with a photo: a new scene for it (or a clip from it). Words alone: make it from scratch.
@@ -295,6 +459,8 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   function downCard(e: React.PointerEvent, c: BoardItem) {
     if (e.button !== 0) return;
     e.stopPropagation();
+    if (editing === c.id) return; // clicks go to the words being edited
+    if (editing) setEditing(null);
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     const ids = e.shiftKey || e.metaKey ? (sel.includes(c.id) ? sel.filter((x) => x !== c.id) : [...sel, c.id]) : sel.includes(c.id) ? sel : [c.id];
     setSel(ids); setAsk(null);
@@ -309,20 +475,25 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   }
   function up() {
     const d = drag.current; drag.current = null;
-    if (d?.kind === 'pan' && !d.moved) { setSel([]); setAsk(null); }
+    if (d?.kind === 'pan' && !d.moved) { setSel([]); setAsk(null); setEditing(null); }
     // A click (no drag) on one of several selected: just that one.
     if (d?.kind === 'move' && !d.moved && !d.add && d.card && (d.ids?.length || 0) > 1) setSel([d.card]);
   }
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
+      if (e.key === 'Escape' && editing) { (document.activeElement as HTMLElement)?.blur?.(); setEditing(null); return; }
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      if ((e.key === 'Delete' || e.key === 'Backspace') && sel.length) { setCards((all) => all.filter((c) => !sel.includes(c.id))); setSel([]); }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && sel.length) {
+        const lost = cards.filter((c) => sel.includes(c.id) && c.design?.spec && (!c.asset_id || c.design.dirty)).length;
+        if (lost && !confirm(`${lost === 1 ? 'This design isn’t' : `${lost} designs aren’t`} saved to your library${lost === 1 ? ' (or has changes that aren’t)' : ''}. Remove from the board anyway?`)) return;
+        setCards((all) => all.filter((c) => !sel.includes(c.id))); setSel([]); setEditing(null);
+      }
       if (e.key === 'Escape') { setSel([]); setAsk(null); }
     };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, [sel]);
+  }, [sel, editing, cards]);
   const zoom = (f: number) => {
     const el = cv.current; if (!el) return;
     const px = el.clientWidth / 2, py = el.clientHeight / 2;
@@ -355,10 +526,27 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
   return (
     <div className={'bd' + (bare ? ' bare' : '')}>
       <div className="bd-canvas" ref={cv} onPointerDown={downBg} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-        <div className="bd-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})` }}>
+        <div className="bd-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`, ['--z' as any]: view.s }}>
           {cards.map((c) => {
             const a = assetOf(c), src = srcOf(c), on = sel.includes(c.id);
             const video = a?.kind === 'video' || (c.pending?.kind === 'video');
+            const d = c.design;
+            if (d) return (
+              <div key={c.id} className={`bd-card design${on ? ' on' : ''}${editing === c.id ? ' editing' : ''}${d.status === 'loading' ? ' pending' : ''}${d.status === 'error' ? ' failed' : ''}`} style={{ left: c.x, top: c.y, width: c.w }}
+                onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => d.status === 'ready' && editWords(c)}>
+                <div className="bd-img" style={{ aspectRatio: `${d.size.w} / ${d.size.h}` }}>
+                  {d.spec ? (
+                    <div className={'bd-design' + (d.status === 'refining' ? ' busy' : '')}>
+                      <DesignCanvas spec={d.spec} size={d.size} brand={brand} srcOf={designSrc} editable={editing === c.id && d.status === 'ready'} onText={(i, t) => designText(c, i, t)} />
+                    </div>
+                  ) : d.status === 'error' ? (
+                    <span className="bd-wait">{d.error}<button type="button" className="btn" onPointerDown={(e) => e.stopPropagation()} onClick={() => retryDesign(c)}>Try again</button></span>
+                  ) : <span className="bd-wait"><span className="spin" aria-hidden />Designing…</span>}
+                  {d.status === 'refining' && <span className="bd-wait over"><span className="spin" aria-hidden />Changing…</span>}
+                </div>
+                {d.spec && <div className="bd-cap"><span>{d.label ? `${d.label} · ` : ''}{d.spec.name}</span>{saving.includes(c.id) ? <em className="ns">Saving…</em> : !c.asset_id ? <em className="ns">Not saved</em> : d.dirty ? <em className="ns">Changes not saved</em> : null}</div>}
+              </div>
+            );
             return (
               <div key={c.id} className={`bd-card${on ? ' on' : ''}${c.pending ? ' pending' : ''}${c.error ? ' failed' : ''}`} style={{ left: c.x, top: c.y, width: c.w }}
                 onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => c.asset_id && onOpen(c.asset_id)}>
@@ -408,6 +596,7 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
             </button>
           </div>
         )}
+        {editing && <div className="bd-editing" onPointerDown={(e) => e.stopPropagation()}>Click any words on the design to change them<button type="button" className="btn" onClick={() => { (document.activeElement as HTMLElement)?.blur?.(); setEditing(null); setTimeout(fit, 30); }}>Done</button></div>}
         <div className="bd-top" onPointerDown={(e) => e.stopPropagation()}>
           <button className="btn quiet" type="button" onClick={onBack}>← Boards</button>
           <input className="bd-name" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} aria-label="Board name" />
@@ -442,10 +631,11 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
         </div>
 
         <div className="bd-compose">
-          {selAssets.length ? (
+          {selAssets.length || selDesigns.length ? (
             <div className="bd-ctx">
-              {selAssets.slice(0, 5).map((a) => { const c = selected.find((x) => x.asset_id === a.id)!; const u = srcOf(c); return <span key={c.id} title={a.name}>{u && a.kind !== 'video' ? <img src={u} alt="" /> : null}<b>{a.name}</b></span>; })}
-              {selAssets.length > 5 && <em>+{selAssets.length - 5}</em>}
+              {selDesigns.slice(0, 5).map((c) => <span key={c.id} title={c.design!.spec!.name}><b>{c.design!.spec!.name}</b></span>)}
+              {selAssets.filter((a) => !selDesigns.some((c) => c.asset_id === a.id)).slice(0, 5).map((a) => { const c = selected.find((x) => x.asset_id === a.id)!; const u = srcOf(c); return <span key={c.id} title={a.name}>{u && a.kind !== 'video' ? <img src={u} alt="" /> : null}<b>{a.name}</b></span>; })}
+              {selAssets.length + selDesigns.length > 5 && <em>+{selAssets.length + selDesigns.length - 5}</em>}
               <button type="button" className="linkish" onClick={() => { setSel([]); setAsk(null); }}>Clear</button>
             </div>
           ) : (
@@ -454,6 +644,21 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
             </div>
           )}
 
+          {selDesigns.length > 0 && (() => {
+            const one = selDesigns.length === 1 ? selDesigns[0] : null;
+            const unsaved = selDesigns.filter((c) => !c.asset_id || c.design!.dirty);
+            return (
+              <div className="bd-sugs">
+                {unsaved.length > 0 && <button type="button" className="go" disabled={unsaved.some((c) => saving.includes(c.id))} onClick={() => unsaved.forEach((c) => saveDesign(c))}>
+                  {unsaved.some((c) => saving.includes(c.id)) ? 'Saving…' : unsaved.every((c) => c.asset_id) ? 'Save changes' : unsaved.length > 1 ? `Save ${unsaved.length} to library` : 'Save to library'}</button>}
+                {one && <button type="button" onClick={() => editWords(one)}>Edit the words</button>}
+                {one && <button type="button" onClick={() => everySize(one)} title="Adapt it to every other size">Every size</button>}
+                {one && (one.design!.history || []).length > 0 && <button type="button" onClick={() => undoDesign(one)}>↶ Undo</button>}
+                {one && <button type="button" onClick={() => downloadDesign(one)}>Download PNG</button>}
+                {one && <button type="button" onClick={() => designToFigma(one)} title="Save it, then Claude rebuilds it in Figma with live layers">Edit in Figma</button>}
+              </div>
+            );
+          })()}
           {selImages.length > 0 && !ask && (
             <div className="bd-sugs">
               {SUGGESTED.filter((a) => a.batch || selImages.length === 1).map((a) => (
@@ -475,12 +680,12 @@ export default function Board({ boardId, ws, supabase, items: library, urls, pla
 
           <div className="bd-box">
             <textarea className="in" rows={2} value={text} onChange={(e) => setText(e.target.value)} maxLength={1500}
-              placeholder={ask?.ask ? ask.ask.placeholder : selImages.length ? 'Say what to change, e.g. “make it autumn”' : mode === 'design' ? 'e.g. A LinkedIn banner for our autumn launch' : mode === 'photo' ? 'e.g. Our trainers on a wet street at dusk' : 'e.g. Slow push-in on the product, morning light'}
+              placeholder={ask?.ask ? ask.ask.placeholder : selDesigns.length ? 'Say what to change: “darker”, “bigger headline”, “use the knitwear photo”' : selImages.length ? 'Say what to change, e.g. “make it autumn”' : mode === 'design' ? 'e.g. A LinkedIn banner for our autumn launch' : mode === 'photo' ? 'e.g. Our trainers on a wet street at dusk' : 'e.g. Slow push-in on the product, morning light'}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (ask?.ask && text.trim()) { const a = ask; setAsk(null); const t = text; setText(''); runAction(a.id, '', t); } else send(); } }} />
             <button className="primary" type="button" aria-label="Send" disabled={!text.trim()} onClick={() => { if (ask?.ask) { const a = ask; setAsk(null); const t = text; setText(''); runAction(a.id, '', t); } else send(); }}>↑</button>
           </div>
           <div className="bd-foot">
-            <span className="tip">{selImages.length ? `Changes ${selImages.length === 1 ? 'the selected photo' : `${selImages.length} photos`}, 2 versions each` : mode === 'design' ? 'Three options in your brand kit' : mode === 'photo' ? 'Two takes, in your brand’s style' : 'An 8-second clip with sound'}</span>
+            <span className="tip">{selDesigns.length ? `Changes ${selDesigns.length === 1 ? 'the selected design' : `${selDesigns.length} designs`}, 1 design each` : selImages.length ? `Changes ${selImages.length === 1 ? 'the selected photo' : `${selImages.length} photos`}, 2 versions each` : mode === 'design' ? 'Three options in your brand kit' : mode === 'photo' ? 'Two takes, in your brand’s style' : 'An 8-second clip with sound'}</span>
             <button type="button" className="linkish" onClick={deleteBoard}>Delete board</button>
           </div>
         </div>

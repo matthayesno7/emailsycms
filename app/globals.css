@@ -1771,3 +1771,27 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .bd-stage-plus{width:38px;height:38px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:22px;flex:none}
 @media (max-width:720px){.bd-stage-go{flex-direction:column;align-items:stretch}.bd-stage{padding:20px}}
 @media (max-width:899px){.bd.bare{grid-template-rows:minmax(0,1fr);height:calc(100dvh - 56px);min-height:560px}.bd.bare .bd-stage{top:64px;transform:translateX(-50%);max-height:calc(100% - 80px)}}
+/* Designs on a board */
+.bd-design{position:absolute;inset:0;transition:filter .3s,opacity .3s}
+.bd-design.busy{filter:blur(3px) saturate(.8);opacity:.7}
+.bd-card.design .bd-img{background:var(--bg)}
+.bd-card.design.pending .bd-img{background:linear-gradient(110deg,var(--surface) 30%,var(--surface-2) 50%,var(--surface) 70%) 0 0/300% 100%;animation:bd-shine 1.6s linear infinite;border:0}
+@keyframes bd-shine{to{background-position:-150% 0}}
+.bd-wait.over{background:rgba(255,255,255,.35)}
+.bd-wait .btn{min-height:32px}
+.bd-card.editing{cursor:auto}
+.bd-card.editing .bd-img{outline:3px solid var(--accent);overflow:visible}
+.bd-card.editing .dc-edit{user-select:text;-webkit-user-select:text}
+.bd-cap em.ns{color:var(--accent);background:var(--accent-soft)}
+.bd-editing{position:absolute;left:50%;top:14px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;background:var(--ink);color:#fff;border-radius:12px;padding:6px 6px 6px 14px;font-size:13.5px;box-shadow:0 8px 24px -10px rgba(42,26,20,.5);z-index:2}
+.bd-editing .btn{min-height:30px;background:#fff;color:var(--ink);border:0}
+.bd-sugs button.go{background:var(--accent);border-color:var(--accent);color:#fff}
+.bd-sugs button.go:hover{background:var(--accent-hover);color:#fff}
+.bd-sugs button:disabled{opacity:.6;cursor:default}
+@media (prefers-reduced-motion:reduce){.bd-card.design.pending .bd-img{animation:none}}
+/* zoomed in, outlines and captions don't grow with the picture */
+.bd-card .bd-img{outline-width:calc(2px / max(var(--z,1),1));outline-offset:calc(3px / max(var(--z,1),1))}
+.bd-card.on .bd-img,.bd-card.editing .bd-img{outline-width:calc(3px / max(var(--z,1),1))}
+.bd-cap{font-size:calc(13px / max(var(--z,1),1));margin-top:calc(8px / max(var(--z,1),1))}
+.bd-cap em{font-size:calc(11px / max(var(--z,1),1))}
+.bd-editing{top:70px}

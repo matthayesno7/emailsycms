@@ -1,6 +1,6 @@
 ---
 title: Editing images and designs
-description: Crop, resize, rotate, adjust and remove white backgrounds; change designs with words; and edit products.
+description: Crop, resize, rotate, adjust and remove white backgrounds; edit designs on a Create board; and edit products.
 category: Your library
 order: 8
 ---
@@ -38,11 +38,15 @@ The file keeps its format (PNG and WebP stay as they are); others save as JPG.
 SVGs and videos can't be edited in Mise.
 
 ## Designs made in Create
-Designs from Create open in the design editor:
-- **Double-click any text** on the design to change it, or use the **Words** fields.
-- **Images:** **Swap** a photo for another approved photo or product; switch the logo between the main and reversed version.
-- **Change it with words:** type "darker", "bigger headline", "move the text left" or "add 20% off" and click **Change**. Each change counts as a design.
-- **↶ Undo**, then **Save as version {n}**, **Save as copy** or **Download PNG**.
+Designs are changed where they're made: on a Create board. Open the design and click **Edit design**. It opens on the board it was made on, or a new one, where you can:
+- **Double-click it** to change any words right on the design.
+- **Say what to change** in the chat: "darker", "bigger headline", "use the knitwear photo", "add 20% off". Each change counts as a design.
+- **Every size** to adapt it to the other sizes.
+- **Save changes** to save it as a new version (the old one is kept).
+
+See [Create designs](create-designs#change-a-design).
+
+The asset page is for the file itself: its name, About, tags, alt text, licence and versions, plus the quick fixes above for photos. Anything that turns a file into something new (new versions, scenes, sizes for social, designs) happens in **Create**.
 
 ## Made in Figma
 Designs made in Figma are edited in Figma, where their layers are. Say what to change and click **Make the change with Claude**: Claude edits the Figma frame and saves it back to Mise as a new version. **Open it in Figma** to edit it yourself.

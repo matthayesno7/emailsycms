@@ -1,5 +1,13 @@
 // Create boards: the canvas's data and layout rules. Safe for the browser.
 // A board keeps what's on it and where; the files themselves live in the library.
+import type { Spec } from './design';
+
+// A design made on the board: its layout lives here until it's saved to the library (asset_id),
+// and stays editable after. dirty: changed since it was last saved.
+export type DesignState = {
+  spec?: Spec; size: { w: number; h: number }; brief: string; run: string; variant?: number; label?: string;
+  status: 'loading' | 'ready' | 'refining' | 'error'; error?: string; history?: Spec[]; dirty?: boolean;
+};
 
 export type BoardItem = {
   id: string;                 // on this board
@@ -10,6 +18,7 @@ export type BoardItem = {
   name?: string;
   pending?: { kind: 'photo' | 'video'; job?: string; label: string };
   error?: string;
+  design?: DesignState;
 };
 export type Turn = {
   id: string; role: 'you' | 'mise'; text: string; at: string;
@@ -36,7 +45,7 @@ export function place(items: BoardItem[], ratios: number[], from?: BoardItem | n
   let x = rowX;
   let y = from ? from.y : items.length ? Math.max(...items.map((i) => i.y + H(i))) + GAP * 2 : 0;
   for (const r of ratios) {
-    const w = ITEM_W, h = w / (r || 1);
+    const w = (r || 1) >= 2.5 ? Math.round(ITEM_W * 1.6) : ITEM_W, h = w / (r || 1); // wide banners get more room
     let hit: BoardItem | undefined, guard = 0;
     while ((hit = all.find((b) => overlaps({ x, y, w, h }, b))) && guard++ < 500) {
       y = hit.y + H(hit) + GAP;

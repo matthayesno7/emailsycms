@@ -118,3 +118,16 @@ export function cleanSpec(input: any, allowed: Set<string>): Spec | null {
 export function assetsUsed(s: Spec) {
   return [...new Set(s.layers.filter((l) => l.type === 'image').map((l: any) => l.asset as string))];
 }
+
+// Picks the canvas from what someone typed, when they didn't choose a size.
+export function formatFor(brief: string): Size {
+  const b = brief.toLowerCase();
+  const id = /linkedin/.test(b) && /banner|cover|header/.test(b) ? 'linkedin-banner'
+    : /linkedin/.test(b) ? 'linkedin-post'
+    : /stor(y|ies)|tiktok|reel/.test(b) ? 'story'
+    : /instagram|insta|\big\b|feed post/.test(b) ? 'ig-post'
+    : /square|facebook|meta|\bad\b|ads\b/.test(b) ? 'square'
+    : 'email-hero';
+  const f = FORMATS.find((x) => x.id === id)!;
+  return { w: f.w, h: f.h };
+}

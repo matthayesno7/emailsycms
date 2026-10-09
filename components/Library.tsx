@@ -17,7 +17,6 @@ import Create from './Create';
 import ImportSources from './ImportSources';
 import { TABS, tabOf, tabLabel } from '@/lib/formats';
 import { normaliseKit, type BrandKitRow } from '@/lib/brandKit';
-import { studioKit } from '@/lib/studioBrand';
 import { dhash, findDuplicate } from '@/lib/phash';
 import { collectionQuery, describeRules, haystack, matchesQuery, matchesRules, suggestCollections, type Collection, type Rules } from '@/lib/collections';
 import AutoOrganise from './AutoOrganise';
@@ -135,6 +134,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [limitHit, setLimitHit] = useState<{ message: string; reason?: string } | null>(null);  // out of Studio designs this month
   const [plan, setPlan] = useState<Plan>('free');
   const [startAssets, setStartAssets] = useState<string[] | null>(null); // "Open in Create": a new board with these files
+  const [startDesign, setStartDesign] = useState<string | null>(null); // "Edit design": a saved design back on a board
   const shownDesignsUpsell = useRef(false);
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
@@ -1058,6 +1058,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           ) : page === 'create' && curWs ? (
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
               plan={plan} startAssets={startAssets} onStartAssetsUsed={() => setStartAssets(null)}
+              startDesign={startDesign} onStartDesignUsed={() => setStartDesign(null)}
               autoBrief={autoBrief} onAutoUsed={() => setAutoBrief(null)}
               onConnect={() => openSettings('claude')} onBrandKit={() => go('brand')} onReview={() => library('all', 'draft')}
               onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
@@ -1293,12 +1294,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onSaveEdit={(r, asCopy) => saveEdit(openAsset, r, asCopy)}
           onRevert={(v) => revertAsset(openAsset, v)}
           onAddPreset={addPreset}
-          design={openAsset.provenance?.via === 'studio' && openAsset.provenance?.spec ? (() => {
-            const sk = studioKit(curWs?.name || '', kitRow, items, urls);
-            return { wsId: ws, brand: sk.brand, fonts: sk.fonts, srcOf: sk.srcOf, thumbOf: (a: Asset) => emailSrcOf(a) || undefined,
-              library: items.filter((i) => (i.kind === 'image' || i.kind === 'product') && i.storage_path && i.status !== 'draft' && isAvailable(i) && i.provenance?.via !== 'studio') };
-          })() : undefined}
-          onDesignSaved={async (newId) => { await loadAssets(ws); if (newId) openEditor(newId, true); }}
+          onEditDesign={can.add(curWs?.role) ? () => { setStartDesign(openAsset.id); openEditor(null); go('create'); } : undefined}
           onShare={async () => {
             if (!openAsset.storage_path) { toast('Nothing to share yet.'); return null; }
             setShareTarget({ kind: 'assets', asset_ids: [openAsset.id], title: openAsset.name });

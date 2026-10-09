@@ -4,7 +4,7 @@ import { runKey } from '@/lib/plans';
 import { openUpgrade } from './Billing';
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import Studio, { formatFor } from './Studio';
+import { formatFor } from '@/lib/design';
 import Board, { type Mode, type Start } from './Board';
 import type { StudioBrand } from './DesignCanvas';
 import { CATEGORIES, MOCKS, PROMPTS, USE_LABEL, fillPrompt, type PromptCategory } from '@/lib/prompts';
@@ -15,13 +15,14 @@ import type { Asset, Ws } from './Library';
 // Ideas the Studio can design right here (single-canvas designs; AI photos and video go to Claude).
 const LIVE = new Set(['hero', 'strip', 'post', 'story', 'thumb', 'slide']);
 
-export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed, plan = 'free', startAssets, onStartAssetsUsed }: {
+export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed, plan = 'free', startAssets, onStartAssetsUsed, startDesign, onStartDesignUsed }: {
   ws: Ws; userId: string; supabase: SupabaseClient; onSaved: () => void;
   items: Asset[]; urls: Record<string, string>; kit: BrandKitRow | null; connected: boolean;
   onConnect: () => void; onBrandKit: () => void; onReview: () => void; onOpen: (a: Asset) => void; toast: (m: string) => void;
   autoBrief?: string | null; onAutoUsed?: () => void; // first designs after sign-up
   plan?: string;
   startAssets?: string[] | null; onStartAssetsUsed?: () => void; // "Open in Create" from a file or a selection
+  startDesign?: string | null; onStartDesignUsed?: () => void; // "Edit design" on a saved design
 }) {
   // Everything in Create happens on a board: a new one opens as the create stage.
   const [board, setBoard] = useState<string | null>(null);
@@ -44,10 +45,21 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     newBoard(first ? first.name : 'New board', { mode: 'photo', assets: startAssets });
     onStartAssetsUsed?.();
   }, [startAssets]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A saved design opens on the board it was last worked on, or a new one.
+  useEffect(() => {
+    if (!startDesign) return;
+    const id = startDesign;
+    onStartDesignUsed?.();
+    supabase.from('boards').select('id').eq('workspace_id', ws.id).contains('items', [{ asset_id: id }]).order('updated_at', { ascending: false }).limit(1)
+      .then(({ data }) => {
+        if (data?.[0]) { setStart(null); setBoard(data[0].id as string); window.scrollTo({ top: 0 }); return; }
+        const a = items.find((i) => i.id === id);
+        newBoard(a ? a.name : 'Design', { mode: 'design', designs: [id] });
+      });
+  }, [startDesign]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [cat, setCat] = useState<PromptCategory | 'all'>('all');
   const [live, setLive] = useState<boolean | null>(null); // can the Studio design here (API key set)?
-  const [studio, setStudio] = useState<{ brief: string; size: { w: number; h: number }; done?: (id: string, size?: { w: number; h: number }) => void } | null>(null);
   useEffect(() => { fetch('/api/design').then((r) => r.json()).then((j) => setLive(!!j.enabled)).catch(() => setLive(false)); }, []);
   const [media, setMedia] = useState<{ image: boolean; video: boolean }>({ image: false, video: false });
   useEffect(() => { fetch('/api/make').then((r) => r.json()).then((j) => setMedia({ image: !!j.image, video: !!j.video })).catch(() => {}); }, []);
@@ -99,12 +111,11 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     fetch(`/api/billing?workspace_id=${ws.id}`).then((r) => (r.ok ? r.json() : null))
       .then((j) => j && setFreeRun({ free: j.billing?.plan === 'free', run: j.free?.studio_run || null })).catch(() => {});
   }, [ws.id]);
-  // The designer, on top of a board.
-  function openDesigner(brief: string, size: { w: number; h: number }, done?: (id: string, size?: { w: number; h: number }) => void) {
+  // Before designing on a board: free has one run, so a different brief opens the upgrade pop-up.
+  function gate(brief: string) {
     const key = runKey(brief);
     if (freeRun.free && freeRun.run && freeRun.run !== key) { openUpgrade({ reason: 'studio' }); return false; }
     if (freeRun.free && !freeRun.run) setFreeRun({ free: true, run: key });
-    setStudio({ brief, size, done });
     return true;
   }
 
@@ -133,20 +144,12 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     return (
       <div className="create on-board">
         {fonts.map((u) => <link key={u} rel="stylesheet" href={u} />)}
-        <Board key={board} boardId={board} ws={ws} supabase={supabase} items={items} urls={urls} plan={plan}
+        <Board key={board} boardId={board} ws={ws} userId={userId} supabase={supabase} items={items} urls={urls} plan={plan}
           caps={{ design: !!live, image: media.image, video: media.video }} onClaude={toClaude}
-          start={start} onStarted={() => setStart(null)}
-          onBack={() => { setBoard(null); setStudio(null); }} onOpen={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }}
-          onDesign={openDesigner} toast={toast} />
-        {studio && (
-          <div className="bd-studio">
-            <Studio ws={ws} userId={userId} supabase={supabase} brand={studioBrand} fonts={fonts} srcOf={srcOf}
-              brief={studio.brief} size={studio.size} onBrief={(brief, size) => openDesigner(brief, size, studio.done)}
-              onClose={() => setStudio(null)}
-              onSaved={(id, size) => { onSaved(); if (id && studio.done) { studio.done(id, size); setStudio(null); } }}
-              onOpenAsset={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }} toast={toast} />
-          </div>
-        )}
+          brand={studioBrand} fonts={fonts} designSrc={srcOf}
+          start={start} onStarted={() => setStart(null)} gate={gate} onLibrary={onSaved}
+          onBack={() => setBoard(null)} onOpen={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }}
+          toast={toast} />
       </div>
     );
   }

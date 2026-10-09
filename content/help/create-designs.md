@@ -15,21 +15,26 @@ order: 1
 3. **Size** (optional): pick Email hero, LinkedIn banner, LinkedIn post, Instagram post, Story or Square ad, or leave it on **Auto** and Mise picks from your words.
 4. Click **Design 3 options**.
 
-Three designs appear in a few seconds, each in a different style (image-led, split, type-led, editorial), using your photos, logo, colours and fonts.
+Three designs appear on the board in a few seconds, each in a different style (image-led, split, type-led, editorial), using your photos, logo, colours and fonts. They're marked **Not saved** until you save the ones you want.
 
 ## Change a design
-- **Double-click any text** to edit it.
-- **Pick a design and say what to change**: "darker", "bigger headline", "use the knitwear photo", "add 20% off". Click **Change**.
-- **↶** undoes.
-- **Every size** adapts the design to all the other sizes at once.
-- Change the brief or size at the top and click **Redesign** to start again.
+Click a design on the board to select it (shift-click to select several), then:
+- **Say what to change** in the chat: "darker", "bigger headline", "use the knitwear photo", "add 20% off". Every selected design changes.
+- **Double-click it** (or click **Edit the words**) to zoom in and change any words right on the design. Click **Done** or press Esc when you've finished.
+- **↶ Undo** goes back a step.
+- **Every size** adapts it to all the other sizes, laid out next to it.
+
+For a different idea, just describe it in the chat: new designs appear on the board alongside the others.
 
 ## Save and use it
-- **Save** adds it to your library and puts it on the board, so you can keep working on it there.
-- **PNG** downloads it.
+- **Save to library** adds the design to your library. Save as many as you like; the rest stay on the board.
+- Change a saved design and it shows **Changes not saved**: **Save changes** saves it as a new version (the old one is kept).
+- **Download PNG** downloads it without saving.
 - **Edit in Figma** saves it and asks Claude to rebuild it in your Figma file with live layers.
 
-Designs saved from Create can be edited later from the library: open it and click **Edit**. See [Editing](editing).
+Removing a design that isn't saved from the board asks first, because it isn't in your library.
+
+To change a saved design later, open it in your library and click **Edit design**: it opens on the board it was made on (or a new one).
 
 ## Start from an idea
 Under **Start from an idea** on Create are ready-made briefs, shown with your own brand and photos: email, social, ads, product shots, video and brand. Click one and it opens on a new board with the brief already written and the size set. Change the words if you like, then make it. **Copy** copies the brief to use in Claude.
