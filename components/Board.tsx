@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SOCIAL_SIZES, SUGGESTED, actionById, actionDesigns, type ActionDef, type ActionId } from '@/lib/actions';
 import { PRODUCT_INFO_H, bounds, itemHeight, place, uid, type BoardItem, type DesignState, type Turn } from '@/lib/boards';
-import { DEFAULT_CTA } from '@/lib/products';
+import { productAsBlock } from '@/lib/products';
+import { BLOCK_TYPES } from '@/lib/blockTypes';
+import { FitPreview, Preview } from './BlockEditor';
 import { modelName, nearestAspect } from '@/lib/models';
 import { FORMATS as DESIGN_FORMATS, assetsUsed, formatFor, type Spec } from '@/lib/design';
 import { exportPng } from '@/lib/exportDesign';
@@ -573,6 +575,16 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
                 {d.spec && <div className="bd-cap"><span>{d.label ? `${d.label} · ` : ''}{d.spec.name}</span>{saving.includes(c.id) ? <em className="ns">Saving…</em> : !c.asset_id ? <em className="ns">Not saved</em> : d.dirty ? <em className="ns">Changes not saved</em> : null}</div>}
               </div>
             );
+            // Products look the same as everywhere else in Mise: the email product card.
+            if (c.product && a?.kind === 'product') return (
+              <div key={c.id} className={`bd-card product${on ? ' on' : ''}`} style={{ left: c.x, top: c.y, width: c.w }}
+                onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => onOpen(a.id)}>
+                <ProductCard a={a} src={src} onHeight={(h) => {
+                  const r = c.w / h;
+                  if (!c.measured || Math.abs((c.ratio || 0) - r) > 0.01) setCards((all) => all.map((x) => (x.id === c.id ? { ...x, ratio: r, measured: true } : x)));
+                }} />
+              </div>
+            );
             return (
               <div key={c.id} className={`bd-card${on ? ' on' : ''}${c.pending ? ' pending' : ''}${c.error ? ' failed' : ''}`} style={{ left: c.x, top: c.y, width: c.w }}
                 onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => c.asset_id && onOpen(c.asset_id)}>
@@ -582,16 +594,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
                     : src ? (video ? <video src={src} muted loop playsInline autoPlay /> : <img src={src} alt={a?.fields?.alt || a?.name || ''} draggable={false} />)
                     : <span className="bd-wait">Not in the library any more</span>}
                 </div>
-                {c.product && a?.kind === 'product' ? (
-                  <div className="bd-prod" style={{ height: PRODUCT_INFO_H }}>
-                    {a.fields?.eyebrow && <em>{a.fields.eyebrow}</em>}
-                    <b>{a.name}</b>
-                    {a.price && <span className="price">{a.price}</span>}
-                    {a.fields?.description && <p>{a.fields.description}</p>}
-                    {(a.fields?.cta ?? DEFAULT_CTA) && <span className="cta">{a.fields?.cta ?? DEFAULT_CTA}</span>}
-                    {a.pid && <small>PID {a.pid}</small>}
-                  </div>
-                ) : !c.pending && <div className="bd-cap"><span>{a?.name || c.name || ''}</span>{a?.status === 'draft' && <em>Draft</em>}</div>}
+                {!c.pending && <div className="bd-cap"><span>{a?.name || c.name || ''}</span>{a?.status === 'draft' && <em>Draft</em>}</div>}
               </div>
             );
           })}
@@ -766,5 +769,24 @@ function AddFiles({ library, urls, onClose, onAdd }: { library: Asset[]; urls: R
         <div className="actions"><button className="primary" type="button" disabled={!pick.length} onClick={() => onAdd(pick)}>{pick.length ? `Add ${pick.length}` : 'Add'}</button><button className="btn quiet" type="button" onClick={onClose}>Cancel</button></div>
       </div>
     </>
+  );
+}
+
+// A product as its email product card (the same one as on its page), measured so the board can lay it out.
+function ProductCard({ a, src, onHeight }: { a: Asset; src: string | null; onHeight: (h: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const report = useRef(onHeight); report.current = onHeight;
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const ro = new ResizeObserver(() => { const h = el.offsetHeight; if (h > 20) report.current(h); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={ref} className="bd-img bd-pcard">
+      <FitPreview width={300} fitHeight={false}>
+        <Preview b={productAsBlock(a)} bt={BLOCK_TYPES.product.fields} slotSrc={() => src || undefined} />
+      </FitPreview>
+    </div>
   );
 }

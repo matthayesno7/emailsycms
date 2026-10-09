@@ -19,7 +19,8 @@ export type BoardItem = {
   pending?: { kind: 'photo' | 'video'; job?: string; label: string };
   error?: string;
   design?: DesignState;
-  product?: boolean;          // a product: its name, price and copy show under the photo
+  product?: boolean;          // a product: shown as its email product card (photo, name, copy, price, button)
+  measured?: boolean;         // ratio is the whole card's, measured once it was drawn
 };
 export type Turn = {
   id: string; role: 'you' | 'mise'; text: string; at: string;
@@ -31,8 +32,8 @@ export type Board = { id: string; workspace_id: string; name: string; items: Boa
 
 export const ITEM_W = 280;
 export const GAP = 40;
-export const PRODUCT_INFO_H = 168; // the product details under the photo, in world units
-const H = (i: BoardItem) => i.w / (i.ratio || 1) + (i.product ? PRODUCT_INFO_H : 0);
+export const PRODUCT_INFO_H = 200; // a first guess at the product card's copy under the photo, until it's measured
+const H = (i: BoardItem) => i.w / (i.ratio || 1) + (i.product && !i.measured ? PRODUCT_INFO_H : 0);
 
 const overlaps = (a: { x: number; y: number; w: number; h: number }, b: BoardItem) =>
   a.x < b.x + b.w + GAP / 2 && b.x < a.x + a.w + GAP / 2 && a.y < b.y + H(b) + GAP / 2 && b.y < a.y + a.h + GAP / 2;
