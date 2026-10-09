@@ -1061,7 +1061,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               startDesign={startDesign} onStartDesignUsed={() => setStartDesign(null)}
               autoBrief={autoBrief} onAutoUsed={() => setAutoBrief(null)}
               onConnect={() => openSettings('claude')} onBrandKit={() => go('brand')} onReview={() => library('all', 'draft')}
-              onOpen={(a) => openEditor(a.id)} /> : <p className="loading">Loading…</p>
+              onOpen={(a) => openEditor(a.id)} onPatchAsset={patchAsset} /> : <p className="loading">Loading…</p>
           ) : page === 'settings' && curWs ? (
             <div className="settings-page">
               <div className="head"><h1>Settings</h1></div>

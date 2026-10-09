@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SOCIAL_SIZES, SUGGESTED, actionById, actionDesigns, type ActionDef, type ActionId } from '@/lib/actions';
 import { PRODUCT_INFO_H, bounds, itemHeight, place, uid, type BoardItem, type DesignState, type Turn } from '@/lib/boards';
-import { productAsBlock } from '@/lib/products';
+import { productAsBlock, productCopy, productPatch, type ProductCopy } from '@/lib/products';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
 import { FitPreview, Preview } from './BlockEditor';
 import { modelName, nearestAspect } from '@/lib/models';
@@ -52,7 +52,7 @@ const TRIES: Record<Mode, string[]> = {
 const usable = (a?: Asset | null) => !!a && ['image', 'logo', 'product'].includes(a.kind) && !!a.storage_path && !/svg|gif|video/.test(a.mime || '');
 const now = () => new Date().toISOString();
 
-export default function Board({ boardId, ws, userId, supabase, items: library, urls, plan, caps, brand, fonts, designSrc, start, onStarted, onBack, onOpen, gate, onClaude, onLibrary, toast }: {
+export default function Board({ boardId, ws, userId, supabase, items: library, urls, plan, caps, brand, fonts, designSrc, start, onStarted, onBack, onOpen, gate, onClaude, onLibrary, onPatchAsset, toast }: {
   boardId: string; ws: Ws; userId: string; supabase: SupabaseClient; items: Asset[]; urls: Record<string, string>; plan: string;
   caps: Caps; onClaude: (prompt: string) => void;
   brand: StudioBrand; fonts: string[]; designSrc: (assetId: string) => string | undefined; // how designs are drawn
@@ -60,6 +60,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
   onBack: () => void; onOpen: (id: string) => void;
   gate: (brief: string) => boolean; // false: the free run is used (the upgrade pop-up is open)
   onLibrary: () => void; // something was saved to the library
+  onPatchAsset?: (id: string, patch: Record<string, any>) => Promise<boolean>; // a product's copy, edited right here
   toast: (m: string) => void;
 }) {
   const [name, setName] = useState('Untitled board');
@@ -75,6 +76,8 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
   const [size, setSize] = useState<{ w: number; h: number } | null>(null); // the create stage's size (null: from the words)
   const stageBox = useRef<HTMLTextAreaElement>(null);
   const [editing, setEditing] = useState<string | null>(null); // the design whose words are being edited in place
+  const [pdraft, setPdraft] = useState<{ id: string; v: ProductCopy; saved?: boolean } | null>(null); // the selected product's copy, as it's typed
+  const pname = useRef<HTMLInputElement>(null);
   // A new board takes its name from the first thing made or added to it.
   const autoName = (t: string) => setName((n) => (!n.trim() || n === 'Untitled board' || n === 'New board' ? t.trim().replace(/\s+/g, ' ').slice(0, 60) : n));
   const cv = useRef<HTMLDivElement>(null);
@@ -115,6 +118,21 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
   const selAssets = selected.map(assetOf).filter(Boolean) as Asset[];
   const selImages = selected.filter((c) => usable(assetOf(c)) && !c.design);
   const selDesigns = cards.filter((c) => sel.includes(c.id) && c.design?.spec && c.design.status === 'ready');
+  // One product selected: its card copy is edited in the panel, live on the board.
+  const selProduct = selAssets.length === 1 && selAssets[0].kind === 'product' && !selDesigns.length ? selAssets[0] : null;
+  useEffect(() => {
+    if (!selProduct) { setPdraft(null); return; }
+    setPdraft((d) => (d?.id === selProduct.id ? d : { id: selProduct.id, v: productCopy(selProduct) }));
+  }, [selProduct?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const withDraft = (a: Asset): Asset => (pdraft?.id === a.id ? { ...a, name: pdraft.v.name, price: pdraft.v.price, link: pdraft.v.link, fields: { ...(a.fields || {}), eyebrow: pdraft.v.eyebrow, description: pdraft.v.description, cta: pdraft.v.cta } } : a);
+  async function saveProduct() {
+    if (!pdraft || !onPatchAsset) return;
+    const a = byId.get(pdraft.id); if (!a) return;
+    if (JSON.stringify(productCopy(a)) === JSON.stringify(pdraft.v)) return;
+    if (!pdraft.v.name.trim()) { toast('A product needs a name.'); return; }
+    const ok = await onPatchAsset(a.id, productPatch(a, pdraft.v));
+    if (ok) setPdraft((d) => (d && d.id === a.id ? { ...d, saved: true } : d));
+  }
   // Selecting photos: what you type changes them, unless you choose Design or Video.
   const hadImages = useRef(false);
   useEffect(() => {
@@ -358,6 +376,12 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
     openInClaude(prompt);
   }
   // Double-click a design: zoom in on it and edit its words where they are.
+  function zoomTo(c: BoardItem) {
+    const el = cv.current; if (!el) return;
+    const h = itemHeight(c);
+    const s = Math.min(4, Math.max(0.3, Math.min((el.clientWidth - 160) / c.w, (el.clientHeight - 200) / h)));
+    setView({ s, x: (el.clientWidth - c.w * s) / 2 - c.x * s, y: (el.clientHeight - h * s) / 2 - c.y * s });
+  }
   function editWords(c: BoardItem) {
     const el = cv.current; if (!el || !c.design?.spec) return;
     setSel([c.id]); setEditing(c.id);
@@ -578,8 +602,8 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
             // Products look the same as everywhere else in Mise: the email product card.
             if (c.product && a?.kind === 'product') return (
               <div key={c.id} className={`bd-card product${on ? ' on' : ''}`} style={{ left: c.x, top: c.y, width: c.w }}
-                onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => onOpen(a.id)}>
-                <ProductCard a={a} src={src} onHeight={(h) => {
+                onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => { setSel([c.id]); zoomTo(c); setTimeout(() => pname.current?.focus(), 80); }}>
+                <ProductCard a={withDraft(a)} src={src} onHeight={(h) => {
                   const r = c.w / h;
                   if (!c.measured || Math.abs((c.ratio || 0) - r) > 0.01) setCards((all) => all.map((x) => (x.id === c.id ? { ...x, ratio: r, measured: true } : x)));
                 }} />
@@ -587,7 +611,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
             );
             return (
               <div key={c.id} className={`bd-card${on ? ' on' : ''}${c.pending ? ' pending' : ''}${c.error ? ' failed' : ''}`} style={{ left: c.x, top: c.y, width: c.w }}
-                onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => c.asset_id && onOpen(c.asset_id)}>
+                onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => { setSel([c.id]); zoomTo(c); }}>
                 <div className="bd-img" style={{ aspectRatio: `${c.ratio || ratioOf(a)}` }}>
                   {c.pending ? <span className="bd-wait"><span className="spin" aria-hidden />{c.pending.kind === 'video' ? 'Making a clip…' : 'Making…'}</span>
                     : c.error ? <span className="bd-wait">{c.error}</span>
@@ -685,6 +709,21 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
             </div>
           )}
 
+          {selProduct && pdraft?.id === selProduct.id && onPatchAsset && (
+            <div className="bd-pfields">
+              <div className="bd-pfields-h"><b>Product card</b><span>{pdraft.saved ? 'Saved' : 'Saves as you go'}</span></div>
+              {([['eyebrow', 'Label', 'e.g. New in'], ['name', 'Name', ''], ['description', 'Description', ''], ['price', 'Price', ''], ['cta', 'Button', 'No button'], ['link', 'Link', 'https://']] as [keyof ProductCopy, string, string][]).map(([k, label, ph]) => (
+                <label key={k} className={k === 'description' ? 'wide' : k === 'name' || k === 'link' ? 'wide' : ''}>
+                  <span>{label}</span>
+                  {k === 'description'
+                    ? <textarea className="in" rows={3} maxLength={300} value={pdraft.v[k]} placeholder={ph} onChange={(e) => setPdraft({ id: pdraft.id, v: { ...pdraft.v, [k]: e.target.value } })} onBlur={saveProduct} />
+                    : <input ref={k === 'name' ? pname : undefined} className={'in' + (k === 'link' ? ' mono' : '')} value={pdraft.v[k]} placeholder={ph} maxLength={k === 'link' ? 500 : 120}
+                        onChange={(e) => setPdraft({ id: pdraft.id, v: { ...pdraft.v, [k]: e.target.value } })} onBlur={saveProduct} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />}
+                </label>
+              ))}
+              <p className="tip">Changes this product everywhere in Mise. A feed sync keeps your name, label, description and button.</p>
+            </div>
+          )}
           {selDesigns.length > 0 && (() => {
             const one = selDesigns.length === 1 ? selDesigns[0] : null;
             const unsaved = selDesigns.filter((c) => !c.asset_id || c.design!.dirty);

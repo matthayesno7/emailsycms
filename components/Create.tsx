@@ -15,7 +15,7 @@ import type { Asset, Ws } from './Library';
 // Ideas the Studio can design right here (single-canvas designs; AI photos and video go to Claude).
 const LIVE = new Set(['hero', 'strip', 'post', 'story', 'thumb', 'slide']);
 
-export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed, plan = 'free', startAssets, onStartAssetsUsed, startDesign, onStartDesignUsed }: {
+export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed, plan = 'free', startAssets, onStartAssetsUsed, startDesign, onStartDesignUsed, onPatchAsset }: {
   ws: Ws; userId: string; supabase: SupabaseClient; onSaved: () => void;
   items: Asset[]; urls: Record<string, string>; kit: BrandKitRow | null; connected: boolean;
   onConnect: () => void; onBrandKit: () => void; onReview: () => void; onOpen: (a: Asset) => void; toast: (m: string) => void;
@@ -23,6 +23,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   plan?: string;
   startAssets?: string[] | null; onStartAssetsUsed?: () => void; // "Open in Create" from a file or a selection
   startDesign?: string | null; onStartDesignUsed?: () => void; // "Edit design" on a saved design
+  onPatchAsset?: (id: string, patch: Record<string, any>) => Promise<boolean>; // product copy edited on a board
 }) {
   // Everything in Create happens on a board: a new one opens as the create stage.
   const [board, setBoard] = useState<string | null>(null);
@@ -149,7 +150,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
           brand={studioBrand} fonts={fonts} designSrc={srcOf}
           start={start} onStarted={() => setStart(null)} gate={gate} onLibrary={onSaved}
           onBack={() => setBoard(null)} onOpen={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }}
-          toast={toast} />
+          onPatchAsset={onPatchAsset} toast={toast} />
       </div>
     );
   }
