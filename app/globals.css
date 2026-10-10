@@ -1952,3 +1952,15 @@ html[data-board-full] .side.rail{display:none}
 .bd-model>button{max-width:170px}
 .bd-model>button{overflow:hidden;text-overflow:ellipsis}
 .bd-compose>.bd-modes{align-self:flex-start}
+/* the chat panel: the thread scrolls, and so does the compose area if it gets tall; nothing overlaps */
+.bd-panel{overflow:hidden}
+.bd-thread{min-height:120px}
+.bd-compose{flex:none;max-height:72%;overflow-y:auto;overscroll-behavior:contain}
+.bd-compose>*{flex:none}
+.bd-pfields{max-height:none;overflow:visible}
+.bd-pfields.shut{display:block;padding:0;background:none}
+button.bd-pfields-h{grid-column:1/-1;display:flex;align-items:center;gap:8px;width:100%;border:0;background:var(--side);border-radius:10px;padding:9px 10px;text-align:left;color:var(--ink)}
+.bd-pfields:not(.shut) button.bd-pfields-h{background:none;padding:0 0 4px}
+button.bd-pfields-h span{flex:1;text-align:right}
+button.bd-pfields-h svg{transform:rotate(90deg);color:var(--ink-3);flex:none;transition:transform .15s}
+button.bd-pfields-h[aria-expanded="true"] svg{transform:rotate(-90deg)}

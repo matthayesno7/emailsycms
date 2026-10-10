@@ -96,6 +96,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
   const [editing, setEditing] = useState<string | null>(null); // the design or text whose words are being edited in place
   const [pdraft, setPdraft] = useState<{ id: string; v: ProductCopy; saved?: boolean } | null>(null); // the selected product's copy, as it's typed
   const pname = useRef<HTMLInputElement>(null);
+  const [pOpen, setPOpen] = useState(false); // the product card's fields, folded away until wanted
   const [tool, setTool] = useState<'select' | 'hand' | 'text'>('select');
   const [libOpen, setLibOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(true);
@@ -954,7 +955,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
             // Products look the same as everywhere else in Mise: the email product card.
             if (c.product && a?.kind === 'product') return (
               <div key={c.id} className={`bd-card product${on ? ' on' : ''}`} style={{ left: c.x, top: c.y, width: c.w }}
-                onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => { setSel([c.id]); zoomTo(c); setChatOpen(true); setTimeout(() => pname.current?.focus(), 80); }}>
+                onPointerDown={(e) => downCard(e, c)} onDoubleClick={() => { setSel([c.id]); zoomTo(c); setChatOpen(true); setPOpen(true); setTimeout(() => pname.current?.focus(), 80); }}>
                 <ProductCard a={withDraft(a)} src={src} onHeight={(h) => {
                   const r = c.w / h;
                   if (!c.measured || Math.abs((c.ratio || 0) - r) > 0.01) setCardsRaw((all) => all.map((x) => (x.id === c.id ? { ...x, ratio: r, measured: true } : x)));
@@ -1130,8 +1131,9 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
 
         <div className="bd-compose">
           {selProduct && pdraft?.id === selProduct.id && onPatchAsset && (
-            <div className="bd-pfields">
-              <div className="bd-pfields-h"><b>Product card</b><span>{pdraft.saved ? 'Saved' : 'Saves as you go'}</span></div>
+            <div className={'bd-pfields' + (pOpen ? '' : ' shut')}>
+              <button type="button" className="bd-pfields-h" aria-expanded={pOpen} onClick={() => setPOpen((o) => !o)}><b>Product card</b><span>{pdraft.saved ? 'Saved' : pOpen ? 'Saves as you go' : 'Edit the name, price and copy'}</span><Icon.Chevron /></button>
+              {pOpen && <>
               {([['eyebrow', 'Label', 'e.g. New in'], ['name', 'Name', ''], ['description', 'Description', ''], ['price', 'Price', ''], ['cta', 'Button', 'No button'], ['link', 'Link', 'https://']] as [keyof ProductCopy, string, string][]).map(([k, label, ph]) => (
                 <label key={k} className={k === 'description' ? 'wide' : k === 'name' || k === 'link' ? 'wide' : ''}>
                   <span>{label}</span>
@@ -1142,6 +1144,7 @@ export default function Board({ boardId, ws, userId, supabase, items: library, u
                 </label>
               ))}
               <p className="tip">Changes this product everywhere in Mise. A feed sync keeps your name, label, description and button.</p>
+              </>}
             </div>
           )}
           {selImages.length > 0 && !ask && mode === 'photo' && (
