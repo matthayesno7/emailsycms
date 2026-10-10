@@ -19,9 +19,12 @@ export type BoardItem = {
   pending?: { kind: 'photo' | 'video'; job?: string; label: string };
   error?: string;
   design?: DesignState;
+  text?: BoardText;          // words placed on the board with the text tool
+  group?: string;             // items grouped together select and move as one
   product?: boolean;          // a product: shown as its email product card (photo, name, copy, price, button)
   measured?: boolean;         // ratio is the whole card's, measured once it was drawn
 };
+export type BoardText = { value: string; size: number; weight: number; color: string; font: 'head' | 'body'; align: 'left' | 'center' | 'right' };
 export type Turn = {
   id: string; role: 'you' | 'mise'; text: string; at: string;
   refs?: string[];            // asset ids it was about
@@ -34,6 +37,7 @@ export const ITEM_W = 280;
 export const GAP = 40;
 export const PRODUCT_INFO_H = 200; // a first guess at the product card's copy under the photo, until it's measured
 const H = (i: BoardItem) => i.w / (i.ratio || 1) + (i.product && !i.measured ? PRODUCT_INFO_H : 0);
+export const itemBox = (i: BoardItem) => ({ x: i.x, y: i.y, w: i.w, h: H(i) });
 
 const overlaps = (a: { x: number; y: number; w: number; h: number }, b: BoardItem) =>
   a.x < b.x + b.w + GAP / 2 && b.x < a.x + a.w + GAP / 2 && a.y < b.y + H(b) + GAP / 2 && b.y < a.y + a.h + GAP / 2;

@@ -137,7 +137,7 @@ export async function shareAssets(db: SupabaseClient, s: ShareRow): Promise<any[
     const order = new Map<string, number>(s.asset_ids.map((id: string, i: number) => [id, i] as [string, number]));
     rows = (data || []).sort((a: any, b: any) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   } else if (s.kind === 'folder' && s.folder_id) {
-    const { data } = await db.from('assets').select(COLS).eq('workspace_id', s.workspace_id).eq('folder_id', s.folder_id).order('created_at', { ascending: false }).limit(2000);
+    const { data } = await db.from('assets').select(COLS).eq('workspace_id', s.workspace_id).eq('folder_id', s.folder_id).eq('on_board', false).order('created_at', { ascending: false }).limit(2000);
     rows = data || [];
   } else if (s.kind === 'collection' && s.collection_id) {
     const { data: c } = await db.from('collections').select('rules').eq('id', s.collection_id).eq('workspace_id', s.workspace_id).maybeSingle();
@@ -150,7 +150,7 @@ export async function shareAssets(db: SupabaseClient, s: ShareRow): Promise<any[
 }
 
 async function allWorkspaceAssets(db: SupabaseClient, ws: string) {
-  const { data } = await db.from('assets').select(COLS).eq('workspace_id', ws).neq('kind', 'block').order('created_at', { ascending: false }).limit(5000);
+  const { data } = await db.from('assets').select(COLS).eq('workspace_id', ws).neq('kind', 'block').eq('on_board', false).order('created_at', { ascending: false }).limit(5000);
   return data || [];
 }
 

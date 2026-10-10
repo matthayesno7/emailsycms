@@ -33,13 +33,16 @@ export type Made = { row: AssetRow; url: string | null };
 export async function makeImages(repo: Repo, db: any, o: {
   wsId: string; userId: string; prompt: string; referenceIds?: string[]; pid?: string | null;
   aspect?: string; purpose?: string; count?: number; name?: string;
+  onBoard?: boolean; // made on a Create board: stays there until someone saves it
+  refBufs?: Ref[];    // pictures made on the fly (a photo with a marked area, a padded canvas), sent before any library ones
+  via?: string; extra?: Record<string, unknown>; // what made it, for provenance
 }): Promise<{ assets: Made[]; model: string; purpose: string; designs: number } | Fail> {
   if (!hasImageGen()) return fail('Image generation isn’t switched on for this Mise yet.', 'off', 501);
   const locked = await gate(db, o.wsId, 'Making new images');
   if (locked) return locked;
   const prompt = String(o.prompt || '').trim().slice(0, 3000);
   if (!prompt) return fail('Say what image to make.', 'bad', 400);
-  const refs: Ref[] = [];
+  const refs: Ref[] = [...(o.refBufs || [])].slice(0, 4);
   const refIds: string[] = [];
   for (const id of (o.referenceIds || []).slice(0, 4)) {
     const r = await refFor(repo, o.wsId, id);
@@ -67,8 +70,8 @@ export async function makeImages(repo: Repo, db: any, o: {
     const row = await repo.insertAsset({
       workspace_id: o.wsId, kind: 'image', name: out.bufs.length > 1 ? `${base} (${i + 1})` : base,
       storage_path: path, mime: out.mime, bytes: buf.length, width: size?.w ?? null, height: size?.h ?? null,
-      origin: 'generated', status: 'draft', created_by: o.userId, fields: {},
-      provenance: { via: 'mise-image', prompt, model: out.model, purpose: out.route.purpose, aspect_ratio: aspect, source_product_pid: product?.pid || null, source_asset_ids: [...new Set([...(product ? [product.id] : []), ...refIds])], brand_kit_version: kitRow?.version ?? null, generated_at: new Date().toISOString() },
+      origin: 'generated', status: 'draft', created_by: o.userId, fields: {}, ...(o.onBoard ? { on_board: true } : {}),
+      provenance: { via: o.via || 'mise-image', ...(o.extra || {}), prompt, model: out.model, purpose: out.route.purpose, aspect_ratio: aspect, source_product_pid: product?.pid || null, source_asset_ids: [...new Set([...(product ? [product.id] : []), ...refIds])], brand_kit_version: kitRow?.version ?? null, generated_at: new Date().toISOString() },
       figma: null,
     });
     assets.push({ row, url: await repo.signedUrl(path) });
@@ -77,11 +80,12 @@ export async function makeImages(repo: Repo, db: any, o: {
 }
 
 // ---------- video: a job that saves itself when ready ----------
-type ClipMeta = { name: string; prompt: string | null; model: string | null; aspect: string | null; seconds: number | null; source: string | null; kitVersion: number | null };
+type ClipMeta = { name: string; prompt: string | null; model: string | null; aspect: string | null; seconds: number | null; source: string | null; kitVersion: number | null; onBoard?: boolean };
 const saving = new Set<string>();
 
 export async function startClip(repo: Repo, db: any, o: {
   wsId: string; userId: string; prompt: string; referenceId?: string | null; aspect?: string; seconds?: number; name?: string;
+  onBoard?: boolean;
 }): Promise<{ job: string; model: string; designs: number } | Fail> {
   if (!hasVideoGen()) return fail('Video isn’t switched on for this Mise yet.', 'off', 501);
   const locked = await gate(db, o.wsId, 'Making video');
@@ -103,7 +107,7 @@ export async function startClip(repo: Repo, db: any, o: {
   if (!take.ok) return fail(limitMessage('design', take), 'limit', 429);
   const started = await startVideo({ prompt: full, image, aspect, seconds });
   if ('error' in started) return fail(started.error, undefined, 502);
-  watch(repo, db, o.wsId, o.userId, started.job, { name: String(o.name || prompt).trim().slice(0, 120) || 'New video', prompt, model: started.model, aspect, seconds, source, kitVersion: kitRow?.version ?? null });
+  watch(repo, db, o.wsId, o.userId, started.job, { name: String(o.name || prompt).trim().slice(0, 120) || 'New video', prompt, model: started.model, aspect, seconds, source, kitVersion: kitRow?.version ?? null, onBoard: !!o.onBoard });
   return { job: started.job, model: started.model, designs: VIDEO_DESIGNS };
 }
 
@@ -125,7 +129,7 @@ async function saveClip(repo: Repo, db: any, wsId: string, userId: string, job: 
     await repo.upload(path, got.buf, got.mime);
     return await repo.insertAsset({
       workspace_id: wsId, kind: 'video', name: m.name, storage_path: path, mime: got.mime, bytes: got.buf.length, width: null, height: null,
-      origin: 'generated', status: 'draft', created_by: userId, fields: {},
+      origin: 'generated', status: 'draft', created_by: userId, fields: {}, ...(m.onBoard ? { on_board: true } : {}),
       provenance: { via: 'mise-video', job, prompt: m.prompt, model: m.model, aspect_ratio: m.aspect, seconds: m.seconds, source_asset_ids: m.source ? [m.source] : [], brand_kit_version: m.kitVersion, generated_at: new Date().toISOString() },
       figma: null,
     });

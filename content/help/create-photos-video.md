@@ -34,7 +34,29 @@ A clip takes one to three minutes. You can carry on working; it saves itself.
 ## Where results go: boards
 Once something is on a board, a chat with Mise opens beside the canvas, so your pictures, the results and the conversation sit side by side. Drag to move things, scroll or pinch to zoom, and drag the empty canvas to pan. Boards save themselves; find them again under **Your boards** on Create.
 
-Each result is tagged **Made with {model}** and saved to **Review** as a **draft**: approve it to use or share it. Type in the chat on the right to make more ("two more, closer up") without starting again.
+Each result is tagged **Made with {model}** and **stays on the board until you save it**, marked **Not saved**. Select what you want to keep and click **Save to library** in the toolbar above it: it goes to your library, and what AI made waits in **Review** as a draft. Removing something you never saved from the board deletes it. Type in the chat on the right to make more ("two more, closer up") without starting again.
+
+## Find your way around a board
+- **Library** on the left: search your files, filter by Photos, Products, Logos, Designs or Videos, and drag them onto the board. Drop files from your computer onto the board to upload them.
+- **Toolbar above what you select**: **Tools** (every edit, searchable), Crop, Remove background, Smart resize, Save to library, duplicate and remove. With several selected: align, group and ungroup.
+- **Bottom toolbar**: Select (V), Hand (H) to move around, Text (T) to add words in your brand fonts, upload, zoom and Fit, and the keyboard shortcuts (?).
+- **Top right**: undo and redo, show or hide the chat, and full screen.
+- **Chat**: type **@** to point at something on the board by name. The model button picks the AI model: **Auto** chooses the best one for the job, or choose one yourself. Models on Pro show a **Pro** tag; on Free they open the upgrade pop-up.
+
+## Tools
+Select one picture and open **Tools**:
+
+| Tool | What it does | Counts as |
+|---|---|---|
+| **Crop and adjust** | Crop, sizes, rotate, flip, brightness, contrast, saturation. Save as a new version of a library file, or as a copy on the board. | Nothing |
+| **Remove background** | A clean cut-out, or the subject on white, your brand colour or a soft colour. | 1 design |
+| **Erase** | Drag a box over something and it's removed, the gap filled to match. | 1 design |
+| **Extend background** | Make the picture wider, taller or square; the scene carries on around it. | 1 design |
+| **Upscale** | Twice or four times the pixels. | 1 design |
+| **Edit text** | Mise reads the words in the picture; change or remove any line, and it's redrawn in the same style. | 2 designs |
+| **Smart resize** | Up to 10 channel sizes (email hero, Instagram, story, LinkedIn, X, Pinterest, Facebook cover, display ad), re-laid out so nothing important is cut off. | 1 design per size |
+
+AI can't promise to leave every detail untouched, so results appear next to the original for you to compare.
 
 ## Make and edit pictures you already have
 Bring pictures onto a board in any of these ways:
@@ -55,7 +77,7 @@ Then select one or more pictures on the board (shift-click to add) and either cl
 | **Edit** | Anything else you type in the chat. Mise changes only what you ask for. | 2 designs per photo |
 | **Animate** | A short clip with sound from the picture (one at a time). | 10 designs |
 
-Up to 10 pictures at once (Animate: one). Everything AI makes is saved to **Review** as drafts; resized copies keep the original's status, tags and folder. Boards are on **Pro**. Resizing needs an editor, admin or owner; contributors can use the AI actions, and what they make waits for review as usual. Removing something from a board never deletes it from your library.
+Up to 10 pictures at once (Animate: one). Everything AI makes stays on the board until you save it; saved AI files wait in **Review** as drafts. Boards are on **Pro**. Resizing needs an editor, admin or owner; contributors can use the AI actions, and what they make waits for review as usual. Removing a library file from a board never deletes it from your library.
 
 ## Which model Mise uses
 | Job | Model | Counts as |

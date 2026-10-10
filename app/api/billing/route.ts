@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   const { data: u } = await db.from('ai_usage').select('used').eq('workspace_id', id).eq('month', month.toISOString().slice(0, 10)).eq('kind', 'design').maybeSingle();
   const used = u?.used || 0;
   // Free taster: how many of the 50 files are in, and whether the one Studio run is used.
-  const { count: files } = await db.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', id).not('storage_path', 'is', null).neq('kind', 'block');
+  const { count: files } = await db.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', id).not('storage_path', 'is', null).neq('kind', 'block').eq('on_board', false);
   const allowance = designAllowance(billing.plan);
   const extra = Math.max(0, used - allowance);
   // Prices show in US dollars; a paying brand sees the currency it actually pays in.

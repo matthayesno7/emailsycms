@@ -13,7 +13,7 @@ export const POST = safe('make/action', async (request: Request) => {
   const m = await member(ws);
   if ('error' in m) return m.error;
   const { data: me } = await m.db.from('workspace_members').select('role').eq('workspace_id', ws).eq('user_id', m.user.id).maybeSingle();
-  const r = await runAction(m.repo, m.db, { wsId: ws, userId: m.user.id, role: me?.role || '', action: b?.action, assetIds: b?.asset_ids, choice: b?.choice, detail: b?.detail, sizes: b?.sizes });
+  const r = await runAction(m.repo, m.db, { wsId: ws, userId: m.user.id, role: me?.role || '', action: b?.action, assetIds: b?.asset_ids, choice: b?.choice, detail: b?.detail, sizes: b?.sizes, onBoard: !!b?.board, purpose: b?.purpose });
   if ('error' in r) return Response.json({ error: r.error, code: r.code }, { status: r.status });
   return Response.json(r);
 });

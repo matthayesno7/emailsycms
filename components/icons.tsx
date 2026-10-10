@@ -43,6 +43,20 @@ export const Icon = {
   Chevron: (p: P) => <S size={12} {...p}><path d="m9 6 6 6-6 6" /></S>,
   Download: (p: P) => <S {...p}><path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 17v3h16v-3" /></S>,
   Close: (p: P) => <S size={16} {...p}><path d="M6 6l12 12M18 6 6 18" /></S>,
+  Pin: (p: P) => <S {...p}><path d="M12 17v5" /><path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9A2 2 0 0 1 15 10.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></S>,
+  Expand: (p: P) => <S {...p}><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></S>,
+  Shrink: (p: P) => <S {...p}><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" /></S>,
+  Undo: (p: P) => <S {...p}><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></S>,
+  Redo: (p: P) => <S {...p}><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></S>,
+  Cursor: (p: P) => <S {...p}><path d="M5 3l14 7-6 2-2 6z" /></S>,
+  Hand: (p: P) => <S {...p}><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.4l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15" /></S>,
+  Text: (p: P) => <S {...p}><path d="M4 7V4h16v3M9 20h6M12 4v16" /></S>,
+  Crop: (p: P) => <S {...p}><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" /></S>,
+  Wand: (p: P) => <S {...p}><path d="m15 4-1 1M19 8l1-1M17 3v2M21 7h-2" /><path d="m3 21 12-12 2 2L5 23z" /></S>,
+  Layers: (p: P) => <S {...p}><path d="m12 2 10 5-10 5L2 7z" /><path d="m2 12 10 5 10-5M2 17l10 5 10-5" /></S>,
+  Keyboard: (p: P) => <S {...p}><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M7 15h10" /></S>,
+  Library: (p: P) => <S {...p}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></S>,
+  Panel: (p: P) => <S {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></S>,
 };
 
 const WIRE: Record<string, string> = {

@@ -135,6 +135,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [plan, setPlan] = useState<Plan>('free');
   const [startAssets, setStartAssets] = useState<string[] | null>(null); // "Open in Create": a new board with these files
   const [startDesign, setStartDesign] = useState<string | null>(null); // "Edit design": a saved design back on a board
+  const [startFile, setStartFile] = useState<{ id: string; tool?: 'crop' } | null>(null); // Edit on a photo or product: on a board
   const shownDesignsUpsell = useRef(false);
   const [view, setView] = useState('all'); // which kind the library shows
   const [addOpen, setAddOpen] = useState(false);
@@ -165,6 +166,10 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
   const [modal, setModal] = useState<string | null>(null);
   const [convertFrom, setConvertFrom] = useState<string | null>(null);
   const [sideOpen, setSideOpen] = useState(false);
+  // The rail: a slim column of icons that opens on hover, or stays open when pinned (remembered per browser).
+  const [pinned, setPinned] = useState(false);
+  useEffect(() => { try { setPinned(localStorage.getItem('mise.railPinned') === '1'); } catch {} }, []);
+  const togglePin = () => setPinned((p) => { try { localStorage.setItem('mise.railPinned', p ? '0' : '1'); } catch {} return !p; });
   const [dropping, setDropping] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [newWs, setNewWs] = useState<string | null>(null);
@@ -223,7 +228,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   const loadAssets = useCallback(async (wsId: string) => {
     if (!wsId) return;
-    const { data, error } = await supabase.from('assets').select('*').eq('workspace_id', wsId).order('created_at', { ascending: false }).limit(2000);
+    const { data, error } = await supabase.from('assets').select('*').eq('workspace_id', wsId).eq('on_board', false).order('created_at', { ascending: false }).limit(2000);
     if (error) toast('Couldn’t load your library. Reload to try again.');
     setItems((data as Asset[]) || []);
     setReady(true);
@@ -971,9 +976,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   // ---------- render ----------
   return (
-    <div className="app">
-      <aside className={'side' + (sideOpen ? ' open' : '')} aria-label="Navigation">
-        <div className="mise-logo" aria-label="Mise"><span className="wordmark">Mise<i aria-hidden /></span></div>
+    <div className={'app' + (pinned ? ' pinned' : '')}>
+      <aside className={'side rail' + (sideOpen ? ' open' : '') + (pinned ? ' pinned' : '') + (wsOpen ? ' held' : '')} aria-label="Navigation">
+        <div className="mise-logo" aria-label="Mise"><span className="wordmark">Mise<i aria-hidden /></span><span className="mise-mark" aria-hidden>M<i /></span></div>
         <div className="wsw">
           <button className="wsw-btn" type="button" aria-expanded={wsOpen} onClick={() => setWsOpen((o) => !o)}>
             <span className="dot" style={{ background: WS_COLORS[Math.max(0, wsIndex) % WS_COLORS.length] }}>{(curWs?.name[0] || 'E').toUpperCase()}</span>
@@ -1018,6 +1023,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           {needsSetup && <span className="count dotnote" title={!connected ? 'Claude isn’t connected yet' : 'No Figma file connected'}>•</span>}
         </button>
         <div className="me"><span title={email}>{email}</span><button type="button" onClick={async () => { await supabase.auth.signOut(); location.href = '/login'; }}>Sign out</button></div>
+        <button className="nav rail-pin" type="button" aria-pressed={pinned} onClick={togglePin} title={pinned ? 'Unpin the menu' : 'Keep the menu open'}><Icon.Pin />{pinned ? 'Unpin menu' : 'Pin menu'}</button>
       </aside>
       {wsOpen && <div className="clickaway" onClick={() => setWsOpen(false)} />}
 
@@ -1059,6 +1065,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
               plan={plan} startAssets={startAssets} onStartAssetsUsed={() => setStartAssets(null)}
               startDesign={startDesign} onStartDesignUsed={() => setStartDesign(null)}
+              startFile={startFile} onStartFileUsed={() => setStartFile(null)}
+              onUpload={async (files) => { const out: Asset[] = []; for (const f of files) { const r = await addImageAsset(f, f.type.startsWith('video/') ? { kind: 'video' } : {}); if (r) out.push(r.asset); } return out; }}
+              onSaveEdit={async (id, r, asCopy) => { const a = itemById(id); return a ? saveEdit(a, r, asCopy) : false; }}
               autoBrief={autoBrief} onAutoUsed={() => setAutoBrief(null)}
               onConnect={() => openSettings('claude')} onBrandKit={() => go('brand')} onReview={() => library('all', 'draft')}
               onOpen={(a) => openEditor(a.id)} onPatchAsset={patchAsset} /> : <p className="loading">Loading…</p>
@@ -1295,6 +1304,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onRevert={(v) => revertAsset(openAsset, v)}
           onAddPreset={addPreset}
           onEditDesign={can.add(curWs?.role) ? () => { setStartDesign(openAsset.id); openEditor(null); go('create'); } : undefined}
+          onEditOnBoard={can.add(curWs?.role) ? (tool) => { setStartFile({ id: openAsset.id, tool }); openEditor(null); go('create'); } : undefined}
           onShare={async () => {
             if (!openAsset.storage_path) { toast('Nothing to share yet.'); return null; }
             setShareTarget({ kind: 'assets', asset_ids: [openAsset.id], title: openAsset.name });

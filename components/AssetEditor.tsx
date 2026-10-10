@@ -26,7 +26,7 @@ const SIZES: [string, string, number | null][] = [['original', 'Original size', 
 // Opens at ?asset=<id>, so it has its own link and Back works.
 // Two ways to change it: Edit (hands-on, free, saves a new version; Studio designs reopen in the
 // Studio with their layout live) and AI edit (prompt-led, coming next).
-export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, onEditDesign, onAddPreset, pro = false, replacements = [], onUpgrade, onMake }: {
+export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose, onPatch, onDelete, onMakeBlock, onPrev, onNext, position, toast, folders = [], onShare, onEmailCopy, figmaUrl, product, suggested, duplicate, onOpenAsset, onRetag, supabase, kit, onSaveEdit, onRevert, onEditDesign, onEditOnBoard, onAddPreset, pro = false, replacements = [], onUpgrade, onMake }: {
   it: Asset;
   onMake?: () => void; // "Open in Create": a new board with this file, to make new versions with AI
   folders?: { id: string; name: string }[];
@@ -43,6 +43,7 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   onSaveEdit?: (r: EditResult, asCopy: boolean) => Promise<boolean>;
   onRevert?: (version: number) => Promise<boolean>;
   onEditDesign?: () => void; // designs made in Create are changed on a Create board
+  onEditOnBoard?: (tool?: 'crop') => void; // photos and products are edited on a Create board too
   onAddPreset?: (p: TeamPreset) => Promise<boolean>;
   pro?: boolean;                                   // the brand's plan: licence dates and replacements are on Pro
   replacements?: { id: string; name: string }[];   // what an obsolete file can point to
@@ -103,6 +104,8 @@ export default function AssetEditor({ it, src, usedIn = [], onOpenBlock, onClose
   const canEdit = isProduct || (!isVideo && !isSvg && (madeIn === 'figma' ? true : !!src && (isDesign ? !!onEditDesign : !!onSaveEdit)));
   const startEdit = () => {
     if (madeIn === 'create' && !isProduct) { if (!pro && onUpgrade) onUpgrade('edit'); else onEditDesign?.(); return; }
+    // Photos and products: on a Create board, the one place things are edited (photos open in Crop and adjust).
+    if (onEditOnBoard && madeIn !== 'figma') { if (!isProduct && !pro && onUpgrade) onUpgrade('edit'); else onEditOnBoard(isProduct ? undefined : 'crop'); return; }
     setEditing(isProduct ? 'product' : madeIn === 'figma' ? 'figma' : 'image');
   };
   const editLabel = isProduct ? 'Edit' : madeIn === 'figma' ? 'Edit in Figma' : madeIn === 'create' ? 'Edit design' : 'Edit';

@@ -44,6 +44,31 @@ export const ACTIONS: ActionDef[] = [
     ask: { label: 'What should change?', placeholder: 'Make it autumn, add steam to the coffee' } },
 ];
 export const SUGGESTED = ACTIONS.filter((a) => a.id !== 'edit');
+
+// ---------- board tools: the hands-on edits in a board's Tools menu (lib/boardTools.ts runs them) ----------
+export type ToolId = 'removebg' | 'upscale' | 'erase' | 'extend' | 'smartresize' | 'readtext' | 'edittext';
+// Smart resize: re-laid out with AI for each channel, not cropped.
+export const SMART_SIZES = [
+  { id: 'email-hero', label: 'Email hero', w: 1200, h: 600 },
+  { id: 'ig-post', label: 'Instagram post', w: 1080, h: 1350 },
+  { id: 'square', label: 'Square', w: 1080, h: 1080 },
+  { id: 'story', label: 'Story or reel', w: 1080, h: 1920 },
+  { id: 'linkedin-post', label: 'LinkedIn post', w: 1200, h: 627 },
+  { id: 'linkedin-banner', label: 'LinkedIn banner', w: 1128, h: 191 },
+  { id: 'x-post', label: 'X post', w: 1600, h: 900 },
+  { id: 'pinterest', label: 'Pinterest pin', w: 1000, h: 1500 },
+  { id: 'fb-cover', label: 'Facebook cover', w: 1640, h: 624 },
+  { id: 'display-mpu', label: 'Display ad 300×250', w: 600, h: 500 },
+] as const;
+export const EXTEND_SHAPES = [
+  { id: 'wide', label: 'Wider (16:9)', aspect: '16:9' },
+  { id: 'tall', label: 'Taller (9:16)', aspect: '9:16' },
+  { id: 'square', label: 'Square (1:1)', aspect: '1:1' },
+  { id: 'portrait', label: 'Portrait (4:5)', aspect: '4:5' },
+  { id: 'landscape', label: 'Landscape (3:2)', aspect: '3:2' },
+] as const;
+// What each tool counts as, in designs (Replicate tools count as one; AI edits as their model does).
+export const TOOL_DESIGNS: Record<ToolId, number> = { removebg: 1, upscale: 1, erase: 1, extend: 1, smartresize: 1, readtext: 0, edittext: 2 };
 export const actionById = (id: unknown) => ACTIONS.find((a) => a.id === id) || null;
 
 // What one source photo costs in designs (shown on the button).

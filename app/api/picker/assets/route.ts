@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       rows = (data || []).filter(pickable).sort((a: any, b: any) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     }
   } else {
-    const { data } = await ctx.db.from('assets').select(PICK_COLS).eq('workspace_id', ctx.ws.id).in('kind', kinds).neq('status', 'draft')
+    const { data } = await ctx.db.from('assets').select(PICK_COLS).eq('workspace_id', ctx.ws.id).in('kind', kinds).neq('status', 'draft').eq('on_board', false)
       .not('storage_path', 'is', null).order('created_at', { ascending: false }).range(offset, offset + PAGE);
     more = (data || []).length > PAGE;
     rows = (data || []).slice(0, PAGE).filter(pickable);

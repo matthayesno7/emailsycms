@@ -360,7 +360,7 @@ function DeleteBrand({ supabase, ws, toast, onDeleted }: { supabase: SupabaseCli
   const [count, setCount] = useState<number | null>(null);
   useEffect(() => {
     if (!open) return;
-    supabase.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', ws.id).then(({ count: n }) => setCount(n ?? 0));
+    supabase.from('assets').select('id', { count: 'exact', head: true }).eq('workspace_id', ws.id).eq('on_board', false).then(({ count: n }) => setCount(n ?? 0));
   }, [open, supabase, ws.id]);
 
   async function remove() {

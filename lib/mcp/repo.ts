@@ -17,7 +17,7 @@ export function supabaseRepo(db: SupabaseClient): Repo {
         .filter(Boolean) as Workspace[];
     },
     async listAssets(workspaceIds, { kind, origin, status, query, limit }) {
-      let q = db.from('assets').select('*').in('workspace_id', workspaceIds).order('updated_at', { ascending: false }).limit(limit);
+      let q = db.from('assets').select('*').in('workspace_id', workspaceIds).eq('on_board', false).order('updated_at', { ascending: false }).limit(limit);
       if (kind) q = q.eq('kind', kind);
       if (origin) q = q.eq('origin', origin);
       if (status) q = q.eq('status', status);
@@ -33,7 +33,7 @@ export function supabaseRepo(db: SupabaseClient): Repo {
     async search(workspaceIds, query, { kind, origin, status, limit }) {
       const r = await searchAssets(db, { ws: workspaceIds, q: query, filters: { kinds: kind ? [kind] : undefined, origin: origin as any, status: status as any }, limit });
       if (!r.hits.length) return [];
-      const { data, error } = await db.from('assets').select('*').in('id', r.hits.map((h) => h.id));
+      const { data, error } = await db.from('assets').select('*').in('id', r.hits.map((h) => h.id)).eq('on_board', false);
       if (error) throw error;
       const rank = new Map(r.hits.map((h, i) => [h.id, i]));
       return ((data || []) as AssetRow[]).sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));

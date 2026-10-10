@@ -7,7 +7,7 @@ order: 8
 
 # Editing images and designs
 
-Open a file and click **Edit**. How it's edited depends on where it came from. Editing is on **Pro**; on Free, Edit shows the upgrade pop-up.
+Open a file and click **Edit**. Photos, logos, products and designs open on a **Create board**, the one place things are edited in Mise: photos open straight into **Crop and adjust**, and the board's **Tools** menu has the rest (remove background, erase, extend, upscale, edit text, smart resize). See [Create photos and video](create-photos-video#tools). Editing is on **Pro**; on Free, Edit shows the upgrade pop-up.
 
 Every edit is saved as a new version or a copy. The original is never lost. See [Versions](versions).
 

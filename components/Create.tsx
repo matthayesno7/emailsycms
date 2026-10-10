@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatFor } from '@/lib/design';
 import Board, { type Mode, type Start } from './Board';
+import type { EditResult } from './ImageEditor';
 import type { StudioBrand } from './DesignCanvas';
 import { CATEGORIES, MOCKS, PROMPTS, USE_LABEL, fillPrompt, type PromptCategory } from '@/lib/prompts';
 import { normaliseKit, type BrandKitRow } from '@/lib/brandKit';
@@ -15,7 +16,7 @@ import type { Asset, Ws } from './Library';
 // Ideas the Studio can design right here (single-canvas designs; AI photos and video go to Claude).
 const LIVE = new Set(['hero', 'strip', 'post', 'story', 'thumb', 'slide']);
 
-export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed, plan = 'free', startAssets, onStartAssetsUsed, startDesign, onStartDesignUsed, onPatchAsset }: {
+export default function Create({ ws, userId, supabase, items, urls, kit, connected, onConnect, onBrandKit, onReview, onOpen, onSaved, toast, autoBrief, onAutoUsed, plan = 'free', startAssets, onStartAssetsUsed, startDesign, onStartDesignUsed, startFile, onStartFileUsed, onPatchAsset, onUpload, onSaveEdit }: {
   ws: Ws; userId: string; supabase: SupabaseClient; onSaved: () => void;
   items: Asset[]; urls: Record<string, string>; kit: BrandKitRow | null; connected: boolean;
   onConnect: () => void; onBrandKit: () => void; onReview: () => void; onOpen: (a: Asset) => void; toast: (m: string) => void;
@@ -24,6 +25,9 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
   startAssets?: string[] | null; onStartAssetsUsed?: () => void; // "Open in Create" from a file or a selection
   startDesign?: string | null; onStartDesignUsed?: () => void; // "Edit design" on a saved design
   onPatchAsset?: (id: string, patch: Record<string, any>) => Promise<boolean>; // product copy edited on a board
+  startFile?: { id: string; tool?: 'crop' } | null; onStartFileUsed?: () => void; // Edit on a photo or product: open it on a board
+  onUpload?: (files: File[]) => Promise<Asset[]>; // files dropped or uploaded on a board
+  onSaveEdit?: (id: string, r: EditResult, asCopy: boolean) => Promise<boolean>; // crop and adjust on a board, saved to the library file
 }) {
   // Everything in Create happens on a board: a new one opens as the create stage.
   const [board, setBoard] = useState<string | null>(null);
@@ -53,11 +57,24 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
     onStartDesignUsed?.();
     supabase.from('boards').select('id').eq('workspace_id', ws.id).contains('items', [{ asset_id: id }]).order('updated_at', { ascending: false }).limit(1)
       .then(({ data }) => {
-        if (data?.[0]) { setStart(null); setBoard(data[0].id as string); window.scrollTo({ top: 0 }); return; }
+        if (data?.[0]) { setStart({ mode: 'design', designs: [id] }); setBoard(data[0].id as string); window.scrollTo({ top: 0 }); return; }
         const a = items.find((i) => i.id === id);
         newBoard(a ? a.name : 'Design', { mode: 'design', designs: [id] });
       });
   }, [startDesign]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Edit on a photo or product: on the board it's already on, or a new one, with the crop tool open for photos.
+  useEffect(() => {
+    if (!startFile) return;
+    const f = startFile;
+    onStartFileUsed?.();
+    const s: Start = { mode: 'photo', assets: [f.id], tool: f.tool };
+    supabase.from('boards').select('id').eq('workspace_id', ws.id).contains('items', [{ asset_id: f.id }]).order('updated_at', { ascending: false }).limit(1)
+      .then(({ data }) => {
+        if (data?.[0]) { setStart(s); setBoard(data[0].id as string); window.scrollTo({ top: 0 }); return; }
+        const a = items.find((i) => i.id === f.id);
+        newBoard(a ? a.name : 'Edit', s);
+      });
+  }, [startFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [cat, setCat] = useState<PromptCategory | 'all'>('all');
   const [live, setLive] = useState<boolean | null>(null); // can the Studio design here (API key set)?
@@ -150,6 +167,7 @@ export default function Create({ ws, userId, supabase, items, urls, kit, connect
           brand={studioBrand} fonts={fonts} designSrc={srcOf}
           start={start} onStarted={() => setStart(null)} gate={gate} onLibrary={onSaved}
           onBack={() => setBoard(null)} onOpen={(id) => { const a = items.find((i) => i.id === id); if (a) onOpen(a); else onSaved(); }}
+          kit={k} onUpload={onUpload} onSaveEdit={onSaveEdit}
           onPatchAsset={onPatchAsset} toast={toast} />
       </div>
     );

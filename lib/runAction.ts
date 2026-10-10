@@ -25,6 +25,8 @@ const fail = (error: string, code: Fail['code'], status: number): Fail => ({ err
 
 export async function runAction(repo: Repo, db: SupabaseClient, o: {
   wsId: string; userId: string; role: string; action: unknown; assetIds: unknown; choice?: unknown; detail?: unknown; sizes?: unknown;
+  onBoard?: boolean; // from a Create board: results stay there until saved
+  purpose?: unknown;  // the model picked on the board ('auto' or a job); otherwise each action's own
 }): Promise<ActionOut> {
   const def = actionById(o.action);
   if (!def) return fail('Pick something to make.', 'bad', 400);
@@ -61,6 +63,7 @@ export async function runAction(repo: Repo, db: SupabaseClient, o: {
           const fileRow = { storage_path: path, mime: out.mime, width: out.width, height: out.height, bytes: out.buf.length, images, phash: null, by: o.userId };
           const { data: copy, error } = await db.rpc('asset_save_copy', { p_asset: a.id, p_file: fileRow, p_name: `${a.name} (${s.label})`, p_note: describeEdit({ width: s.w, height: s.h }, { w: out.width, h: out.height }).replace(' (with Claude)', '') });
           if (error || !copy) throw new Error(error?.message || 'Couldn’t save the copy.');
+          if (o.onBoard) await db.from('assets').update({ on_board: true }).eq('id', (copy as any).id);
           r.assets.push({ id: (copy as any).id, name: (copy as any).name, url: await repo.signedUrl(path), width: out.width, height: out.height, status: (copy as any).status });
         }
       } catch (e: any) { r.error = e?.message || 'Couldn’t resize this one.'; }
@@ -76,7 +79,7 @@ export async function runAction(repo: Repo, db: SupabaseClient, o: {
   // ---------- Animate: one clip, ready in a minute or two ----------
   if (def.kind === 'video') {
     const a = rows[0];
-    const r = await startClip(repo, db, { wsId: o.wsId, userId: o.userId, prompt, referenceId: a.id, aspect: (a.width || 16) < (a.height || 9) ? '9:16' : '16:9', seconds: 6, name: `${a.name}, ${label.toLowerCase()}` });
+    const r = await startClip(repo, db, { wsId: o.wsId, userId: o.userId, prompt, referenceId: a.id, aspect: (a.width || 16) < (a.height || 9) ? '9:16' : '16:9', seconds: 6, name: `${a.name}, ${label.toLowerCase()}`, onBoard: o.onBoard });
     if ('error' in r) return r;
     return { action: def.id, results: [{ source: { id: a.id, name: a.name }, assets: [] }], model: r.model, designs: r.designs, job: r.job };
   }
@@ -88,7 +91,7 @@ export async function runAction(repo: Repo, db: SupabaseClient, o: {
     const aspect = a.width && a.height ? nearestAspect(a.width, a.height, ASPECTS as unknown as string[]) : '1:1';
     const r = await makeImages(repo, db, {
       wsId: o.wsId, userId: o.userId, prompt, referenceIds: [a.id], aspect, count: def.takes || 1,
-      purpose: def.id === 'translate' ? 'text' : 'product', name: `${a.name}, ${label}`,
+      purpose: ['product', 'text', 'quick'].includes(String(o.purpose)) && o.purpose !== 'quick' ? String(o.purpose) : def.id === 'translate' ? 'text' : 'product', name: `${a.name}, ${label}`, onBoard: o.onBoard,
     });
     if ('error' in r) {
       // Plan, allowance or switched off: stop and say so. A model hiccup on one photo: carry on with the rest.

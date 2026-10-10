@@ -12,7 +12,7 @@ export const POST = safe('make/video', async (request: Request) => {
   if ('error' in m) return m.error;
   const r = await startClip(m.repo, m.db, {
     wsId: String(body.workspace_id), userId: m.user.id, prompt: String(body?.prompt || ''),
-    referenceId: body?.reference_id ? String(body.reference_id) : null, aspect: body?.aspect, seconds: body?.seconds, name: body?.name,
+    referenceId: body?.reference_id ? String(body.reference_id) : null, aspect: body?.aspect, seconds: body?.seconds, name: body?.name, onBoard: !!body?.board,
   });
   if ('error' in r) return Response.json({ error: r.error, code: r.code }, { status: r.status });
   return Response.json(r);

@@ -309,7 +309,7 @@ export async function collectionMembers(ctx: MoreCtx, collectionId: string, wsId
   if (!c || !wsIds.includes((c as any).workspace_id)) return { error: 'That smart collection isn’t in your workspaces. Call list_folders.' };
   const rules = (c as any).rules as Rules;
   const hits = await collectionHits(db, (c as any).workspace_id, rules);
-  const { data: rows } = await db.from('assets').select('id, kind, name, pid, description, tags, text_in_image, colour_names, on_brand, fields').eq('workspace_id', (c as any).workspace_id).limit(5000);
+  const { data: rows } = await db.from('assets').select('id, kind, name, pid, description, tags, text_in_image, colour_names, on_brand, fields').eq('workspace_id', (c as any).workspace_id).eq('on_board', false).limit(5000);
   return new Set(((rows || []) as any[]).filter((a) => matchesRules(a, rules, hits)).map((a) => a.id));
 }
 
@@ -327,7 +327,7 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
       if (!list.length) return toolError(args.workspace_id ? 'That workspace is not one of yours.' : 'You have no workspaces yet.');
       const out: any[] = [];
       for (const w of list) {
-        const [{ data: assets }, kit] = await Promise.all([db.from('assets').select('*').eq('workspace_id', w.id).limit(3000), ctx.repo.getBrandKit(w.id)]);
+        const [{ data: assets }, kit] = await Promise.all([db.from('assets').select('*').eq('workspace_id', w.id).eq('on_board', false).limit(3000), ctx.repo.getBrandKit(w.id)]);
         const q = reviewQueue((assets || []) as AssetRow[], kit);
         out.push({
           workspace_id: w.id, workspace: w.name, needs_you: q.count, this_week: summaryLine(q.summary),
@@ -433,7 +433,7 @@ export async function callMoreTool(name: string, args: Record<string, any>, ctx:
       const [{ data: folders }, { data: colls }, { data: rows }] = await Promise.all([
         db.from('folders').select('id, name').eq('workspace_id', w.ws.id).order('name'),
         db.from('collections').select('id, name, rules').eq('workspace_id', w.ws.id).order('position'),
-        db.from('assets').select('id, kind, name, pid, description, tags, text_in_image, colour_names, on_brand, fields, folder_id').eq('workspace_id', w.ws.id).neq('kind', 'block').limit(5000),
+        db.from('assets').select('id, kind, name, pid, description, tags, text_in_image, colour_names, on_brand, fields, folder_id').eq('workspace_id', w.ws.id).neq('kind', 'block').eq('on_board', false).limit(5000),
       ]);
       const all = (rows || []) as any[];
       const collections: any[] = [];
