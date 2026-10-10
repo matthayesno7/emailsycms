@@ -1,14 +1,12 @@
 // The words of Mise's welcome emails. Links are real app links (appUrl() is https://app.misedam.com in production).
 import type { Email } from './template';
 import { appUrl } from '../keys';
-import { money, PRICES } from '../plans';
 
 export const greetingFor = (name?: string | null) => {
   const first = (name || '').trim().split(/\s+/)[0];
   return first && /^[\p{L}][\p{L}'’-]*$/u.test(first) ? `Hi ${first[0].toUpperCase()}${first.slice(1)},` : 'Hi there,';
 };
 // Pro is $3,750 a year per brand, in US dollars for everyone (lib/plans.ts).
-export const proPrice = () => `${money(PRICES.usd.year, 'usd')} a year`;
 
 export function welcomeEmail(o: { name?: string | null }): Email {
   const app = appUrl();
@@ -28,7 +26,7 @@ export function welcomeEmail(o: { name?: string | null }): Email {
       },
       {
         title: 'Share them with one link (2 minutes)',
-        body: `Open a folder, click Share and send the link to your agency or a retailer. It’s styled with your brand kit, nobody needs a login, and you’ll see who viewed and downloaded. Add new files to the folder later and they appear in the link automatically. Sharing is on Pro: ${proPrice()} per brand, with unlimited files and people.`,
+        body: `Open a folder, click Share and send the link to your agency or a retailer. It’s styled with your brand kit, nobody needs a login, and you’ll see who viewed and downloaded. Add new files to the folder later and they appear in the link automatically. Sharing is on Pro: $3,750 a year per brand, with unlimited files and people.`,
         link: { label: 'How share links work', url: `${app}/help/share-links` },
       },
       {

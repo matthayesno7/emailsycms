@@ -1,3 +1,4 @@
+// LEGACY: these are the original prices (before 9 Oct 2026). Current Pro is $3,750 a year: see scripts/stripe-annual.mjs.
 // Adds US dollar amounts to Mise's existing Stripe prices, so Checkout can charge USD outside the UK.
 //   read -s STRIPE_SECRET_KEY && export STRIPE_SECRET_KEY && node scripts/stripe-usd.mjs
 // Pro $199/month and $1,990/year; extra designs 60¢. Safe to run again (it skips prices that have USD).

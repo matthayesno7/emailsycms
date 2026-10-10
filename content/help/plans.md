@@ -10,7 +10,7 @@ order: 1
 Mise is priced **per brand**, not per person. Invite as many people as you like on every plan.
 
 ## Free: try it with your brand
-No card needed.
+No card needed. There's no free trial of Pro: Free is the way to try Mise.
 - One brand of your own.
 - Your brand kit, built from your website.
 - Up to **50 files**.
@@ -21,10 +21,10 @@ No card needed.
 - Unlimited people.
 
 ## Pro: $3,750 a year per brand
-Billed yearly, about $313 a month. Plus applicable taxes. Charged when you upgrade. Start on Free first: there's no trial on Pro.
+Billed yearly only, plus tax. There's no monthly price. You're charged when you upgrade.
 
 Everything in Free, plus:
-- **Unlimited files**, every one organised and searchable, with no storage limit to think about.
+- **Unlimited files and users**, with no seat fees. Every file is organised and searchable, with no storage limit to think about.
 - **200 designs a month**, then **60¢ each** up to a monthly cap you set.
 - **New photos and video** in Create, made with the best model for each job.
 - **Share links and published brand portals**, with views and downloads.
@@ -36,11 +36,10 @@ Everything in Free, plus:
 
 ## Enterprise: from $15,000 a year
 For companies with several brands, or a procurement checklist.
-- All your brands on one contract and one invoice. Owners and admins add new brands straight from the app, with no checkout.
+- All your brands on one contract and one invoice, with a security review and onboarding help. Owners and admins add new brands straight from the app, with no checkout.
 - **Roles**: owner, admin, editor, contributor and viewer. See [Team and roles](team-and-roles).
 - **Activity log** with CSV export. See [Activity log](activity-log).
 - Higher allowances (1,000 designs a month per brand).
-- Security review and onboarding help.
 
 [Book a call](https://calendar.notion.so/meet/matthayes/3363f4yal) to set up Enterprise.
 

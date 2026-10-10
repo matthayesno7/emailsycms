@@ -125,15 +125,15 @@ export function PlanSettings({ ws, toast }: { ws: Ws; toast: (m: string) => void
         <section className="plan-upgrade">
           <div className="pu-head">
             <h3>Pro</h3>
-            <span className="pu-price"><b>{fmt(P.year)}</b> / year per brand{s.trial_days ? <span className="trial-pill">{s.trial_days}-day free trial</span> : null}</span>
+            <span className="pu-price"><b>{fmt(P.year)}</b> / year per brand</span>
           </div>
           <ul className="upsell-list">{proAdds(cur).map((t) => <li key={t}>{t}</li>)}</ul>
           {!s.stripe ? <p className="tip">Billing isn’t switched on yet.</p>
             : !owner ? <p className="tip">Ask an owner of {ws.name} to upgrade it.</p>
             : (
               <div className="plan-actions">
-                <button className="primary" type="button" onClick={() => openUpgrade({ reason: 'general' })}>{s.trial_days ? `Start ${s.trial_days}-day free trial` : `Upgrade ${ws.name}`}</button>
-                <p className="tip">Billed yearly, about {fmt(Math.round(P.year / 12 / 100) * 100)} a month. Plus applicable taxes.</p>
+                <button className="primary" type="button" onClick={() => openUpgrade({ reason: 'general' })}>{`Upgrade ${ws.name}`}</button>
+                <p className="tip">Billed yearly, plus applicable taxes. Unlimited files and users, no seat fees.</p>
               </div>
             )}
         </section>
@@ -218,7 +218,6 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
   const t = pitch(ask, ws.name, cur);
   const newBrand = ask.reason === 'brand';
   const canBuy = !!info?.stripe && (newBrand || info.role === 'owner') && (newBrand || info.plan === 'free');
-  const trial = info?.trial_days || 0;
 
   async function start() {
     setBusy(true);
@@ -235,10 +234,9 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
         <div className="upsell-price">
           <b>{interval === 'year' ? fmt(P.year) : fmt(P.month)}</b>
           <span>/ {interval === 'year' ? 'year' : 'month'}</span>
-          {trial > 0 && <span className="trial-pill">{trial}-day free trial</span>}
         </div>
         <p className="upsell-sub">
-          {newBrand ? `For ${ask.brand || 'your new brand'}` : `For ${ws.name}`} · billed yearly, about {fmt(Math.round(P.year / 12 / 100) * 100)} a month · plus applicable taxes
+          {newBrand ? `For ${ask.brand || 'your new brand'}` : `For ${ws.name}`} · billed yearly · plus applicable taxes
           {!ANNUAL_ONLY && (<>{' · '}
             <button type="button" className="linkish" onClick={() => setPeriod(interval === 'year' ? 'month' : 'year')}>
               {interval === 'year' ? `or ${fmt(P.month)} a month` : `or ${fmt(P.year)} a year`}
@@ -250,8 +248,8 @@ export function UpgradeModal({ ws, ask, onClose, toast }: { ws: Ws; ask: Upgrade
       {!info ? <button className="primary wide" type="button" disabled>Loading…</button>
         : canBuy ? (
           <>
-            <button className="primary wide" type="button" disabled={busy} onClick={start}>{busy ? 'Opening checkout…' : trial ? `Start ${trial}-day free trial` : 'Upgrade to Pro'}</button>
-            <p className="upsell-fine">{trial ? `You won’t be charged today. After ${trial} days it’s ${interval === 'year' ? `${fmt(P.year)} a year` : `${fmt(P.month)} a month`} unless you cancel; cancel and you’re back on Free with all your files.` : `Secure checkout with Stripe. ${interval === 'year' ? 'Billed yearly' : 'Billed monthly'}. Cancel before it renews and you’re back on Free with all your files.`} By continuing you agree to the <a href="/terms" target="_blank">Terms</a>.</p>
+            <button className="primary wide" type="button" disabled={busy} onClick={start}>{busy ? 'Opening checkout…' : 'Upgrade to Pro'}</button>
+            <p className="upsell-fine">Secure checkout with Stripe. Billed yearly, plus applicable taxes. Cancel before it renews and you’re back on Free with all your files. By continuing you agree to the <a href="/terms" target="_blank">Terms</a>.</p>
           </>
         ) : !info.stripe ? <p className="tip">Billing isn’t switched on yet.</p>
         : info.plan !== 'free' && !newBrand ? <p className="tip">{ws.name} is already on Pro.</p>

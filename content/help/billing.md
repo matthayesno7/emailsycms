@@ -11,7 +11,7 @@ Only **owners** of a brand can upgrade it and manage its billing. Each brand has
 
 ## Upgrade to Pro
 1. Settings → **Plan & usage** → **Upgrade {brand}**, or click **Upgrade to Pro** in any upgrade pop-up.
-2. Pro is **$3,750 a year** per brand, billed yearly.
+2. Pro is **$3,750 a year** per brand, billed yearly, plus tax. There's no monthly option.
 3. Pay with Stripe's secure checkout. It asks for your card and billing address, and lets you add a VAT or tax number and a promotion code.
 4. You're back in Mise: "Welcome to Pro. It can take a few seconds to show."
 
@@ -31,7 +31,7 @@ Settings → **Plan & usage** → **Manage billing** opens your billing portal. 
 - Cancel.
 
 ## Extra designs
-Pro includes 200 designs a month per brand. After that each design costs **60¢** (50p in pounds), added to the next invoice, up to a monthly cap.
+Pro includes 200 designs a month per brand. After that each design costs **60¢** (50p for brands that pay in pounds), added to the next invoice, up to a monthly cap.
 - Set the cap in Settings → **Plan & usage** → **Extra designs** → **Monthly cap** → **Save**. The default is $50.
 - Set it to **0** to switch extras off. Create then pauses when the 200 are used, until the 1st.
 - The page shows how many extra designs you've used this month, what they'll cost, and how many more fit under the cap.
@@ -46,9 +46,6 @@ Payments aren't refunded for part of a period, unless the law requires it. See t
 
 ## Failed payments
 If a payment fails, Plan & usage shows "payment failed, Stripe is retrying", and Stripe tries again over the following days. Update your card in **Manage billing**. If it stays unpaid, the brand moves to Free.
-
-## Monthly subscriptions
-Pro is sold yearly. Brands already on a monthly plan stay on it. To move to yearly, send a request through **Feedback** and it's switched for you, with the difference worked out.
 
 ## Enterprise
 Enterprise is billed by invoice under your agreement, so **Plan & usage** shows your Enterprise account and how many of its brands are in use, with no card or checkout. For changes to your agreement, [book a call](https://calendar.notion.so/meet/matthayes/3363f4yal).

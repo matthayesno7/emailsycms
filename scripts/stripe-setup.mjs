@@ -1,3 +1,4 @@
+// LEGACY: these are the original prices (before 9 Oct 2026). Current Pro is $3,750 a year: see scripts/stripe-annual.mjs.
 // Sets up Stripe for Mise Pro, once per Stripe account (test mode first, then live).
 //   STRIPE_SECRET_KEY=sk_test_… node scripts/stripe-setup.mjs
 // Creates (or finds, if run again): the "studio_design" meter, the Pro product with its

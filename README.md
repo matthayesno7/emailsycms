@@ -135,17 +135,18 @@ Run `supabase/migrations/20261002210000_versions.sql`. Nothing else to set up.
 
 ## 10. Plans and billing (Stripe)
 
-**Free is a taster; Pro is £149 a month per brand (or £1,490 a year), with a 7-day free trial (card up front).**
+**Free is the way to try Mise (no trial); Pro is $3,750 a year per brand, billed yearly only, in US dollars; Enterprise is from $15,000 a year.** See `lib/plans.ts` and `content/help/plans.md`.
 
-- Free: build the brand kit, up to 50 files (all organised and searchable), one Studio run (a brief: its three designs and extra sizes), unlimited users, connect Claude.
-- The trial pop-up opens at: file 51, a second Studio brief, any sharing (links, portals), editing (photo edits, design changes, Figma edits, restoring versions), licence dates and obsolete files, and a second brand.
+- Free: build the brand kit, up to 50 files (all organised and searchable), one Studio run (a brief: its three designs and extra sizes), unlimited users, connect Claude. No card.
+- The upgrade pop-up opens at: file 51, a second Studio brief, any sharing (links, portals), editing (photo edits, design changes, Figma edits, restoring versions), licence dates and obsolete files, and a second brand.
 - The database enforces it too (`20261006090000_free_taster.sql`): file 51 and edits raise `FREE_FILE_LIMIT` / `PRO_EDIT`; every brand after your first goes through checkout.
-- Pro: unlimited files, sharing, editing, 200 Studio designs a month then 50p each up to a cap the owner sets, licence expiry and lifecycle.
+- Pro: unlimited files and users (no seat fees), sharing, editing, photos and video, 200 designs a month then 60¢ each up to a cap the owner sets, licence expiry and lifecycle, daily feed sync.
+- Brands that subscribed before 9 Oct 2026 keep their old price and currency (£149/$199 a month or £1,490/$1,990 a year).
 - Each Pro brand has its own Stripe customer and subscription. Plans live in `workspace_billing`, which only the server writes.
 
 Set up:
 1. Run the migrations `20261005120000_billing_and_lifecycle.sql` and `20261006090000_free_taster.sql` (both at the end of `supabase/run-pending.sql`).
-2. `STRIPE_SECRET_KEY=sk_test_… node scripts/stripe-setup.mjs` creates the meter, products, prices and portal settings, and prints the env lines.
+2. `STRIPE_SECRET_KEY=sk_test_… node scripts/stripe-setup.mjs` creates the meter, products, prices and portal settings, and prints the env lines. It makes the original (legacy) prices; then run `scripts/stripe-annual.mjs` for the current $3,750 yearly price and set `STRIPE_PRICE_PRO_YEAR` to it.
 3. In Stripe → Developers → Webhooks, add `https://<app>/api/billing/webhook` with `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
 4. Add the env vars to Railway. For UK VAT, turn on Stripe Tax, add the VAT registration, then set `STRIPE_TAX=1`.
 5. Test with card 4242 4242 4242 4242. Settings → Plan shows the plan, this month's designs and the cap.

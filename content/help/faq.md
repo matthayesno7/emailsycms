@@ -18,10 +18,10 @@ No. Mise makes designs, photos and video itself. If you use Figma, Mise works wi
 No. Everything works in the Mise app. Claude is optional, for people who want to run Mise from a chat or build in Figma.
 
 **Is there a free trial?**
-Free is the trial: your brand kit, 50 files and a Create run, with no card. Upgrade when you need more.
+No. Free is the way to try Mise: your brand kit, 50 files and one Create run, with no card and unlimited people. Upgrade when you need more.
 
 **How much does it cost?**
-Free, then $3,750 a year per brand on Pro. Enterprise starts at $15,000 a year. See [Plans](plans).
+Free costs nothing. Pro is $3,750 a year per brand, billed yearly (plus tax), with unlimited files and users and no seat fees. Enterprise starts at $15,000 a year for all your brands on one contract. See [Plans](plans).
 
 **Do I pay per person?**
 No. Mise is priced per brand. Invite everyone.

@@ -1,5 +1,5 @@
 // Monthly AI usage per brand (workspace).
-// Studio designs are the one thing plans meter: Free 20 a month, Pro 200, then 50p each on Pro
+// Studio designs are the one thing plans meter: Free gets one Create run, Pro 200 a month, then 60¢ each (50p for legacy GBP brands)
 // up to the brand's own monthly cap (reported to Stripe as a meter event).
 // Organising, search and brand kits are unlimited on every plan; their caps are only
 // fair-use ceilings against runaway imports (override with AI_CAP_TAG etc., or per brand in
@@ -42,7 +42,7 @@ export async function takeUsage(ws: string, kind: UsageKind, n = 1): Promise<Tak
     let row = await take(db, ws, kind, n, base);
     if (!row) return { ok: true, used: 0, cap: base, plan };
 
-    // Pro: past the allowance, extra designs at 50p each, up to the brand's monthly cap.
+    // Pro: past the allowance, extra designs at 60¢ each (50p for legacy GBP brands), up to the brand's monthly cap.
     let extra = false;
     const customer = p.row?.stripe_customer_id as string | undefined;
     const interval = (p.row?.interval as 'month' | 'year') || 'month';
