@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { publicOrigin } from '@/lib/origin';
+import { CREATE_ON } from '@/lib/features';
 
 // The picker is embedded in other tools: only the sites on its key may frame it.
 // (Looked up straight from the database's REST API, so this works in the middleware runtime.)
@@ -17,6 +18,10 @@ async function pickerSites(key: string): Promise<string[]> {
 }
 
 export async function middleware(request: NextRequest) {
+  // Create is switched off: its API routes answer 404.
+  if (!CREATE_ON && /^\/api\/(design|make|board)(\/|$)/.test(request.nextUrl.pathname)) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   if (request.nextUrl.pathname === '/picker') {
     const sites = await pickerSites(request.nextUrl.searchParams.get('key') || '');
     const res = NextResponse.next({ request });

@@ -16,6 +16,7 @@ import { imageSize } from '../imageSize';
 import { PROMPTS, fillPrompt, USE_LABEL } from '../prompts';
 import { IMAGE_TABS, tabOf } from '../formats';
 import { MORE_INSTRUCTIONS, MORE_TOOLS, callMoreTool, collectionMembers } from './more';
+import { CREATE_ON } from '../features';
 
 export type Workspace = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
 export type AssetRow = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
@@ -44,6 +45,12 @@ export type Ctx = { repo: Repo; userId: string; fetchImpl?: typeof fetch; db?: a
 
 export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
+// Without Figma, Mise's own image and video makers do the making; they're part of Create, so they're off while Create is.
+const NO_FIGMA_ROUTE = CREATE_ON
+  ? `- No Figma (no file, or no Figma connector): make new photography and finished single images with generate_image. Mise picks the right model for the job from purpose: product (a real product in a new scene; pass the product photo in reference_asset_ids so it stays exact), text (exact words on the image, hero shots; counts as 2 designs), quick (fast variations, up to 4 at once, no references). Leave it on auto when unsure. For layouts like email heroes and social posts with live text, suggest Mise Studio (Create → Describe it), which designs three on-brand options in seconds. Never tell the user they need Figma.
+- Video: generate_video makes a short clip with sound (4–8 seconds) from a description, or animates a product photo or finished design (reference_asset_id). It counts as 10 Studio designs, so confirm before making several. It takes a minute or two: call check_video with the job_id it returns. Audio on its own (voiceover, music) isn't something Mise makes yet; say so plainly.`
+  : `- No Figma (no file, or no Figma connector): Mise doesn't make new images or video itself yet. Work from the brand kit and the library's approved assets, and suggest connecting Figma (and a Figma file in Mise's workspace settings) for designs and new imagery.`;
+
 const INSTRUCTIONS = `Mise is the brand's creative library for Claude: its brand kit, logos, images, product feed and email blocks, plus everything made with Claude. Work from these, make things in Figma, and save what you make back here.
 
 Brand kit: each workspace has one brand kit: colours by role, fonts with email-safe fallbacks, button style, content width, logos, imagery style and voice. Call get_brand_kit before building or generating anything for a workspace and follow it; never guess colours or fonts the kit gives you. A draft kit hasn't been approved by the team yet: use it, but mention that.
@@ -61,8 +68,7 @@ Where assets come from: each asset has an origin: uploaded (added by the team), 
 No longer available: an asset can be archived, expired (its licence or usage rights ran out) or obsolete (superseded, e.g. an old logo). list_assets leaves these out unless include_unavailable is true; get_asset marks them with availability, reason and use_instead. Never use an unavailable asset in new work: use its replacement (use_instead) or ask the user.
 
 Making things. Mise holds the brand and the source assets. Check get_brand_kit and whether the brand has a Figma file (list_workspaces → figma_file) and whether the Figma connector is available to you, then pick the route:
-- No Figma (no file, or no Figma connector): make new photography and finished single images with generate_image. Mise picks the right model for the job from purpose: product (a real product in a new scene; pass the product photo in reference_asset_ids so it stays exact), text (exact words on the image, hero shots; counts as 2 designs), quick (fast variations, up to 4 at once, no references). Leave it on auto when unsure. For layouts like email heroes and social posts with live text, suggest Mise Studio (Create → Describe it), which designs three on-brand options in seconds. Never tell the user they need Figma.
-- Video: generate_video makes a short clip with sound (4–8 seconds) from a description, or animates a product photo or finished design (reference_asset_id). It counts as 10 Studio designs, so confirm before making several. It takes a minute or two: call check_video with the job_id it returns. Audio on its own (voiceover, music) isn't something Mise makes yet; say so plainly.
+${NO_FIGMA_ROUTE}
 With Figma, the Figma connector does the making:
 - Designs (banners, social posts, ads, slides): build them in Figma from the brand kit and Mise assets (push_image_to_figma), headline as live text, then save the finished frame with add_generated_asset.
 - New imagery (a product in a new scene, a seasonal backdrop, a cut-out): use Figma's Weave models. weave_find_model (e.g. "nano banana 2" for images), pass the product photo's image_url from get_asset as the reference image, and describe the scene using the brand kit's imagery.style and do/don't rules. Never alter the product itself: say so in the prompt, and prefer compositing the real cut-out over a generated scene in Figma when the product must be exact. Weave runs cost the user credits: always quote the cost and get an explicit yes before running.
@@ -424,7 +430,11 @@ async function roleGate(name: string, args: Record<string, any>, ctx: Ctx): Prom
   return can[level](role) ? null : `${NEEDS[level]} (Your role in this brand: ${roleLabel(role)}.)`;
 }
 
+// Mise's own image and video makers belong to Create, so they're hidden while Create is off.
+const CREATE_TOOLS = new Set(['generate_image', 'generate_video', 'check_video']);
+
 export async function callTool(name: string, args: Record<string, any>, ctx: Ctx) {
+  if (!CREATE_ON && CREATE_TOOLS.has(name)) return toolError('Making images and video in Mise isn’t available yet. Use Figma if it’s connected.');
   args = args || {};
   const refused = await roleGate(name, args, ctx);
   if (refused) return toolError(refused);
@@ -794,7 +804,7 @@ export async function handleMessage(msg: RpcMessage, ctx: Ctx): Promise<object |
       case 'ping':
         return reply({});
       case 'tools/list':
-        return reply({ tools: [...TOOLS, ...MORE_TOOLS] });
+        return reply({ tools: [...TOOLS, ...MORE_TOOLS].filter((t) => CREATE_ON || !CREATE_TOOLS.has(t.name)) });
       case 'tools/call': {
         const name = msg.params?.name;
         const result = await callTool(name, msg.params?.arguments || {}, ctx);

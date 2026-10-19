@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
 import { Icon, Wire } from './icons';
 import type { Asset, Ws } from './Library';
+import { CREATE_ON } from '@/lib/features';
 
 export function Modal({ children, onClose, wide, className }: { children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string }) {
   return (
@@ -245,7 +246,7 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
           <>
             <li><b>Add it to Claude</b><span>In Claude, open <a href="https://claude.ai/settings/connectors" target="_blank" rel="noreferrer">Settings → Connectors</a> → <em>Add custom connector</em>. Name it <em>Mise</em> and paste your link.</span></li>
             <li><b>Optional: add Figma</b><span>If you design in Figma, add the <em>Figma</em> connector from the directory in the same place and sign in, so Claude can build in your Figma files too. You don’t need it: Mise makes images, video and designs itself.</span></li>
-            <li><b>Start a new chat</b><span>Connectors load when a chat starts. Then pick anything from the prompt library on the Create page.</span></li>
+            <li><b>Start a new chat</b><span>Connectors load when a chat starts.{CREATE_ON ? ' Then pick anything from the prompt library on the Create page.' : ' Then ask: “Show me my Mise brand kit.”'}</span></li>
           </>
         ) : (
           <>
@@ -264,7 +265,7 @@ export function Connector({ supabase, toast, full }: { supabase: SupabaseClient;
             </li>
             <li><b>Optional: add Figma</b><span>If you design in Figma, add it too, then sign in through <code>/mcp</code>:</span><Cmd text={cmdFigma} /></li>
             <li><b>Restart Claude Code</b><span>Type <code>/exit</code>, then run <code>claude</code> again: connectors load when a session starts.</span></li>
-            <li><b>Ask for something</b><span>Start <code>claude</code> and paste a prompt from the Create page. The prompts also show up in Claude Code’s <code>/</code> menu under Mise.</span></li>
+            <li><b>Ask for something</b><span>Start <code>claude</code> and {CREATE_ON ? 'paste a prompt from the Create page' : 'ask for something'}. Mise’s prompts also show up in Claude Code’s <code>/</code> menu under Mise.</span></li>
           </>
         )}
       </ol>

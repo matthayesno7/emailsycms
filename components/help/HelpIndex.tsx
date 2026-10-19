@@ -1,5 +1,5 @@
 'use client';
-import { HELP_ARTICLES, HELP_CATEGORIES } from '@/lib/helpArticles';
+import { HELP_ARTICLES, HELP_CATEGORIES } from '@/lib/helpLive';
 
 // The help centre's front page: a search box that opens search, then every article by section.
 export default function HelpIndex() {

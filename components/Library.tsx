@@ -36,6 +36,7 @@ import { fromRows } from '@/lib/feedParse';
 import ProductFeeds from './ProductFeeds';
 import { countsAsFile, effectivePlan, FREE_FILES, freeLimitOf, mb, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, tooBig, type Plan } from '@/lib/plans';
 import { expiresSoon, isAvailable, lifecycleOf, LIFECYCLE } from '@/lib/lifecycle';
+import { CREATE_ON } from '@/lib/features';
 
 export type Asset = Record<string, any> & { id: string; workspace_id: string; kind: string; name: string };
 export type Ws = { id: string; name: string; role: string; figma_file_url?: string | null; figma_file_key?: string | null; figma_file_name?: string | null };
@@ -955,7 +956,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
 
   // Files the team added themselves (not the logo and photo the brand kit pulled from their site).
   const ownFiles = items.some((a) => a.kind !== 'block' && a.provenance?.via !== 'brand_kit');
-  const go = (p: typeof page) => { setPage(p); setSideOpen(false); setWsOpen(false); };
+  const go = (p: typeof page) => { if (p === 'create' && !CREATE_ON) p = 'library'; setPage(p); setSideOpen(false); setWsOpen(false); };
   const library = (k: string, o = 'any') => { setView(k); setOrigin(o); go('library'); };
   // Free is a taster: sharing is on Pro, so asking to share opens the upgrade pop-up instead.
   useEffect(() => {
@@ -1009,7 +1010,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
             {toReview > 0 ? <span className="count pill-n" title="Things that need you">{toReview}</span> : null}
           </button>
           <button className="nav big" type="button" aria-current={page === 'library'} onClick={() => library(view === 'all' ? 'all' : view)}><Icon.Image />Assets</button>
-          <button className="nav big" type="button" aria-current={page === 'create'} onClick={() => go('create')}><Icon.Sparkle />Create</button>
+          {CREATE_ON && <button className="nav big" type="button" aria-current={page === 'create'} onClick={() => go('create')}><Icon.Sparkle />Create</button>}
           <button className="nav big" type="button" aria-current={page === 'sharing'} onClick={() => go('sharing')}><Icon.Share />Sharing</button>
           <button className="nav big" type="button" aria-current={page === 'brand'} onClick={() => go('brand')}><Icon.Palette />Brand kit
             {kitRow?.status === 'approved' ? null : <span className="count dotnote" title={kitRow ? 'Draft, not approved yet' : 'Not set up yet'}>•</span>}
@@ -1059,9 +1060,9 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               onProducts={() => library('product')}
               onBrandKit={() => go('brand')}
               onLibrary={() => library('all')} /> : <p className="loading">Loading…</p>
-          ) : page === 'create' && curWs && !can.add(curWs.role) ? (
+          ) : page === 'create' && CREATE_ON && curWs && !can.add(curWs.role) ? (
             <div className="settings"><h1>Create</h1><p className="tip">{NEEDS.add}</p></div>
-          ) : page === 'create' && curWs ? (
+          ) : page === 'create' && CREATE_ON && curWs ? (
             ready ? <Create ws={curWs} userId={userId} supabase={supabase} onSaved={() => loadAssets(ws)} items={items} urls={urls} kit={kitRow} connected={connected} toast={toast}
               plan={plan} startAssets={startAssets} onStartAssetsUsed={() => setStartAssets(null)}
               startDesign={startDesign} onStartDesignUsed={() => setStartDesign(null)}
@@ -1104,8 +1105,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               onBuilt={async (name) => {
                 setAutoSite(null);
                 await Promise.all([loadKit(ws), loadAssets(ws)]);
-                setAutoBrief(`A launch post introducing ${name}, made from our own photos and logo, for Instagram.`);
-                setPage('create');
+                if (CREATE_ON) { setAutoBrief(`A launch post introducing ${name}, made from our own photos and logo, for Instagram.`); setPage('create'); } else setPage('library');
               }} /> : <p className="loading">Loading your brand kit…</p>
           ) : !ready ? (
             <p className="loading">Loading your library…</p>
@@ -1136,7 +1136,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
               {addOpen && <div className="clickaway" onClick={() => setAddOpen(false)} />}
               {curWs && !q.trim() && folder === 'all' && !curColl && (
                 <GettingStarted supabase={supabase} ws={curWs.id} items={items} kitStatus={kitRow?.status || null}
-                  onBrandKit={() => go('brand')} onImport={() => setModal('import')} onUpload={() => fileImg.current?.click()} onCreate={() => go('create')} onSharing={() => go('sharing')} />
+                  onBrandKit={() => go('brand')} onImport={() => setModal('import')} onUpload={() => fileImg.current?.click()} onCreate={CREATE_ON ? () => go('create') : undefined} onSharing={() => go('sharing')} />
               )}
 
               {suggestions.length > 0 && collections.length === 0 && (
@@ -1249,7 +1249,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
                     </div>
                   </div>
                 ) : (
-                  <p className="nomatch">{q ? `Nothing matches “${q}”.` : showOrigins && origin === 'generated' ? 'Nothing made with Claude yet. Head to Create and make something.' : showOrigins && origin !== 'any' ? 'Nothing here with that filter.' : `No ${tabLabel(view).toLowerCase()} yet. Drop some onto the page.`}</p>
+                  <p className="nomatch">{q ? `Nothing matches “${q}”.` : showOrigins && origin === 'generated' ? (CREATE_ON ? 'Nothing made with Claude yet. Head to Create and make something.' : 'Nothing made with Claude yet.') : showOrigins && origin !== 'any' ? 'Nothing here with that filter.' : `No ${tabLabel(view).toLowerCase()} yet. Drop some onto the page.`}</p>
                 )
               ) : (
                 <div className={'grid' + (['product', 'block', 'logo'].includes(view) ? '' : ' masonry')}>
@@ -1282,7 +1282,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onDelete={() => deleteAsset(openAsset)}
           pro={plan !== 'free'}
           replacements={items.filter((i) => i.kind === openAsset.kind && i.id !== openAsset.id && isAvailable(i)).map((i) => ({ id: i.id, name: i.name })).sort((a, b) => a.name.localeCompare(b.name))}
-          onMake={can.add(curWs?.role) ? () => { setStartAssets([openAsset.id]); openEditor(null); go('create'); } : undefined}
+          onMake={CREATE_ON && can.add(curWs?.role) ? () => { setStartAssets([openAsset.id]); openEditor(null); go('create'); } : undefined}
           onUpgrade={(reason) => { if (reason !== 'edit') openEditor(null); openUpgrade({ reason: reason === 'edit' ? 'edit' : 'lifecycle' }); }}
           usedIn={usedIn[openAsset.id] || []}
           onOpenBlock={(b) => showBlock(blockDraft(b))}
@@ -1303,8 +1303,8 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
           onSaveEdit={(r, asCopy) => saveEdit(openAsset, r, asCopy)}
           onRevert={(v) => revertAsset(openAsset, v)}
           onAddPreset={addPreset}
-          onEditDesign={can.add(curWs?.role) ? () => { setStartDesign(openAsset.id); openEditor(null); go('create'); } : undefined}
-          onEditOnBoard={can.add(curWs?.role) ? (tool) => { setStartFile({ id: openAsset.id, tool }); openEditor(null); go('create'); } : undefined}
+          onEditDesign={CREATE_ON && can.add(curWs?.role) ? () => { setStartDesign(openAsset.id); openEditor(null); go('create'); } : undefined}
+          onEditOnBoard={CREATE_ON && can.add(curWs?.role) ? (tool) => { setStartFile({ id: openAsset.id, tool }); openEditor(null); go('create'); } : undefined}
           onShare={async () => {
             if (!openAsset.storage_path) { toast('Nothing to share yet.'); return null; }
             setShareTarget({ kind: 'assets', asset_ids: [openAsset.id], title: openAsset.name });
@@ -1386,7 +1386,7 @@ export default function Library({ userId, email, appUrl }: { userId: string; ema
       {selected.length > 0 && page === 'library' && !openId && !block && (
         <div className="selbar" role="toolbar" aria-label="Selected files">
           <b>{selected.length} selected</b>
-          {can.add(curWs?.role) && items.some((i) => selected.includes(i.id) && ['image', 'logo', 'product', 'video'].includes(i.kind) && i.storage_path) && (
+          {CREATE_ON && can.add(curWs?.role) && items.some((i) => selected.includes(i.id) && ['image', 'logo', 'product', 'video'].includes(i.kind) && i.storage_path) && (
             <button className="btn" type="button" onClick={() => { setStartAssets(items.filter((i) => selected.includes(i.id) && ['image', 'logo', 'product', 'video'].includes(i.kind) && i.storage_path).map((i) => i.id).slice(0, 20)); setSelected([]); go('create'); }}><Icon.Sparkle size={15} />Open in Create</button>
           )}
           <button className="primary" type="button" onClick={() => setShareTarget({ kind: 'assets', asset_ids: selected, title: `${selected.length} file${selected.length === 1 ? '' : 's'} from ${curWs?.name || 'us'}` })}><Icon.Share size={15} />Share</button>

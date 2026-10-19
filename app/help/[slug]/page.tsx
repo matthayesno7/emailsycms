@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import HelpShell from '@/components/help/HelpShell';
 import HelpToc from '@/components/help/HelpToc';
-import { HELP_ARTICLES, HELP_ORIGIN, helpArticle } from '@/lib/helpArticles';
+import { HELP_ARTICLES, HELP_ORIGIN, helpArticle } from '@/lib/helpLive';
 import { headings, navLabel } from '@/lib/helpNav';
 import { markdown } from '@/lib/markdown';
 

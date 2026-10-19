@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { HELP_ARTICLES } from '@/lib/helpArticles';
+import { HELP_ARTICLES } from '@/lib/helpLive';
 
 // Search across every help article: the box in the top bar opens it, and so do ⌘K, Ctrl+K and /.
 // Anything else on the page can open it with window.dispatchEvent(new Event('hcx-search')).

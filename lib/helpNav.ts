@@ -1,4 +1,4 @@
-import { HELP_ARTICLES, HELP_CATEGORIES, type HelpArticle } from '@/lib/helpArticles';
+import { HELP_ARTICLES, HELP_CATEGORIES, type HelpArticle } from '@/lib/helpLive';
 import { slugify } from '@/lib/markdown';
 
 // Shorter names for the help centre sidebar, where full titles would wrap.

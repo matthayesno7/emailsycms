@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import HelpShell from '@/components/help/HelpShell';
 import HelpIndex from '@/components/help/HelpIndex';
-import { HELP_INTRO, HELP_ORIGIN } from '@/lib/helpArticles';
+import { HELP_INTRO, HELP_ORIGIN } from '@/lib/helpLive';
 
 export const metadata: Metadata = {
   title: 'Help centre · Mise',

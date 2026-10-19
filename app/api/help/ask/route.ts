@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { HELP_ARTICLES } from '@/lib/helpArticles';
+import { HELP_ARTICLES } from '@/lib/helpLive';
 import { TAG_MODEL } from '@/lib/autotag';
 import { planOf } from '@/lib/billing';
 import { roleLabel } from '@/lib/roles';
