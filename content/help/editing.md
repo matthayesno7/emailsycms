@@ -7,7 +7,7 @@ order: 8
 
 # Editing images and designs
 
-Open a file and click **Edit**. Photos, logos, products and designs open on a **Create board**, the one place things are edited in Mise: photos open straight into **Crop and adjust**, and the board's **Tools** menu has the rest (remove background, erase, extend, upscale, edit text, smart resize). See [Create photos and video](create-photos-video#tools). Editing is on **Pro**; on Free, Edit shows the upgrade pop-up.
+[[create]]Open a file and click **Edit**. Photos, logos, products and designs open on a **Create board**, the one place things are edited in Mise: photos open straight into **Crop and adjust**, and the board's **Tools** menu has the rest (remove background, erase, extend, upscale, edit text, smart resize). See [Create photos and video](create-photos-video#tools). Editing is on **Pro**; on Free, Edit shows the upgrade pop-up.[[/create]][[nocreate]]Open a file and click **Edit** to crop, resize, rotate and adjust it. Editing is on **Pro**; on Free, Edit shows the upgrade pop-up.[[/nocreate]]
 
 Every edit is saved as a new version or a copy. The original is never lost. See [Versions](versions).
 
@@ -33,11 +33,11 @@ If the crop is smaller than the size you chose, you'll be warned that it will be
 
 The file keeps its format (PNG and WebP stay as they are); others save as JPG.
 
-**Words in a photo** are part of the picture and can't be edited here. Designs made in Create keep their words editable.
+**Words in a photo** are part of the picture and can't be edited here.[[create]] Designs made in Create keep their words editable.[[/create]]
 
 SVGs and videos can't be edited in Mise.
 
-## Designs made in Create
+[[create]]## Designs made in Create
 Designs are changed where they're made: on a Create board. Open the design and click **Edit design**. It opens on the board it was made on, or a new one, where you can:
 - **Double-click it** to change any words right on the design.
 - **Say what to change** in the chat: "darker", "bigger headline", "use the knitwear photo", "add 20% off". Each change counts as a design.
@@ -47,7 +47,7 @@ Designs are changed where they're made: on a Create board. Open the design and c
 See [Create designs](create-designs#change-a-design).
 
 The asset page is for the file itself: its name, About, tags, alt text, licence and versions, plus the quick fixes above for photos. Anything that turns a file into something new (new versions, scenes, sizes for social, designs) happens in **Create**.
-
+[[/create]]
 ## Made in Figma
 Designs made in Figma are edited in Figma, where their layers are. Say what to change and click **Make the change with Claude**: Claude edits the Figma frame and saves it back to Mise as a new version. **Open it in Figma** to edit it yourself.
 

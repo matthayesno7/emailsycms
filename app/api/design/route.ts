@@ -1,3 +1,4 @@
+import { createOff } from '@/lib/features';
 import { safe } from '@/lib/safeRoute';
 import { can, NEEDS } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
@@ -15,10 +16,12 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function GET() {
+  const off = createOff(); if (off) return off;
   return Response.json({ enabled: hasClaude(), model: MODEL });
 }
 
 export const POST = safe('design', async (request: Request) => {
+  const off = createOff(); if (off) return off;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: 'Sign in first.' }, { status: 401 });

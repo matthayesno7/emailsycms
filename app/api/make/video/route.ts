@@ -1,3 +1,4 @@
+import { createOff } from '@/lib/features';
 import { safe } from '@/lib/safeRoute';
 import { member } from '@/lib/makeAuth';
 import { clipStatus, startClip } from '@/lib/makeMedia';
@@ -7,6 +8,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export const POST = safe('make/video', async (request: Request) => {
+  const off = createOff(); if (off) return off;
   const body = await request.json().catch(() => null);
   const m = await member(String(body?.workspace_id || ''));
   if ('error' in m) return m.error;
@@ -19,6 +21,7 @@ export const POST = safe('make/video', async (request: Request) => {
 });
 
 export async function GET(request: Request) {
+  const off = createOff(); if (off) return off;
   const u = new URL(request.url);
   const ws = u.searchParams.get('workspace_id') || '';
   const m = await member(ws, 'any');

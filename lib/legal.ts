@@ -1,6 +1,7 @@
 // Mise's Terms and Privacy Policy. Plain text, rendered by components/LegalPage.tsx.
 // A paragraph starting "- " is a bullet. Anything in [square brackets] still needs filling in.
 // DRAFT: have a solicitor review before relying on these.
+import { CREATE_ON } from './features';
 
 export const COMPANY = {
   name: 'HW Tech Ltd',
@@ -27,8 +28,8 @@ export const TERMS: Section[] = [
     'Each brand (workspace) has one or more owners. Owners control the brand’s plan, billing, members and settings.',
   ] },
   { h: 'Plans and payment', p: [
-    'Free: you can try Mise without a card, within the limits shown in the app (currently a brand kit, up to 50 files and one Create run per brand). We may change what Free includes.',
-    'Pro: per brand, charged when you upgrade, plus VAT or sales tax where it applies. It is US$3,750 a year, billed yearly in US dollars (brands that subscribed before 9 October 2026 keep the price and currency they signed up on). Pro brands get 200 designs a month (designs, photos and video made in Create or by Claude through Mise); each design beyond that costs 60¢ (50p in pounds), up to a monthly cap the brand’s owner sets, and is billed in arrears on the next invoice. A brand keeps the currency it first paid in.',
+    `Free: you can try Mise without a card, within the limits shown in the app (currently a brand kit, up to 50 files${CREATE_ON ? ' and one Create run' : ''} per brand). We may change what Free includes.`,
+    'Pro: per brand, charged when you upgrade, plus VAT or sales tax where it applies. It is US$3,750 a year, billed yearly in US dollars (brands that subscribed before 9 October 2026 keep the price and currency they signed up on).' + (CREATE_ON ? ' Pro brands get 200 designs a month (designs, photos and video made in Create or by Claude through Mise); each design beyond that costs 60¢ (50p in pounds), up to a monthly cap the brand’s owner sets, and is billed in arrears on the next invoice.' : '') + ' A brand keeps the currency it first paid in.',
         'Subscriptions renew automatically at the end of each month or year until cancelled. You can cancel at any time in Settings → Plan → Manage billing; the brand stays on Pro until the end of the period you have paid for, then returns to Free. We do not refund part periods unless the law requires it.',
     'Payments are processed by Stripe. If a payment fails we will retry it, and we may move the brand to Free if it remains unpaid.',
     'We may change prices with at least 30 days’ notice by email. A change takes effect from your next renewal after the notice period; you can cancel before then.',

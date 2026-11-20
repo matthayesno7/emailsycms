@@ -9,16 +9,16 @@ order: 2
 
 ## The basics
 **What is Mise?**
-A brand asset library built for AI: your logos, photos, product shots, videos and designs in one place, organised automatically, with on-brand designs, photos and video made from them, and a connector for Claude. Your team approves everything AI makes. See [What Mise is](what-is-mise).
+A brand asset library built for AI: your logos, photos, product shots, videos and designs in one place, organised automatically, [[create]]with on-brand designs, photos and video made from them, [[/create]]and a connector for Claude. Your team approves everything AI makes. See [What Mise is](what-is-mise).
 
 **Do I need Figma?**
-No. Mise makes designs, photos and video itself. If you use Figma, Mise works with it. See [Figma](figma).
+[[create]]No. Mise makes designs, photos and video itself. If you use Figma, Mise works with it.[[/create]][[nocreate]]No. Mise works on its own. If you use Figma, Claude can put your Mise files straight into your Figma designs.[[/nocreate]] See [Figma](figma).
 
 **Do I need Claude?**
 No. Everything works in the Mise app. Claude is optional, for people who want to run Mise from a chat or build in Figma.
 
 **Is there a free trial?**
-No. Free is the way to try Mise: your brand kit, 50 files and one Create run, with no card and unlimited people. Upgrade when you need more.
+No. Free is the way to try Mise: your brand kit, 50 files[[create]] and one Create run[[/create]], with no card and unlimited people. Upgrade when you need more.
 
 **How much does it cost?**
 Free costs nothing. Pro is $3,750 a year per brand, billed yearly (plus tax), with unlimited files and users and no seat fees. Enterprise starts at $15,000 a year for all your brands on one contract. See [Plans](plans).
@@ -45,7 +45,7 @@ Set **Licence ends** on the photo (Pro). On that date it's blocked from download
 **Can I get my files out?**
 Yes. Download any file in its original format from its page. For a full export of a large library, send a request through Feedback.
 
-## Creating
+[[create]]## Creating
 **Who owns what Mise makes?**
 You do. It's saved to your library.
 
@@ -58,7 +58,7 @@ Create only uses approved, available photos. Approve the photos you want used, a
 **Which AI models does Mise use?**
 Claude for designs, organising and search; Nano Banana 2, Nano Banana Pro and Imagen for photos; Veo for video. Mise picks the right one for each job and shows which it used. See [Create photos and video](create-photos-video).
 
-## Sharing
+[[/create]]## Sharing
 **Can people download without an account?**
 Yes, from share links and public portals, in the formats you allow. Invite-only portals ask them to confirm their email.
 

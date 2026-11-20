@@ -28,7 +28,7 @@ If your team keeps its foundations in Figma, turn on the Mise and Figma connecto
 - **Colours**: Primary, Secondary, Accent, Text, Muted text, Background, Surface, Border, Link, Button and Button text.
 - **Type**: Headings and Body: font family, weight, a **web font link** (a Google Fonts CSS link), and a fallback font. Sizes for H1, H2, Body and Small, and **Headline case** (As typed, UPPERCASE, Title Case).
 - **Buttons and layout**: button style (Filled, Outline, Underlined link), case, corner radius, padding and weight; email width (480–800, usually 600), corners and spacing.
-- **Imagery**: describe your photo style, list **Do** and **Don’t** rules (up to 8 each), and pick up to 6 **Reference images**. These drive the brand check on every photo, and the style of new photos Mise makes.
+- **Imagery**: describe your photo style, list **Do** and **Don’t** rules (up to 8 each), and pick up to 6 **Reference images**. These drive the brand check on every photo[[create]], and the style of new photos Mise makes[[/create]].
 - **Voice**: up to 6 tone words and **Notes for Claude** (up to 1,000 characters).
 
 The preview on the right shows an email in your brand as you edit.

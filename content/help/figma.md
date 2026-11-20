@@ -26,4 +26,4 @@ Turn on both the Mise and Figma connectors in Claude (see [Connect Claude](claud
 - **Build your brand kit** from your Figma design system.
 
 ## Figma's own AI models
-Claude can also use Figma's image and video models. Those runs use your Figma credits. Claude tells you the cost and asks before it runs one. Mise's own photo and video tools (see [Create photos and video](create-photos-video)) don't use Figma credits.
+Claude can also use Figma's image and video models. Those runs use your Figma credits. Claude tells you the cost and asks before it runs one.[[create]] Mise's own photo and video tools (see [Create photos and video](create-photos-video)) don't use Figma credits.[[/create]]

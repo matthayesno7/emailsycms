@@ -30,12 +30,12 @@ Settings → **Plan & usage** → **Manage billing** opens your billing portal. 
 - Change your billing address, company name and VAT or tax number.
 - Cancel.
 
-## Extra designs
+[[create]]## Extra designs
 Pro includes 200 designs a month per brand. After that each design costs **60¢** (50p for brands that pay in pounds), added to the next invoice, up to a monthly cap.
 - Set the cap in Settings → **Plan & usage** → **Extra designs** → **Monthly cap** → **Save**. The default is $50.
 - Set it to **0** to switch extras off. Create then pauses when the 200 are used, until the 1st.
 - The page shows how many extra designs you've used this month, what they'll cost, and how many more fit under the cap.
-
+[[/create]]
 ## Cancel
 **Manage billing** → cancel. The brand stays on Pro until the end of the period you've paid for, then returns to Free with all its files. See [Going back to Free](plans#going-back-to-free).
 

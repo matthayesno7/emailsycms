@@ -1,3 +1,4 @@
+import { createOff } from '@/lib/features';
 import { safe } from '@/lib/safeRoute';
 import { member } from '@/lib/makeAuth';
 import { hasImageGen } from '@/lib/imageGen';
@@ -9,10 +10,12 @@ export const runtime = 'nodejs';
 export const maxDuration = 120;
 
 export async function GET() {
+  const off = createOff(); if (off) return off;
   return Response.json({ image: hasImageGen(), video: hasVideoGen() });
 }
 
 export const POST = safe('make', async (request: Request) => {
+  const off = createOff(); if (off) return off;
   const body = await request.json().catch(() => null);
   const m = await member(String(body?.workspace_id || ''));
   if ('error' in m) return m.error;

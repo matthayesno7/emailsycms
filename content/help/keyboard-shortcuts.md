@@ -14,11 +14,11 @@ order: 4
 | **←** **→** | A file's page | Previous or next file |
 | **Enter** or **Space** | A focused tile | Open it |
 | **⌘V** / **Ctrl+V** | Assets | Upload a copied image |
-| **Enter** | Create | Make it (Shift+Enter for a new line) |
-| **⌘S** / **Ctrl+S** | Block editor | Save the block |
+[[create]]| **Enter** | Create | Make it (Shift+Enter for a new line) |
+[[/create]]| **⌘S** / **Ctrl+S** | Block editor | Save the block |
 | **Esc** | Block editor | Back (asks if you have unsaved changes) |
-| **Double-click** text | Create and the design editor | Edit the words |
-| **Double-click** a slider | Photo editor | Reset it |
+[[create]]| **Double-click** text | Create and the design editor | Edit the words |
+[[/create]]| **Double-click** a slider | Photo editor | Reset it |
 | **←** **→**, **Esc** | Share links and portals | Move between files, close |
 
 In Figma: **⌘V** pastes an image copied from Mise; **⌘⇧R** replaces the selected layer's image with it.

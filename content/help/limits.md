@@ -19,7 +19,7 @@ order: 3
 | Products per feed sync | 10,000 |
 | Files per share link | 500 |
 
-## Designs, photos and video each month (per brand)
+[[create]]## Designs, photos and video each month (per brand)
 | | Included | After that |
 |---|---|---|
 | Free | One Create run | Upgrade |
@@ -29,7 +29,7 @@ order: 3
 See [What counts as a design](plans#what-counts-as-a-design).
 
 Photos: up to 4 per request. Video: 4, 6 or 8 seconds, 9:16 or 16:9.
-
+[[/create]]
 ## Fair use (per brand, per month)
 These are generous ceilings that a real brand never meets. They only stop runaway imports or abuse.
 | | Ceiling |

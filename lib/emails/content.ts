@@ -1,6 +1,7 @@
 // The words of Mise's welcome emails. Links are real app links (appUrl() is https://app.misedam.com in production).
 import type { Email } from './template';
 import { appUrl } from '../keys';
+import { CREATE_ON } from '../features';
 
 export const greetingFor = (name?: string | null) => {
   const first = (name || '').trim().split(/\s+/)[0];
@@ -46,7 +47,7 @@ export function proEmail(o: { name?: string | null; brand: string }): Email {
   const app = appUrl();
   return {
     subject: 'You’re on Mise Pro. Here’s what just unlocked',
-    preheader: 'Share links, portals, unlimited files and 200 designs a month.',
+    preheader: CREATE_ON ? 'Share links, portals, unlimited files and 200 designs a month.' : 'Share links, portals, unlimited files and editing.',
     greeting: greetingFor(o.name),
     intro: [
       `Thanks for upgrading ${o.brand} to Pro. It means a lot this early on, and I’d love to hear what tipped you over. Just reply.`,
@@ -62,11 +63,13 @@ export function proEmail(o: { name?: string | null; brand: string }): Email {
         body: 'Open a folder or collection, click Share and send it to your agency or retailers. Set an expiry date or passcode, choose which sizes they can download, and see who opened it. Want something more permanent? Sharing → Create brand portal gives partners one page with your approved files and brand guidelines.',
         link: { label: 'Share links', url: `${app}/help/share-links` },
       },
+      ...(CREATE_ON ? [
       {
         title: 'Make new work from your library',
         body: 'Create now gives you 200 designs a month, plus new product photos and short videos in your brand’s style. Everything AI makes lands in Review for you to approve first.',
         link: { label: 'Open Create', url: app },
       },
+      ] : []),
       {
         title: 'Stop out-of-date files being used',
         body: 'Set a licence end date on stock photos and Mise blocks them automatically on that day. Mark an old logo obsolete and point people to the new one.',

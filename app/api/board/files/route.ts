@@ -1,3 +1,4 @@
+import { createOff } from '@/lib/features';
 import { safe } from '@/lib/safeRoute';
 import { member } from '@/lib/makeAuth';
 import { uploadEmailCopy } from '@/lib/uploadEmailCopy';
@@ -15,6 +16,7 @@ const ids = (v: unknown) => (Array.isArray(v) ? v : []).map(String).filter((x) =
 const COLS = 'id, workspace_id, kind, name, storage_path, mime, width, height, bytes, images, status, origin, on_board, focus, fields, provenance, pid, price, link, lifecycle';
 
 export const POST = safe('board/files', async (request: Request) => {
+  const off = createOff(); if (off) return off;
   const b = await request.json().catch(() => null);
   const ws = String(b?.workspace_id || '');
   const m = await member(ws, b?.action === 'rows' ? 'any' : 'add');

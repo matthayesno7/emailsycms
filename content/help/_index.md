@@ -5,7 +5,7 @@ description: Everything you need to set up and use Mise, the brand asset library
 
 # Mise help centre
 
-Mise keeps every logo, photo, product shot and design for your brand in one place. It tags everything as it arrives, makes on-brand designs, photos and video from what you have, plugs into Claude, and your team approves before anything goes out.
+Mise keeps every logo, photo, product shot and design for your brand in one place. It tags everything as it arrives, [[create]]makes on-brand designs, photos and video from what you have, [[/create]]plugs into Claude, and your team approves before anything goes out.
 
 ## Getting started
 - [What Mise is and how it works](what-is-mise)

@@ -15,7 +15,7 @@ At the top is a weekly summary: new files, how many were organised, how many wer
 
 | Section | Why it's here | What you can do |
 |---|---|---|
-| **Waiting for approval** | Made with AI (Create photos and videos, or Claude). Drafts aren't used or shared until approved. On Enterprise, contributors' uploads land here too. | **Approve**, **Reject** (deletes it), **Open**. **Approve all** when there are several. |
+| **Waiting for approval** | Made with AI ([[create]]Create photos and videos, or [[/create]]Claude). Drafts aren't used or shared until approved. On Enterprise, contributors' uploads land here too. | **Approve**, **Reject** (deletes it), **Open**. **Approve all** when there are several. |
 | **Possible duplicates** | Looks like a copy of a file you already have. | **Delete this one** or **Keep both**. |
 | **Off-brand** | Doesn't match your brand kit's imagery rules. | **Delete**, **Open**, or **It’s fine**. |
 | **Couldn’t organise** | Mise couldn't read the file, so it has no tags or alt text yet. | **Open** or **Try again**. |

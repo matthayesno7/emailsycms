@@ -14,8 +14,8 @@ No card needed. There's no free trial of Pro: Free is the way to try Mise.
 - One brand of your own.
 - Your brand kit, built from your website.
 - Up to **50 files**.
-- **One Create run**: three designs from one brief, plus the other sizes of one of them.
-- Search, folders, smart collections, Review, auto-organise and the Claude connector.
+[[create]]- **One Create run**: three designs from one brief, plus the other sizes of one of them.
+[[/create]]- Search, folders, smart collections, Review, auto-organise and the Claude connector.
 - Build and **preview** a brand portal.
 - Archive files.
 - Unlimited people.
@@ -25,10 +25,10 @@ Billed yearly only, plus tax. There's no monthly price. You're charged when you 
 
 Everything in Free, plus:
 - **Unlimited files and users**, with no seat fees. Every file is organised and searchable, with no storage limit to think about.
-- **200 designs a month**, then **60¢ each** up to a monthly cap you set.
+[[create]]- **200 designs a month**, then **60¢ each** up to a monthly cap you set.
 - **New photos and video** in Create, made with the best model for each job.
-- **Share links and published brand portals**, with views and downloads.
-- **Editing**: crop, resize and adjust photos, change designs with words, and restore any version.
+[[/create]]- **Share links and published brand portals**, with views and downloads.
+- **Editing**: crop, resize and adjust photos, [[create]]change designs with words, [[/create]]and restore any version.
 - **Licence expiry dates**, with expired files blocked automatically, and **obsolete files** pointing to their replacement.
 - **Daily sync** of your Shopify store and product feeds.
 - **Integrations**: the Mise picker inside Bloomreach and other tools, with permanent links to approved files.
@@ -39,11 +39,11 @@ For companies with several brands, or a procurement checklist.
 - All your brands on one contract and one invoice, with a security review and onboarding help. Owners and admins add new brands straight from the app, with no checkout.
 - **Roles**: owner, admin, editor, contributor and viewer. See [Team and roles](team-and-roles).
 - **Activity log** with CSV export. See [Activity log](activity-log).
-- Higher allowances (1,000 designs a month per brand).
-
+[[create]]- Higher allowances (1,000 designs a month per brand).
+[[/create]]
 [Book a call](https://calendar.notion.so/meet/matthayes/3363f4yal) to set up Enterprise.
 
-## What counts as a design
+[[create]]## What counts as a design
 | What you make | Counts as |
 |---|---|
 | A design in Create (**Design 3 options** makes 3) | 1 each |
@@ -53,14 +53,14 @@ For companies with several brands, or a procurement checklist.
 | A video clip | 10 |
 
 The same counts apply to things Claude makes through Mise. Organising files, search, the brand kit, sharing and downloads never count. Designs reset on the 1st of each month.
-
+[[/create]]
 ## When you hit a Free limit
-Mise shows an upgrade pop-up right where you hit it: adding your 51st file, a second Create brief, changing a design with words, sharing, publishing a portal, editing, licence and obsolete tools, photos and video, or a second brand. **Upgrade to Pro** goes to checkout; **Stay on Free** closes it.
+Mise shows an upgrade pop-up right where you hit it: adding your 51st file, [[create]]a second Create brief, changing a design with words, [[/create]]sharing, publishing a portal, editing, licence and obsolete tools, [[create]]photos and video, [[/create]]or a second brand. **Upgrade to Pro** goes to checkout; **Stay on Free** closes it.
 
 ## Going back to Free
 If you cancel, the brand stays on Pro until the end of the year you paid for, then returns to Free.
 - **All your files stay.** You can't add more than Free allows until you upgrade again.
 - **Share links and portals stop opening for people outside your team.** They work again if you upgrade.
-- Editing, photos and video, licence tools and daily feed sync pause.
+- Editing, [[create]]photos and video, [[/create]]licence tools and daily feed sync pause.
 
 See [Billing](billing).

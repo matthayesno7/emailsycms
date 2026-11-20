@@ -15,7 +15,7 @@ Files that shouldn't be used any more stay in Mise for the record, clearly marke
 | **Licence expired** | The licence or usage rights have run out. | Blocked |
 | **Obsolete** | Superseded, for example an old logo, with a link to the replacement. | Allowed |
 
-Files in any of these states are hidden from the library (except under **No longer available**), and **aren't** offered in Create, share links, portals or to Claude.
+Files in any of these states are hidden from the library (except under **No longer available**), and **aren't** offered in [[create]]Create, [[/create]]share links, portals or to Claude.
 
 ## Archive a file (every plan)
 Open the file → **Availability** → **Archive**. Add a reason if you like ("Old campaign"). Find it later under the **No longer available** filter on Assets.

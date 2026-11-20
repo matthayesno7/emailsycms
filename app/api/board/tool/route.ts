@@ -1,3 +1,4 @@
+import { createOff } from '@/lib/features';
 import { safe } from '@/lib/safeRoute';
 import { member } from '@/lib/makeAuth';
 import { runTool } from '@/lib/boardTools';
@@ -7,6 +8,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 export const POST = safe('board/tool', async (request: Request) => {
+  const off = createOff(); if (off) return off;
   const b = await request.json().catch(() => null);
   const ws = String(b?.workspace_id || '');
   const m = await member(ws);

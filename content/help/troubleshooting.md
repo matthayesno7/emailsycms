@@ -79,7 +79,7 @@ Search this page (⌘F or Ctrl+F) for the words you see.
 | "Couldn’t delete. Try again." | Reload; check your role. |
 | "Couldn’t save that change. Try again." | Reload; check your role. |
 
-## Create
+[[create]]## Create
 | Message | What to do |
 |---|---|
 | "Your free Create run is used…" | Upgrade to Pro to keep creating. |
@@ -93,7 +93,7 @@ Search this page (⌘F or Ctrl+F) for the words you see.
 | "The image took too long. Try again." | Try again. |
 | "Image generation isn’t switched on…" / "Video isn’t switched on…" | Temporarily unavailable. Try again later. |
 
-## Brand kit
+[[/create]]## Brand kit
 | Message | What to do |
 |---|---|
 | "Couldn’t open {url} (…). Check the address, or try the brand’s main shop page." | Check the address; try the homepage or shop page. |

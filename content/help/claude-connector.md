@@ -7,7 +7,7 @@ order: 1
 
 # Connect Claude
 
-The Mise connector gives Claude your brand kit and assets, lets it make designs, photos and video with Mise, and gives it a place to save what it makes. Set it up once per person.
+The Mise connector gives Claude your brand kit and assets, lets it [[create]]make designs, photos and video with Mise[[/create]][[nocreate]]put your files into Figma[[/nocreate]], and gives it a place to save what it makes. Set it up once per person.
 
 ## 1. Create your Mise link
 Settings → **Claude** → **Create my link**. Copy the link straight away: it's **shown once**. It's personal, so treat it like a password.
